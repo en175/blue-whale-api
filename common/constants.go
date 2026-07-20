@@ -22,7 +22,8 @@ var TopUpLink = ""
 var themeValue atomic.Value // stores string; safe for concurrent read/write
 
 func init() {
-	themeValue.Store("classic")
+	// 默认 default 主题（modern）；classic 主题构建链存在 date-fns/date-fns-tz 兼容问题，仅作备用
+	themeValue.Store("default")
 }
 
 func GetTheme() string {
