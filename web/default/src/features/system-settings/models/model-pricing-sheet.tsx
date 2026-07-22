@@ -61,7 +61,12 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  ToggleGroup,
+  ToggleGroupItem,
+} from '@/components/ui/toggle-group'
 import { cn } from '@/lib/utils'
+import { useSystemConfigStore } from '@/stores/system-config-store'
 
 import {
   EMPTY_LANE_ENABLED,
@@ -80,6 +85,12 @@ import {
   type PricingMode,
 } from './model-pricing-core'
 import { PriceInput, PriceLane } from './model-pricing-inputs'
+import {
+  displayToUsd,
+  priceSymbol,
+  usdToDisplay,
+  type PriceCurrency,
+} from './pricing-currency'
 import { formatPricingNumber } from './pricing-format'
 import { TieredPricingEditor } from './tiered-pricing-editor'
 
@@ -145,6 +156,9 @@ export const ModelPricingEditorPanel = forwardRef<
   ref
 ) {
   const { t } = useTranslation()
+  const usdExchangeRate =
+    useSystemConfigStore((s) => s.config.currency.usdExchangeRate) || 7
+  const [priceCurrency, setPriceCurrency] = useState<PriceCurrency>('USD')
   const [pricingMode, setPricingMode] = useState<PricingMode>('per-token')
   const [promptPrice, setPromptPrice] = useState('')
   const [lanePrices, setLanePrices] = useState<Record<LaneKey, string>>({
@@ -351,16 +365,20 @@ export const ModelPricingEditorPanel = forwardRef<
         promptPrice,
         lanePrices,
         laneEnabled,
+        priceCurrency,
+        usdExchangeRate,
         t
       ),
     [
       billingExpr,
       laneEnabled,
       lanePrices,
+      priceCurrency,
       pricingMode,
       promptPrice,
       requestRuleExpr,
       t,
+      usdExchangeRate,
       watchedValues,
     ]
   )
@@ -539,6 +557,35 @@ export const ModelPricingEditorPanel = forwardRef<
                   )}
                 />
 
+                {pricingMode !== 'tiered_expr' && (
+                  <div className='flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3'>
+                    <div className='min-w-0'>
+                      <div className='text-sm font-medium'>
+                        {t('Price input currency')}
+                      </div>
+                      <p className='text-muted-foreground text-xs'>
+                        {priceCurrency === 'CNY'
+                          ? t(
+                              'CNY mode: prices auto-convert to USD on save (rate from system config).'
+                            )
+                          : t('Input prices in USD.')}
+                      </p>
+                    </div>
+                    <ToggleGroup
+                      value={[priceCurrency]}
+                      onValueChange={(value) => {
+                        const next = value.find((item) => item !== priceCurrency)
+                        if (next === 'USD' || next === 'CNY') {
+                          setPriceCurrency(next)
+                        }
+                      }}
+                    >
+                      <ToggleGroupItem value='USD'>$ USD</ToggleGroupItem>
+                      <ToggleGroupItem value='CNY'>¥ CNY</ToggleGroupItem>
+                    </ToggleGroup>
+                  </div>
+                )}
+
                 <Tabs
                   value={pricingMode}
                   onValueChange={handleModeChange}
@@ -562,11 +609,15 @@ export const ModelPricingEditorPanel = forwardRef<
                         <FieldLabel>{t('Input price')}</FieldLabel>
                         <PriceInput
                           value={promptPrice}
+                          currency={priceCurrency}
+                          exchangeRate={usdExchangeRate}
                           placeholder='3'
                           onChange={handlePromptPriceChange}
                         />
                         <FieldDescription>
-                          {t('USD price per 1M input tokens.')}
+                          {priceCurrency === 'CNY'
+                            ? t('CNY price per 1M input tokens.')
+                            : t('USD price per 1M input tokens.')}
                         </FieldDescription>
                       </Field>
 
@@ -583,6 +634,8 @@ export const ModelPricingEditorPanel = forwardRef<
                               description={t(lane.descriptionKey)}
                               placeholder={lane.placeholder}
                               value={lanePrices[lane.key]}
+                              currency={priceCurrency}
+                              exchangeRate={usdExchangeRate}
                               enabled={laneEnabled[lane.key]}
                               disabled={disabled}
                               onEnabledChange={(checked) =>
@@ -609,16 +662,30 @@ export const ModelPricingEditorPanel = forwardRef<
                               <FieldLabel>{t('Fixed price')}</FieldLabel>
                               <FormControl>
                                 <InputGroup>
-                                  <InputGroupAddon>$</InputGroupAddon>
+                                  <InputGroupAddon>
+                                    {priceSymbol(priceCurrency)}
+                                  </InputGroupAddon>
                                   <InputGroupInput
                                     inputMode='decimal'
-                                    placeholder='0.01'
                                     {...field}
+                                    placeholder={
+                                      priceCurrency === 'CNY' ? '0.7' : '0.01'
+                                    }
+                                    value={usdToDisplay(
+                                      field.value ?? '',
+                                      priceCurrency,
+                                      usdExchangeRate
+                                    )}
                                     onChange={(event) => {
-                                      const value = event.target.value
-                                      if (numericDraftRegex.test(value)) {
-                                        field.onChange(value)
-                                      }
+                                      const raw = event.target.value
+                                      if (!numericDraftRegex.test(raw)) return
+                                      field.onChange(
+                                        displayToUsd(
+                                          raw,
+                                          priceCurrency,
+                                          usdExchangeRate
+                                        )
+                                      )
                                     }}
                                   />
                                   <InputGroupAddon align='inline-end'>
@@ -627,9 +694,13 @@ export const ModelPricingEditorPanel = forwardRef<
                                 </InputGroup>
                               </FormControl>
                               <FieldDescription>
-                                {t(
-                                  'Cost in USD per request, regardless of tokens used.'
-                                )}
+                                {priceCurrency === 'CNY'
+                                  ? t(
+                                      'Cost in CNY per request, regardless of tokens used.'
+                                    )
+                                  : t(
+                                      'Cost in USD per request, regardless of tokens used.'
+                                    )}
                               </FieldDescription>
                               <FormMessage />
                             </Field>

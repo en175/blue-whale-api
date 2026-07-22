@@ -54,6 +54,10 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import {
+  ToggleGroup,
+  ToggleGroupItem,
+} from '@/components/ui/toggle-group'
+import {
   Select,
   SelectContent,
   SelectGroup,
@@ -71,12 +75,19 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { Switch } from '@/components/ui/switch'
+import { useSystemConfigStore } from '@/stores/system-config-store'
 import { Textarea } from '@/components/ui/textarea'
 import {
   useSystemOptions,
   getOptionValue,
 } from '@/features/system-settings/hooks/use-system-options'
 import { useUpdateOption } from '@/features/system-settings/hooks/use-update-option'
+import {
+  displayToUsd,
+  priceSymbol,
+  usdToDisplay,
+  type PriceCurrency,
+} from '@/features/system-settings/models/pricing-currency'
 import { normalizeJsonString } from '@/features/system-settings/models/utils'
 import type { ModelSettings } from '@/features/system-settings/types'
 import { safeJsonParse } from '@/features/system-settings/utils/json-parser'
@@ -133,6 +144,9 @@ export function ModelMutateDrawer({
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [promptPrice, setPromptPrice] = useState('')
   const [completionPrice, setCompletionPrice] = useState('')
+  const usdExchangeRate =
+    useSystemConfigStore((s) => s.config.currency.usdExchangeRate) || 7
+  const [priceCurrency, setPriceCurrency] = useState<PriceCurrency>('USD')
   const [oldModelName, setOldModelName] = useState<string>('')
 
   // Fetch vendors for dropdown
@@ -920,6 +934,33 @@ export function ModelMutateDrawer({
                 {t('Pricing Configuration')}
               </h3>
 
+              <div className='flex items-center justify-between gap-3'>
+                <div className='min-w-0'>
+                  <div className='text-sm font-medium'>
+                    {t('Price input currency')}
+                  </div>
+                  <p className='text-muted-foreground text-xs'>
+                    {priceCurrency === 'CNY'
+                      ? t(
+                          'CNY mode: prices auto-convert to USD on save (rate from system config).'
+                        )
+                      : t('Input prices in USD.')}
+                  </p>
+                </div>
+                <ToggleGroup
+                  value={[priceCurrency]}
+                  onValueChange={(value) => {
+                    const next = value.find((item) => item !== priceCurrency)
+                    if (next === 'USD' || next === 'CNY') {
+                      setPriceCurrency(next)
+                    }
+                  }}
+                >
+                  <ToggleGroupItem value='USD'>$ USD</ToggleGroupItem>
+                  <ToggleGroupItem value='CNY'>¥ CNY</ToggleGroupItem>
+                </ToggleGroup>
+              </div>
+
               <div className='space-y-4'>
                 <Label>{t('Pricing mode')}</Label>
                 <RadioGroup
@@ -949,24 +990,42 @@ export function ModelMutateDrawer({
                   name='price'
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>{t('Fixed price (USD)')}</FormLabel>
+                      <FormLabel>
+                        {t(
+                          priceCurrency === 'CNY'
+                            ? 'Fixed price (CNY)'
+                            : 'Fixed price (USD)'
+                        )}
+                      </FormLabel>
                       <FormControl>
                         <Input
                           type='text'
-                          placeholder='0.01'
                           {...field}
+                          placeholder={
+                            priceCurrency === 'CNY' ? '0.7' : '0.01'
+                          }
+                          value={usdToDisplay(
+                            field.value ?? '',
+                            priceCurrency,
+                            usdExchangeRate
+                          )}
                           onChange={(e) => {
-                            const value = e.target.value
-                            if (validateNumber(value)) {
-                              field.onChange(value)
-                            }
+                            const raw = e.target.value
+                            if (!validateNumber(raw)) return
+                            field.onChange(
+                              displayToUsd(raw, priceCurrency, usdExchangeRate)
+                            )
                           }}
                         />
                       </FormControl>
                       <FormDescription>
-                        {t(
-                          'Cost in USD per request, regardless of tokens used.'
-                        )}
+                        {priceCurrency === 'CNY'
+                          ? t(
+                              'Cost in CNY per request, regardless of tokens used.'
+                            )
+                          : t(
+                              'Cost in USD per request, regardless of tokens used.'
+                            )}
                       </FormDescription>
                       <FormMessage />
                     </FormItem>
@@ -991,7 +1050,11 @@ export function ModelMutateDrawer({
                       <div className='flex items-center space-x-2'>
                         <RadioGroupItem value='price' id='price' />
                         <Label htmlFor='price' className='font-normal'>
-                          {t('Price mode (USD per 1M tokens)')}
+                          {t(
+                            priceCurrency === 'CNY'
+                              ? 'Price mode (CNY per 1M tokens)'
+                              : 'Price mode (USD per 1M tokens)'
+                          )}
                         </Label>
                       </div>
                     </RadioGroup>
@@ -1030,7 +1093,7 @@ export function ModelMutateDrawer({
                             <FormDescription>
                               {field.value &&
                               !Number.isNaN(Number.parseFloat(field.value))
-                                ? `Calculated price: $${(Number.parseFloat(field.value) * 2).toFixed(4)} per 1M tokens`
+                                ? `Calculated price: ${priceSymbol(priceCurrency)}${(Number.parseFloat(field.value) * 2 * (priceCurrency === 'CNY' ? usdExchangeRate : 1)).toFixed(4)} per 1M tokens`
                                 : t('Multiplier for prompt tokens.')}
                             </FormDescription>
                             <FormMessage />
@@ -1072,7 +1135,7 @@ export function ModelMutateDrawer({
                               !Number.isNaN(Number.parseFloat(field.value)) &&
                               promptPrice &&
                               !Number.isNaN(Number.parseFloat(promptPrice))
-                                ? `Calculated price: $${(Number.parseFloat(promptPrice) * Number.parseFloat(field.value)).toFixed(4)} per 1M tokens`
+                                ? `Calculated price: ${priceSymbol(priceCurrency)}${(Number.parseFloat(promptPrice) * Number.parseFloat(field.value) * (priceCurrency === 'CNY' ? usdExchangeRate : 1)).toFixed(4)} per 1M tokens`
                                 : t('Multiplier for completion tokens.')}
                             </FormDescription>
                             <FormMessage />
@@ -1083,14 +1146,28 @@ export function ModelMutateDrawer({
                   ) : (
                     <div className='space-y-4'>
                       <div className='space-y-2'>
-                        <Label>{t('Prompt price ($/1M tokens)')}</Label>
+                        <Label>
+                          {t(
+                            priceCurrency === 'CNY'
+                              ? 'Prompt price (¥/1M tokens)'
+                              : 'Prompt price ($/1M tokens)'
+                          )}
+                        </Label>
                         <Input
                           type='text'
-                          placeholder='2.0'
-                          value={promptPrice}
-                          onChange={(e) =>
-                            handlePromptPriceChange(e.target.value)
-                          }
+                          placeholder={priceCurrency === 'CNY' ? '14' : '2.0'}
+                          value={usdToDisplay(
+                            promptPrice,
+                            priceCurrency,
+                            usdExchangeRate
+                          )}
+                          onChange={(e) => {
+                            const raw = e.target.value
+                            if (!validateNumber(raw)) return
+                            handlePromptPriceChange(
+                              displayToUsd(raw, priceCurrency, usdExchangeRate)
+                            )
+                          }}
                         />
                         <p className='text-muted-foreground text-sm'>
                           {promptPrice &&
@@ -1101,14 +1178,28 @@ export function ModelMutateDrawer({
                       </div>
 
                       <div className='space-y-2'>
-                        <Label>{t('Completion price ($/1M tokens)')}</Label>
+                        <Label>
+                          {t(
+                            priceCurrency === 'CNY'
+                              ? 'Completion price (¥/1M tokens)'
+                              : 'Completion price ($/1M tokens)'
+                          )}
+                        </Label>
                         <Input
                           type='text'
-                          placeholder='4.0'
-                          value={completionPrice}
-                          onChange={(e) =>
-                            handleCompletionPriceChange(e.target.value)
-                          }
+                          placeholder={priceCurrency === 'CNY' ? '28' : '4.0'}
+                          value={usdToDisplay(
+                            completionPrice,
+                            priceCurrency,
+                            usdExchangeRate
+                          )}
+                          onChange={(e) => {
+                            const raw = e.target.value
+                            if (!validateNumber(raw)) return
+                            handleCompletionPriceChange(
+                              displayToUsd(raw, priceCurrency, usdExchangeRate)
+                            )
+                          }}
                         />
                         <p className='text-muted-foreground text-sm'>
                           {completionPrice &&

@@ -20,6 +20,7 @@ import * as z from 'zod'
 
 import { combineBillingExpr } from '@/features/pricing/lib/billing-expr'
 
+import { type PriceCurrency } from './pricing-currency'
 import { formatPricingNumber } from './pricing-format'
 
 export const createModelPricingSchema = (t: (key: string) => string) =>
@@ -215,8 +216,19 @@ export function buildPreviewRows(
   promptPrice: string,
   lanePrices: Record<LaneKey, string>,
   laneEnabled: Record<LaneKey, boolean>,
+  priceCurrency: PriceCurrency,
+  exchangeRate: number,
   t: (key: string) => string
 ): PreviewRow[] {
+  // $ 内部值 → 预览符号（随 ¥/$ 开关；CNY 模式 ×汇率）。后端美元锚点不变。
+  const formatPriceLabel = (usd: string): string => {
+    if (usd === '') return ''
+    const num = Number(usd)
+    if (!Number.isFinite(num)) return ''
+    const val = priceCurrency === 'CNY' ? num * exchangeRate : num
+    return `${priceCurrency === 'CNY' ? '¥' : '$'}${formatPricingNumber(val)}`
+  }
+
   if (mode === 'tiered_expr') {
     const effectiveExpr = combineBillingExpr(billingExpr, requestRuleExpr)
     return [
@@ -235,7 +247,7 @@ export function buildPreviewRows(
       {
         key: 'price',
         label: 'ModelPrice',
-        value: values.price || t('Empty'),
+        value: values.price ? formatPriceLabel(values.price) : t('Empty'),
       },
     ]
   }
@@ -244,14 +256,14 @@ export function buildPreviewRows(
     {
       key: 'inputPrice',
       label: t('Input price'),
-      value: promptPrice ? `$${promptPrice}` : t('Empty'),
+      value: promptPrice ? formatPriceLabel(promptPrice) : t('Empty'),
     },
     {
       key: 'completion',
       label: t('Completion price'),
       value:
         laneEnabled.completion && lanePrices.completion
-          ? `$${lanePrices.completion}`
+          ? formatPriceLabel(lanePrices.completion)
           : t('Empty'),
     },
     {
@@ -259,7 +271,7 @@ export function buildPreviewRows(
       label: t('Cache read price'),
       value:
         laneEnabled.cache && lanePrices.cache
-          ? `$${lanePrices.cache}`
+          ? formatPriceLabel(lanePrices.cache)
           : t('Empty'),
     },
     {
@@ -267,7 +279,7 @@ export function buildPreviewRows(
       label: t('Cache write price'),
       value:
         laneEnabled.createCache && lanePrices.createCache
-          ? `$${lanePrices.createCache}`
+          ? formatPriceLabel(lanePrices.createCache)
           : t('Empty'),
     },
     {
@@ -275,7 +287,7 @@ export function buildPreviewRows(
       label: t('Image input price'),
       value:
         laneEnabled.image && lanePrices.image
-          ? `$${lanePrices.image}`
+          ? formatPriceLabel(lanePrices.image)
           : t('Empty'),
     },
     {
@@ -283,7 +295,7 @@ export function buildPreviewRows(
       label: t('Audio input price'),
       value:
         laneEnabled.audioInput && lanePrices.audioInput
-          ? `$${lanePrices.audioInput}`
+          ? formatPriceLabel(lanePrices.audioInput)
           : t('Empty'),
     },
     {
@@ -291,7 +303,7 @@ export function buildPreviewRows(
       label: t('Audio output price'),
       value:
         laneEnabled.audioOutput && lanePrices.audioOutput
-          ? `$${lanePrices.audioOutput}`
+          ? formatPriceLabel(lanePrices.audioOutput)
           : t('Empty'),
     },
   ]

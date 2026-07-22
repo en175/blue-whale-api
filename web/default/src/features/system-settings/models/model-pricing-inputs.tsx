@@ -29,24 +29,42 @@ import {
   SettingsControlGroup,
   SettingsSwitchField,
 } from '../components/settings-form-layout'
+import { numericDraftRegex } from './model-pricing-core'
+import {
+  displayToUsd,
+  priceSymbol,
+  usdToDisplay,
+  type PriceCurrency,
+} from './pricing-currency'
 
 export function PriceInput(props: {
+  // value / onChange 均为 $ 内部值（后端美元锚点不动）；CNY 仅视图层换算
   value: string
+  currency: PriceCurrency
+  exchangeRate: number
   placeholder?: string
   disabled?: boolean
-  onChange: (value: string) => void
+  onChange: (usdValue: string) => void
 }) {
+  const { currency, exchangeRate } = props
+  const symbol = priceSymbol(currency)
+  const displayValue = usdToDisplay(props.value, currency, exchangeRate)
+
   return (
     <InputGroup>
-      <InputGroupAddon>$</InputGroupAddon>
+      <InputGroupAddon>{symbol}</InputGroupAddon>
       <InputGroupInput
         inputMode='decimal'
-        value={props.value}
+        value={displayValue}
         placeholder={props.placeholder}
         disabled={props.disabled}
-        onChange={(event) => props.onChange(event.target.value)}
+        onChange={(event) => {
+          const raw = event.target.value
+          if (!numericDraftRegex.test(raw)) return
+          props.onChange(displayToUsd(raw, currency, exchangeRate))
+        }}
       />
-      <InputGroupAddon align='inline-end'>$/1M</InputGroupAddon>
+      <InputGroupAddon align='inline-end'>{symbol}/1M</InputGroupAddon>
     </InputGroup>
   )
 }
@@ -56,10 +74,12 @@ export function PriceLane(props: {
   description: string
   placeholder: string
   value: string
+  currency: PriceCurrency
+  exchangeRate: number
   enabled: boolean
   disabled?: boolean
   onEnabledChange: (checked: boolean) => void
-  onChange: (value: string) => void
+  onChange: (usdValue: string) => void
 }) {
   const { t } = useTranslation()
   const effectiveDisabled = props.disabled || !props.enabled
@@ -79,13 +99,17 @@ export function PriceLane(props: {
       />
       <PriceInput
         value={props.value}
+        currency={props.currency}
+        exchangeRate={props.exchangeRate}
         placeholder={props.placeholder}
         disabled={effectiveDisabled}
         onChange={props.onChange}
       />
       <p className='text-muted-foreground text-xs'>
         {props.enabled
-          ? t('USD price per 1M tokens.')
+          ? props.currency === 'CNY'
+            ? t('CNY price per 1M tokens.')
+            : t('USD price per 1M tokens.')
           : t('Disabled lanes are omitted on save.')}
       </p>
     </SettingsControlGroup>
