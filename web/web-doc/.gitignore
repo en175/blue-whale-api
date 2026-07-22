@@ -1,0 +1,13 @@
+# Dependencies
+/node_modules/
+
+# Docusaurus build artifacts
+/.docusaurus/
+/build/
+
+# Generated API docs (由 gen-api-docs 从 openapi/relay.json 重新生成)
+/docs/api/
+
+# Misc
+.DS_Store
+npm-debug.log*
