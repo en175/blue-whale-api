@@ -20,7 +20,14 @@ RUN npx fumadocs-mdx
 RUN bun run prebuild
 
 # Build Next.js standalone output
-RUN bun run build
+# Limit workers to reduce concurrent font download connections during SSG
+# Retry on transient network errors (font downloads, socket resets)
+ENV NEXT_WORKERS=16
+RUN for i in 1 2 3; do \
+    bun run build && exit 0; \
+    echo "Build attempt $i failed, retrying..."; \
+    sleep 10; \
+done; exit 1
 
 
 # Stage 2: Runtime
