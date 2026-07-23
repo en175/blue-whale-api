@@ -333,7 +333,6 @@ export type BillingSettings = {
 export type OperationsSettings = {
   DefaultCollapseSidebar: boolean
   DemoSiteEnabled: boolean
-  SelfUseModeEnabled: boolean
   QuotaRemindThreshold: string
   SMTPServer: string
   SMTPPort: string

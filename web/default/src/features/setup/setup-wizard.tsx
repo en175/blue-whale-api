@@ -141,13 +141,7 @@ export function SetupWizard() {
     setCurrentStep(0)
 
     // Pre-fill usage mode if backend echoes it
-    if (status.SelfUseModeEnabled) {
-      form.setValue('usageMode', 'self', {
-        shouldDirty: false,
-        shouldTouch: false,
-        shouldValidate: false,
-      })
-    } else if (status.DemoSiteEnabled) {
+    if (status.DemoSiteEnabled) {
       form.setValue('usageMode', 'demo', {
         shouldDirty: false,
         shouldTouch: false,

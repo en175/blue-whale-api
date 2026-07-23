@@ -13,7 +13,7 @@ import (
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting/config"
-	"github.com/QuantumNous/new-api/setting/operation_setting"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
@@ -121,24 +121,19 @@ func withTieredBillingConfig(t *testing.T, modes map[string]string, exprs map[st
 	model.InvalidatePricingCache()
 }
 
-func withSelfUseModeDisabled(t *testing.T) {
+// withModelRatio registers model ratios for a test and restores the original
+// ratio map on cleanup. Unpriced models are always filtered from ListModels,
+// so tests that need a model to appear must give it a ratio (or price/expr).
+func withModelRatio(t *testing.T, ratios map[string]float64) {
 	t.Helper()
 
-	original := operation_setting.SelfUseModeEnabled
-	operation_setting.SelfUseModeEnabled = false
+	snapshot := ratio_setting.ModelRatio2JSONString()
 	t.Cleanup(func() {
-		operation_setting.SelfUseModeEnabled = original
+		_ = ratio_setting.UpdateModelRatioByJSONString(snapshot)
 	})
-}
-
-func withSelfUseModeEnabled(t *testing.T) {
-	t.Helper()
-
-	original := operation_setting.SelfUseModeEnabled
-	operation_setting.SelfUseModeEnabled = true
-	t.Cleanup(func() {
-		operation_setting.SelfUseModeEnabled = original
-	})
+	ratioBytes, err := common.Marshal(ratios)
+	require.NoError(t, err)
+	require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(string(ratioBytes)))
 }
 
 func decodeListModelsPayload(t *testing.T, recorder *httptest.ResponseRecorder) listModelsResponse {
@@ -216,7 +211,6 @@ func TestGetUserModelsFiltersByRequestedGroup(t *testing.T) {
 }
 
 func TestListModelsIncludesTieredBillingModel(t *testing.T) {
-	withSelfUseModeDisabled(t)
 	withTieredBillingConfig(t, map[string]string{
 		"zz-tiered-visible-model":      "tiered_expr",
 		"zz-tiered-empty-expr-model":   "tiered_expr",
@@ -272,7 +266,7 @@ func TestListModelsIncludesTieredBillingModel(t *testing.T) {
 }
 
 func TestListModelsUsesAdvancedCustomEndpointTypesFromPricingCache(t *testing.T) {
-	withSelfUseModeEnabled(t)
+	withModelRatio(t, map[string]float64{"gemini-3.5-flash": 1})
 	db := setupModelListControllerTestDB(t)
 
 	originalMemoryCacheEnabled := common.MemoryCacheEnabled
@@ -343,7 +337,6 @@ func TestListModelsUsesAdvancedCustomEndpointTypesFromPricingCache(t *testing.T)
 }
 
 func TestListModelsTokenLimitIncludesTieredBillingModel(t *testing.T) {
-	withSelfUseModeDisabled(t)
 	withTieredBillingConfig(t, map[string]string{
 		"zz-token-tiered-visible-model":      "tiered_expr",
 		"zz-token-tiered-empty-expr-model":   "tiered_expr",
