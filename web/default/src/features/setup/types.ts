@@ -23,7 +23,6 @@ export interface SetupStatus {
   root_init: boolean
   database_type: string
   // Some backends also echo mode flags; they are optional here.
-  SelfUseModeEnabled?: boolean
   DemoSiteEnabled?: boolean
 }
 
