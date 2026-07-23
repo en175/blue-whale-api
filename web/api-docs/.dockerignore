@@ -1,0 +1,33 @@
+# Dependencies — installed fresh in builder stage
+node_modules
+
+# Build artifacts — rebuilt in builder stage
+.next
+.source
+
+# Version control
+.git
+.github
+
+# Root-level docs (not needed in image; see LICENSE)
+README.md
+LEGAL.md
+
+# Env files — injected at runtime
+.env
+.env*.local
+
+# Deployment platform
+.vercel
+
+# IDE
+.idea
+.cursor
+.vscode
+
+# Misc
+.DS_Store
+*.pem
+*.tsbuildinfo
+coverage
+build
