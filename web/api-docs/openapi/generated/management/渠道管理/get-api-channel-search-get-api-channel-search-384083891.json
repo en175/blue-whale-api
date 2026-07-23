@@ -1,0 +1,56 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "搜索渠道",
+    "version": "1.0.0",
+    "description": "👨‍💼 需要管理员权限（Admin）"
+  },
+  "tags": [
+    {
+      "name": "渠道管理"
+    }
+  ],
+  "paths": {
+    "/api/channel/search": {
+      "get": {
+        "tags": [
+          "渠道管理"
+        ],
+        "summary": "搜索渠道",
+        "description": "👨‍💼 需要管理员权限（Admin）",
+        "operationId": "get-api-channel-search",
+        "parameters": [
+          {
+            "name": "keyword",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "group",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "model",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

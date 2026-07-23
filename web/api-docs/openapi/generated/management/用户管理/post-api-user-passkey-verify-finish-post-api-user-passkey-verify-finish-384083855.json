@@ -1,0 +1,31 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "完成验证Passkey",
+    "version": "1.0.0",
+    "description": "🔐 需要登录（User权限）"
+  },
+  "tags": [
+    {
+      "name": "用户管理"
+    }
+  ],
+  "paths": {
+    "/api/user/passkey/verify/finish": {
+      "post": {
+        "tags": [
+          "用户管理"
+        ],
+        "summary": "完成验证Passkey",
+        "description": "🔐 需要登录（User权限）",
+        "operationId": "post-api-user-passkey-verify-finish",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

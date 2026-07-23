@@ -1,0 +1,31 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "获取所有额度数据",
+    "version": "1.0.0",
+    "description": "👨‍💼 需要管理员权限（Admin）"
+  },
+  "tags": [
+    {
+      "name": "数据统计"
+    }
+  ],
+  "paths": {
+    "/api/data/": {
+      "get": {
+        "tags": [
+          "数据统计"
+        ],
+        "summary": "获取所有额度数据",
+        "description": "👨‍💼 需要管理员权限（Admin）",
+        "operationId": "get-api-data",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

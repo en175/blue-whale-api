@@ -1,0 +1,40 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "获取指定用户",
+    "version": "1.0.0",
+    "description": "👨‍💼 需要管理员权限（Admin）"
+  },
+  "tags": [
+    {
+      "name": "用户管理"
+    }
+  ],
+  "paths": {
+    "/api/user/{id}": {
+      "get": {
+        "tags": [
+          "用户管理"
+        ],
+        "summary": "获取指定用户",
+        "description": "👨‍💼 需要管理员权限（Admin）",
+        "operationId": "get-api-user-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

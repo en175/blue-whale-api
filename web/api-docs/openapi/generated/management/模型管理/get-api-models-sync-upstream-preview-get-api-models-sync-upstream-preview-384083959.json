@@ -1,0 +1,31 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "预览上游模型同步",
+    "version": "1.0.0",
+    "description": "👨‍💼 需要管理员权限（Admin）"
+  },
+  "tags": [
+    {
+      "name": "模型管理"
+    }
+  ],
+  "paths": {
+    "/api/models/sync_upstream/preview": {
+      "get": {
+        "tags": [
+          "模型管理"
+        ],
+        "summary": "预览上游模型同步",
+        "description": "👨‍💼 需要管理员权限（Admin）",
+        "operationId": "get-api-models-sync-upstream-preview",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

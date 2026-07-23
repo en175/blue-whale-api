@@ -1,0 +1,655 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="1280"
+  height="820"
+  viewBox="0 0 1280 820"
+  role="img"
+  aria-labelledby="architecture-title architecture-description"
+>
+  <title id="architecture-title">New API technical architecture</title>
+  <desc id="architecture-description">
+    New API routes requests from web consoles, SDKs, and AI applications through
+    a unified interface, Go backend, relay pipeline, and model adapters to many AI
+    service providers. Database, Redis, Docker, and Docker Compose support the
+    platform.
+  </desc>
+
+  <defs>
+    <linearGradient id="brand-gradient" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#22d3ee" />
+      <stop offset="0.5" stop-color="#8b5cf6" />
+      <stop offset="1" stop-color="#ec4899" />
+    </linearGradient>
+    <linearGradient id="foundation-gradient" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ec4899" stop-opacity="0.12" />
+      <stop offset="0.5" stop-color="#8b5cf6" stop-opacity="0.1" />
+      <stop offset="1" stop-color="#22d3ee" stop-opacity="0.12" />
+    </linearGradient>
+    <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse">
+      <path d="M24 0H0V24" class="grid-line" fill="none" />
+    </pattern>
+    <filter id="panel-shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#0f172a" flood-opacity="0.08" />
+    </filter>
+    <filter id="node-shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="3" stdDeviation="5" flood-color="#0f172a" flood-opacity="0.07" />
+    </filter>
+    <marker
+      id="arrow"
+      markerWidth="8"
+      markerHeight="8"
+      refX="7"
+      refY="4"
+      orient="auto"
+      markerUnits="strokeWidth"
+    >
+      <path d="M0 0L8 4L0 8Z" class="arrow-head" />
+    </marker>
+
+    <style>
+      :root {
+        color-scheme: light dark;
+      }
+
+      text {
+        font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+      }
+
+      .canvas {
+        fill: #f8fafc;
+      }
+
+      .grid-line {
+        stroke: #e2e8f0;
+        stroke-width: 1;
+      }
+
+      .panel {
+        fill: #ffffff;
+        stroke: #e2e8f0;
+        stroke-width: 1.2;
+      }
+
+      .node {
+        fill: #ffffff;
+        stroke: #e2e8f0;
+        stroke-width: 1.2;
+      }
+
+      .soft-node {
+        fill: #f8fafc;
+        stroke: #e2e8f0;
+        stroke-width: 1;
+      }
+
+      .divider {
+        stroke: #e2e8f0;
+        stroke-width: 1;
+      }
+
+      .title {
+        fill: #0f172a;
+        font-size: 26px;
+        font-weight: 750;
+        letter-spacing: -0.5px;
+      }
+
+      .subtitle {
+        fill: #64748b;
+        font-size: 14px;
+        font-weight: 450;
+      }
+
+      .layer-index {
+        fill: #94a3b8;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 1.6px;
+      }
+
+      .layer-title {
+        fill: #0f172a;
+        font-size: 17px;
+        font-weight: 720;
+        letter-spacing: -0.15px;
+      }
+
+      .node-title {
+        fill: #1e293b;
+        font-size: 14px;
+        font-weight: 680;
+      }
+
+      .node-copy {
+        fill: #64748b;
+        font-size: 11.5px;
+        font-weight: 450;
+      }
+
+      .micro-label {
+        fill: #64748b;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 1.25px;
+      }
+
+      .provider-label {
+        fill: #334155;
+        font-size: 12px;
+        font-weight: 650;
+      }
+
+      .flow-line {
+        fill: none;
+        stroke: #94a3b8;
+        stroke-width: 2;
+        stroke-linecap: round;
+        marker-end: url(#arrow);
+      }
+
+      .internal-line {
+        fill: none;
+        stroke: #cbd5e1;
+        stroke-width: 1.5;
+        stroke-linecap: round;
+        marker-end: url(#arrow);
+      }
+
+      .data-line {
+        fill: none;
+        stroke: #ec4899;
+        stroke-width: 1.6;
+        stroke-linecap: round;
+        stroke-dasharray: 4 5;
+        marker-end: url(#arrow-pink);
+      }
+
+      .arrow-head {
+        fill: #94a3b8;
+      }
+
+      .client-tint {
+        fill: #ecfeff;
+      }
+
+      .interface-tint {
+        fill: #f5f3ff;
+      }
+
+      .core-tint {
+        fill: #fdf2f8;
+      }
+
+      .relay-tint {
+        fill: #fffbeb;
+      }
+
+      .provider-tint {
+        fill: #ecfdf5;
+      }
+
+      .client-accent {
+        fill: #0891b2;
+        stroke: #0891b2;
+      }
+
+      .interface-accent {
+        fill: #7c3aed;
+        stroke: #7c3aed;
+      }
+
+      .core-accent {
+        fill: #db2777;
+        stroke: #db2777;
+      }
+
+      .relay-accent {
+        fill: #d97706;
+        stroke: #d97706;
+      }
+
+      .provider-accent {
+        fill: #059669;
+        stroke: #059669;
+      }
+
+      .icon-stroke {
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.7;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      .white-icon {
+        color: #ffffff;
+      }
+
+      .chip {
+        fill: #ffffff;
+        stroke: #e2e8f0;
+        stroke-width: 1;
+      }
+
+      .chip-text {
+        fill: #475569;
+        font-size: 11px;
+        font-weight: 650;
+      }
+
+      .foundation {
+        fill: url(#foundation-gradient);
+        stroke: #e2e8f0;
+        stroke-width: 1.2;
+      }
+
+      .foundation-title {
+        fill: #0f172a;
+        font-size: 15px;
+        font-weight: 700;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        .canvas {
+          fill: #090d18;
+        }
+
+        .grid-line {
+          stroke: #172033;
+        }
+
+        .panel,
+        .node {
+          fill: #111827;
+          stroke: #263244;
+        }
+
+        .soft-node {
+          fill: #0d1422;
+          stroke: #263244;
+        }
+
+        .divider {
+          stroke: #263244;
+        }
+
+        .title,
+        .layer-title,
+        .foundation-title {
+          fill: #f8fafc;
+        }
+
+        .subtitle,
+        .node-copy,
+        .micro-label {
+          fill: #94a3b8;
+        }
+
+        .layer-index {
+          fill: #64748b;
+        }
+
+        .node-title,
+        .provider-label {
+          fill: #e2e8f0;
+        }
+
+        .flow-line {
+          stroke: #64748b;
+        }
+
+        .internal-line {
+          stroke: #475569;
+        }
+
+        .arrow-head {
+          fill: #64748b;
+        }
+
+        .client-tint {
+          fill: #092532;
+        }
+
+        .interface-tint {
+          fill: #21183b;
+        }
+
+        .core-tint {
+          fill: #321429;
+        }
+
+        .relay-tint {
+          fill: #30220d;
+        }
+
+        .provider-tint {
+          fill: #0e2b23;
+        }
+
+        .chip {
+          fill: #111827;
+          stroke: #334155;
+        }
+
+        .chip-text {
+          fill: #cbd5e1;
+        }
+
+        .foundation {
+          stroke: #263244;
+        }
+      }
+    </style>
+
+    <marker
+      id="arrow-pink"
+      markerWidth="8"
+      markerHeight="8"
+      refX="7"
+      refY="4"
+      orient="auto"
+      markerUnits="strokeWidth"
+    >
+      <path d="M0 0L8 4L0 8Z" fill="#ec4899" />
+    </marker>
+  </defs>
+
+  <!-- Canvas -->
+  <rect width="1280" height="820" rx="24" class="canvas" />
+  <rect width="1280" height="820" rx="24" fill="url(#grid)" opacity="0.58" />
+
+  <!-- Header -->
+  <g transform="translate(48 38)">
+    <rect width="40" height="40" rx="12" fill="url(#brand-gradient)" />
+    <g transform="translate(9 9)" class="white-icon">
+      <circle cx="5" cy="11" r="3" fill="none" stroke="currentColor" stroke-width="1.8" />
+      <circle cx="17" cy="5" r="3" fill="none" stroke="currentColor" stroke-width="1.8" />
+      <circle cx="17" cy="17" r="3" fill="none" stroke="currentColor" stroke-width="1.8" />
+      <path d="M7.7 9.6L14.2 6.4M7.7 12.4L14.2 15.6" class="icon-stroke" />
+    </g>
+  </g>
+  <text x="102" y="58" class="title" dominant-baseline="middle">New API Architecture</text>
+  <text x="102" y="84" class="subtitle" dominant-baseline="middle">
+    A unified gateway from any client to every AI provider
+  </text>
+
+  <g transform="translate(952 48)">
+    <rect width="124" height="28" rx="14" class="chip" />
+    <circle cx="16" cy="14" r="4" fill="#ec4899" />
+    <text x="28" y="14" class="chip-text" dominant-baseline="middle">Unified gateway</text>
+  </g>
+  <g transform="translate(1088 48)">
+    <rect width="144" height="28" rx="14" class="chip" />
+    <circle cx="16" cy="14" r="4" fill="#22c55e" />
+    <text x="28" y="14" class="chip-text" dominant-baseline="middle">Multi-protocol</text>
+  </g>
+
+  <!-- Main panels -->
+  <g filter="url(#panel-shadow)">
+    <rect x="48" y="142" width="176" height="480" rx="18" class="panel" />
+    <rect x="48" y="142" width="176" height="74" rx="18" class="client-tint" />
+    <rect x="48" y="198" width="176" height="18" class="client-tint" />
+
+    <rect x="260" y="142" width="220" height="480" rx="18" class="panel" />
+    <rect x="260" y="142" width="220" height="74" rx="18" class="interface-tint" />
+    <rect x="260" y="198" width="220" height="18" class="interface-tint" />
+
+    <rect x="520" y="142" width="260" height="480" rx="18" class="panel" />
+    <rect x="520" y="142" width="260" height="74" rx="18" class="core-tint" />
+    <rect x="520" y="198" width="260" height="18" class="core-tint" />
+
+    <rect x="820" y="142" width="180" height="480" rx="18" class="panel" />
+    <rect x="820" y="142" width="180" height="74" rx="18" class="relay-tint" />
+    <rect x="820" y="198" width="180" height="18" class="relay-tint" />
+
+    <rect x="1040" y="142" width="192" height="480" rx="18" class="panel" />
+    <rect x="1040" y="142" width="192" height="74" rx="18" class="provider-tint" />
+    <rect x="1040" y="198" width="192" height="18" class="provider-tint" />
+  </g>
+
+  <!-- Panel headings -->
+  <text x="66" y="166" class="layer-index">01 · CLIENTS</text>
+  <text x="66" y="193" class="layer-title">Request sources</text>
+
+  <text x="278" y="166" class="layer-index">02 · INTERFACE</text>
+  <text x="278" y="193" class="layer-title">Unified access</text>
+
+  <text x="538" y="166" class="layer-index">03 · PLATFORM</text>
+  <text x="538" y="193" class="layer-title">Core backend · Go</text>
+
+  <text x="838" y="166" class="layer-index">04 · RELAY</text>
+  <text x="838" y="193" class="layer-title">AI relay core</text>
+
+  <text x="1058" y="166" class="layer-index">05 · PROVIDERS</text>
+  <text x="1058" y="193" class="layer-title">Model network</text>
+
+  <!-- Client layer -->
+  <g filter="url(#node-shadow)">
+    <rect x="64" y="238" width="144" height="78" rx="13" class="node" />
+    <rect x="64" y="334" width="144" height="78" rx="13" class="node" />
+    <rect x="64" y="430" width="144" height="78" rx="13" class="node" />
+  </g>
+
+  <circle cx="86" cy="260" r="11" class="client-accent" />
+  <g transform="translate(80 254)" class="white-icon">
+    <rect x="0.5" y="1" width="11" height="8" rx="1.5" class="icon-stroke" />
+    <path d="M4 11H8M6 9V11" class="icon-stroke" />
+  </g>
+  <text x="105" y="263" class="node-title">Web console</text>
+  <text x="80" y="291" class="node-copy">Admin &amp; user interface</text>
+
+  <circle cx="86" cy="356" r="11" class="client-accent" />
+  <g transform="translate(80 350)" class="white-icon">
+    <path d="M4 2L1 6L4 10M8 2L11 6L8 10" class="icon-stroke" />
+  </g>
+  <text x="105" y="359" class="node-title">API &amp; SDKs</text>
+  <text x="80" y="387" class="node-copy">Programmatic clients</text>
+
+  <circle cx="86" cy="452" r="11" class="client-accent" />
+  <g transform="translate(80 446)" class="white-icon">
+    <path d="M2 2H10V10H2ZM5 5H7V7H5Z" class="icon-stroke" />
+  </g>
+  <text x="105" y="455" class="node-title">AI apps</text>
+  <text x="80" y="483" class="node-copy">Chat · CLI · Agents</text>
+
+  <rect x="64" y="548" width="144" height="44" rx="12" class="soft-node" />
+  <text x="136" y="565" class="micro-label" text-anchor="middle">TRANSPORT</text>
+  <text x="136" y="582" class="node-copy" text-anchor="middle">HTTPS · SSE · WebSocket</text>
+
+  <!-- Interface layer -->
+  <g filter="url(#node-shadow)">
+    <rect x="276" y="238" width="188" height="116" rx="14" class="node" />
+    <rect x="276" y="372" width="188" height="82" rx="14" class="node" />
+    <rect x="276" y="480" width="188" height="112" rx="14" class="node" />
+  </g>
+
+  <circle cx="300" cy="263" r="12" class="interface-accent" />
+  <g transform="translate(294 257)" class="white-icon">
+    <circle cx="6" cy="6" r="2" class="icon-stroke" />
+    <path d="M6 0.5C8.8 0.5 11 3 11 6S8.8 11.5 6 11.5 1 9 1 6 3.2.5 6 .5ZM0.7 3.2C3.1 1.8 6.6 2.4 8.5 4.8s1.7 5.4-.2 6.6M11.3 3.2C8.9 1.8 5.4 2.4 3.5 4.8s-1.7 5.4.2 6.6" class="icon-stroke" />
+  </g>
+  <text x="321" y="266" class="node-title">React web app</text>
+  <text x="292" y="297" class="node-copy">Pages · Components</text>
+  <text x="292" y="318" class="node-copy">Responsive management UI</text>
+  <rect x="292" y="328" width="68" height="18" rx="9" class="interface-tint" />
+  <text x="326" y="337" class="micro-label" text-anchor="middle" dominant-baseline="middle">FRONTEND</text>
+
+  <text x="292" y="397" class="node-title">Shared application state</text>
+  <text x="292" y="423" class="node-copy">User · Theme · Status</text>
+  <text x="292" y="442" class="node-copy">Context · i18n</text>
+
+  <circle cx="300" cy="506" r="12" class="interface-accent" />
+  <g transform="translate(294 500)" class="white-icon">
+    <path d="M2 1H10A1 1 0 0 1 11 2V10A1 1 0 0 1 10 11H2A1 1 0 0 1 1 10V2A1 1 0 0 1 2 1ZM4 4L2.5 6 4 8M8 4L9.5 6 8 8" class="icon-stroke" />
+  </g>
+  <text x="321" y="509" class="node-title">Unified API</text>
+  <text x="292" y="540" class="node-copy">Multi-protocol endpoints</text>
+  <text x="292" y="561" class="node-copy">Streaming &amp; tool calls</text>
+  <rect x="292" y="568" width="78" height="18" rx="9" class="interface-tint" />
+  <text x="331" y="577" class="micro-label" text-anchor="middle" dominant-baseline="middle">API ACCESS</text>
+
+  <!-- Core backend -->
+  <g filter="url(#node-shadow)">
+    <rect x="536" y="238" width="228" height="70" rx="13" class="node" />
+    <rect x="536" y="326" width="228" height="70" rx="13" class="node" />
+    <rect x="536" y="414" width="108" height="64" rx="13" class="node" />
+    <rect x="656" y="414" width="108" height="64" rx="13" class="node" />
+    <rect x="536" y="510" width="228" height="82" rx="13" class="soft-node" />
+  </g>
+
+  <circle cx="558" cy="260" r="10" class="core-accent" />
+  <g transform="translate(553 255)" class="white-icon">
+    <path d="M1 2H9M3 5H7M4 8H6" class="icon-stroke" />
+  </g>
+  <text x="577" y="263" class="node-title">Router &amp; middleware</text>
+  <text x="552" y="288" class="node-copy">Auth · Quota · Rate limits</text>
+
+  <circle cx="558" cy="348" r="10" class="core-accent" />
+  <g transform="translate(553 343)" class="white-icon">
+    <path d="M1 1H9V9H1ZM3 3H7M3 5H7M3 7H6" class="icon-stroke" />
+  </g>
+  <text x="577" y="351" class="node-title">Controllers</text>
+  <text x="552" y="376" class="node-copy">Validation &amp; orchestration</text>
+
+  <text x="590" y="438" class="node-title" text-anchor="middle">Services</text>
+  <text x="590" y="460" class="node-copy" text-anchor="middle">Business logic</text>
+  <text x="710" y="438" class="node-title" text-anchor="middle">Models</text>
+  <text x="710" y="460" class="node-copy" text-anchor="middle">Domain data</text>
+
+  <text x="552" y="532" class="micro-label">STATE &amp; CACHE</text>
+  <rect x="552" y="546" width="92" height="30" rx="9" class="node" />
+  <ellipse cx="570" cy="555" rx="8" ry="3.5" fill="none" stroke="#db2777" stroke-width="1.5" />
+  <path d="M562 555V566C562 568 566 570 570 570S578 568 578 566V555" fill="none" stroke="#db2777" stroke-width="1.5" />
+  <text x="588" y="562" class="provider-label" dominant-baseline="middle">Database</text>
+  <rect x="654" y="546" width="94" height="30" rx="9" class="node" />
+  <path d="M666 554H680V568H666ZM669 557H677V565H669Z" fill="none" stroke="#db2777" stroke-width="1.4" />
+  <text x="686" y="562" class="provider-label" dominant-baseline="middle">Redis</text>
+
+  <!-- Relay pipeline -->
+  <g filter="url(#node-shadow)">
+    <rect x="836" y="238" width="148" height="74" rx="13" class="node" />
+    <rect x="836" y="346" width="148" height="74" rx="13" class="node" />
+    <rect x="836" y="454" width="148" height="74" rx="13" class="node" />
+  </g>
+
+  <circle cx="858" cy="262" r="10" class="relay-accent" />
+  <path d="M854 258H862M854 262H860M854 266H858" stroke="#fff" stroke-width="1.6" stroke-linecap="round" />
+  <text x="877" y="265" class="node-title">Relay router</text>
+  <text x="852" y="291" class="node-copy">Channel selection</text>
+
+  <path d="M910 312V340" class="internal-line" />
+
+  <circle cx="858" cy="370" r="10" class="relay-accent" />
+  <path d="M853 370H863M858 365V375" stroke="#fff" stroke-width="1.6" stroke-linecap="round" />
+  <text x="877" y="373" class="node-title">Handlers</text>
+  <text x="852" y="399" class="node-copy">Request lifecycle</text>
+
+  <path d="M910 420V448" class="internal-line" />
+
+  <circle cx="858" cy="478" r="10" class="relay-accent" />
+  <path d="M853 474L863 482M863 474L853 482" stroke="#fff" stroke-width="1.6" stroke-linecap="round" />
+  <text x="877" y="481" class="node-title">Adapters</text>
+  <text x="852" y="507" class="node-copy">Protocol conversion</text>
+
+  <rect x="836" y="554" width="148" height="38" rx="11" class="soft-node" />
+  <text x="910" y="568" class="micro-label" text-anchor="middle">NORMALIZED OUTPUT</text>
+  <text x="910" y="584" class="node-copy" text-anchor="middle">Text · Image · Audio</text>
+
+  <!-- Provider network -->
+  <g>
+    <rect x="1056" y="238" width="76" height="54" rx="11" class="soft-node" />
+    <rect x="1140" y="238" width="76" height="54" rx="11" class="soft-node" />
+    <rect x="1056" y="304" width="76" height="54" rx="11" class="soft-node" />
+    <rect x="1140" y="304" width="76" height="54" rx="11" class="soft-node" />
+    <rect x="1056" y="370" width="76" height="54" rx="11" class="soft-node" />
+    <rect x="1140" y="370" width="76" height="54" rx="11" class="soft-node" />
+    <rect x="1056" y="436" width="76" height="54" rx="11" class="soft-node" />
+    <rect x="1140" y="436" width="76" height="54" rx="11" class="soft-node" />
+  </g>
+
+  <circle cx="1094" cy="253" r="5" fill="#10a37f" />
+  <text x="1094" y="276" class="provider-label" text-anchor="middle">OpenAI</text>
+  <circle cx="1178" cy="253" r="5" fill="#d97757" />
+  <text x="1178" y="276" class="provider-label" text-anchor="middle">Claude</text>
+
+  <circle cx="1094" cy="319" r="5" fill="#4285f4" />
+  <text x="1094" y="342" class="provider-label" text-anchor="middle">Gemini</text>
+  <circle cx="1178" cy="319" r="5" fill="#4d6bfe" />
+  <text x="1178" y="342" class="provider-label" text-anchor="middle">DeepSeek</text>
+
+  <circle cx="1094" cy="385" r="5" fill="#615ced" />
+  <text x="1094" y="408" class="provider-label" text-anchor="middle">Qwen</text>
+  <circle cx="1178" cy="385" r="5" fill="#2563eb" />
+  <text x="1178" y="408" class="provider-label" text-anchor="middle">Zhipu</text>
+
+  <circle cx="1094" cy="451" r="5" fill="#0ea5e9" />
+  <text x="1094" y="474" class="provider-label" text-anchor="middle">Azure</text>
+  <circle cx="1178" cy="451" r="5" fill="#059669" />
+  <text x="1178" y="474" class="provider-label" text-anchor="middle">Others</text>
+
+  <rect x="1056" y="520" width="160" height="72" rx="12" class="provider-tint" />
+  <text x="1136" y="544" class="micro-label" text-anchor="middle">EXTENSIBLE CHANNELS</text>
+  <text x="1136" y="567" class="node-copy" text-anchor="middle">Add providers without</text>
+  <text x="1136" y="584" class="node-copy" text-anchor="middle">changing client code</text>
+
+  <!-- Cross-layer flow -->
+  <path d="M224 360H252" class="flow-line" />
+  <path d="M480 360H512" class="flow-line" />
+  <path d="M780 360H812" class="flow-line" />
+  <path d="M1000 360H1032" class="flow-line" />
+
+  <text x="242" y="343" class="micro-label" text-anchor="middle">HTTPS</text>
+  <text x="500" y="343" class="micro-label" text-anchor="middle">API</text>
+  <text x="800" y="343" class="micro-label" text-anchor="middle">ROUTE</text>
+  <text x="1020" y="343" class="micro-label" text-anchor="middle">CALL</text>
+
+  <path d="M650 396V408" class="internal-line" />
+  <path d="M590 478V502" class="data-line" />
+  <path d="M710 478V502" class="data-line" />
+
+  <!-- Deployment foundation -->
+  <rect x="48" y="662" width="1184" height="110" rx="18" class="foundation" />
+  <g transform="translate(70 683)">
+    <rect width="40" height="40" rx="11" fill="url(#brand-gradient)" />
+    <g transform="translate(10 10)" class="white-icon">
+      <path d="M2 5H7V10H2ZM8 5H13V10H8ZM14 5H19V10H14ZM5 11H10V16H5ZM11 11H16V16H11M1 16C3.5 19 8 20 12 19.5 16 19 19 16.5 20 13" class="icon-stroke" />
+    </g>
+  </g>
+  <text x="124" y="696" class="foundation-title">Deployment foundation</text>
+  <text x="124" y="721" class="node-copy">Portable, self-hosted, and ready to scale</text>
+
+  <g transform="translate(385 685)">
+    <rect width="94" height="36" rx="10" class="chip" />
+    <circle cx="17" cy="18" r="5" fill="#2496ed" />
+    <text x="30" y="18" class="chip-text" dominant-baseline="middle">Docker</text>
+  </g>
+  <g transform="translate(491 685)">
+    <rect width="142" height="36" rx="10" class="chip" />
+    <circle cx="17" cy="18" r="5" fill="#8b5cf6" />
+    <text x="30" y="18" class="chip-text" dominant-baseline="middle">Docker Compose</text>
+  </g>
+  <g transform="translate(645 685)">
+    <rect width="108" height="36" rx="10" class="chip" />
+    <circle cx="17" cy="18" r="5" fill="#ec4899" />
+    <text x="30" y="18" class="chip-text" dominant-baseline="middle">Self-hosted</text>
+  </g>
+  <g transform="translate(765 685)">
+    <rect width="126" height="36" rx="10" class="chip" />
+    <circle cx="17" cy="18" r="5" fill="#f59e0b" />
+    <text x="30" y="18" class="chip-text" dominant-baseline="middle">Horizontal scale</text>
+  </g>
+  <g transform="translate(903 685)">
+    <rect width="118" height="36" rx="10" class="chip" />
+    <circle cx="17" cy="18" r="5" fill="#22c55e" />
+    <text x="30" y="18" class="chip-text" dominant-baseline="middle">Observability</text>
+  </g>
+  <g transform="translate(1033 685)">
+    <rect width="177" height="36" rx="10" class="chip" />
+    <circle cx="17" cy="18" r="5" fill="#06b6d4" />
+    <text x="30" y="18" class="chip-text" dominant-baseline="middle">Database + Redis</text>
+  </g>
+
+  <text x="385" y="744" class="node-copy">One deployment · Multi-tenant management · Unified billing · Secure access control</text>
+</svg>

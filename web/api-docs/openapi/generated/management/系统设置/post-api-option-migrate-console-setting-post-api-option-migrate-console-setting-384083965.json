@@ -1,0 +1,31 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "迁移控制台设置",
+    "version": "1.0.0",
+    "description": "👑 需要超级管理员权限（Root）"
+  },
+  "tags": [
+    {
+      "name": "系统设置"
+    }
+  ],
+  "paths": {
+    "/api/option/migrate_console_setting": {
+      "post": {
+        "tags": [
+          "系统设置"
+        ],
+        "summary": "迁移控制台设置",
+        "description": "👑 需要超级管理员权限（Root）",
+        "operationId": "post-api-option-migrate-console-setting",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

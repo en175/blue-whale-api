@@ -1,0 +1,231 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "原生Gemini格式",
+    "version": "1.0.0",
+    "description": "Gemini 音频生成接口。\n可使用gemini-2.5-flash-preview-tts等模型"
+  },
+  "tags": [
+    {
+      "name": "音频（Audio）"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "使用 Bearer Token 认证。\n格式: `Authorization: Bearer sk-xxxxxx`\n"
+      }
+    }
+  },
+  "paths": {
+    "/v1beta/models/{model}:generateContent": {
+      "post": {
+        "tags": [
+          "音频（Audio）"
+        ],
+        "summary": "原生Gemini格式",
+        "description": "Gemini 音频生成接口。\n可使用gemini-2.5-flash-preview-tts等模型",
+        "operationId": "geminirelayv1beta-383836364",
+        "parameters": [
+          {
+            "name": "model",
+            "in": "path",
+            "required": true,
+            "description": "模型名称",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "contents": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "parts": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "text": {
+                                "type": "string"
+                              }
+                            },
+                            "x-apifox-orders": [
+                              "text"
+                            ]
+                          }
+                        }
+                      },
+                      "x-apifox-orders": [
+                        "parts"
+                      ]
+                    }
+                  },
+                  "generationConfig": {
+                    "type": "object",
+                    "properties": {
+                      "responseModalities": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "speechConfig": {
+                        "type": "object",
+                        "properties": {
+                          "voiceConfig": {
+                            "type": "object",
+                            "properties": {
+                              "prebuiltVoiceConfig": {
+                                "type": "object",
+                                "properties": {
+                                  "voiceName": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "voiceName"
+                                ],
+                                "x-apifox-orders": [
+                                  "voiceName"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "prebuiltVoiceConfig"
+                            ],
+                            "x-apifox-orders": [
+                              "prebuiltVoiceConfig"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "voiceConfig"
+                        ],
+                        "x-apifox-orders": [
+                          "voiceConfig"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "responseModalities",
+                      "speechConfig"
+                    ],
+                    "x-apifox-orders": [
+                      "responseModalities",
+                      "speechConfig"
+                    ]
+                  }
+                },
+                "required": [
+                  "contents",
+                  "generationConfig"
+                ],
+                "x-apifox-orders": [
+                  "contents",
+                  "generationConfig"
+                ]
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "candidates": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "content": {
+                            "type": "object",
+                            "properties": {
+                              "role": {
+                                "type": "string"
+                              },
+                              "parts": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {},
+                                  "x-apifox-orders": []
+                                }
+                              }
+                            },
+                            "x-apifox-orders": [
+                              "role",
+                              "parts"
+                            ]
+                          },
+                          "finishReason": {
+                            "type": "string"
+                          },
+                          "safetyRatings": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {},
+                              "x-apifox-orders": []
+                            }
+                          }
+                        },
+                        "x-apifox-orders": [
+                          "content",
+                          "finishReason",
+                          "safetyRatings"
+                        ]
+                      }
+                    },
+                    "usageMetadata": {
+                      "type": "object",
+                      "properties": {
+                        "promptTokenCount": {
+                          "type": "integer"
+                        },
+                        "candidatesTokenCount": {
+                          "type": "integer"
+                        },
+                        "totalTokenCount": {
+                          "type": "integer"
+                        }
+                      },
+                      "x-apifox-orders": [
+                        "promptTokenCount",
+                        "candidatesTokenCount",
+                        "totalTokenCount"
+                      ]
+                    }
+                  },
+                  "x-apifox-orders": [
+                    "candidates",
+                    "usageMetadata"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

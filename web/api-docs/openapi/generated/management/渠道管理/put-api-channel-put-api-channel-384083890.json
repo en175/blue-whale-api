@@ -1,0 +1,42 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "更新渠道",
+    "version": "1.0.0",
+    "description": "👨‍💼 需要管理员权限（Admin）"
+  },
+  "tags": [
+    {
+      "name": "渠道管理"
+    }
+  ],
+  "paths": {
+    "/api/channel/": {
+      "put": {
+        "tags": [
+          "渠道管理"
+        ],
+        "summary": "更新渠道",
+        "description": "👨‍💼 需要管理员权限（Admin）",
+        "operationId": "put-api-channel",
+        "parameters": [],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "description": "Unresolved $ref: #/definitions/224188811"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

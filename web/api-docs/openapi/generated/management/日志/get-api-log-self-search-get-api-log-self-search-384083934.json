@@ -1,0 +1,40 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "搜索个人日志",
+    "version": "1.0.0",
+    "description": "🔐 需要登录（User权限）"
+  },
+  "tags": [
+    {
+      "name": "日志"
+    }
+  ],
+  "paths": {
+    "/api/log/self/search": {
+      "get": {
+        "tags": [
+          "日志"
+        ],
+        "summary": "搜索个人日志",
+        "description": "🔐 需要登录（User权限）",
+        "operationId": "get-api-log-self-search",
+        "parameters": [
+          {
+            "name": "keyword",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

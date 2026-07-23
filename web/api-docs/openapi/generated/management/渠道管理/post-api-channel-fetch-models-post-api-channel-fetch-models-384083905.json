@@ -1,0 +1,57 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "获取模型列表",
+    "version": "1.0.0",
+    "description": "👨‍💼 需要管理员权限（Admin）"
+  },
+  "tags": [
+    {
+      "name": "渠道管理"
+    }
+  ],
+  "paths": {
+    "/api/channel/fetch_models": {
+      "post": {
+        "tags": [
+          "渠道管理"
+        ],
+        "summary": "获取模型列表",
+        "description": "👨‍💼 需要管理员权限（Admin）",
+        "operationId": "post-api-channel-fetch-models",
+        "parameters": [],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "base_url": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "integer"
+                  },
+                  "key": {
+                    "type": "string"
+                  }
+                },
+                "x-apifox-orders": [
+                  "base_url",
+                  "type",
+                  "key"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

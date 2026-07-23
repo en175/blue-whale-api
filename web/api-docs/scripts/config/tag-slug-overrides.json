@@ -1,0 +1,30 @@
+{
+  "default": "default",
+
+  "列出模型": "list",
+  "原生OpenAI格式": "openai",
+  "通义千问OpenAI格式": "qwen",
+  "原生Gemini格式": "gemini",
+  "原生Claude格式": "claude",
+  "Sora格式": "sora",
+  "可灵格式": "kling",
+  "即梦格式": "jimeng",
+
+  "系统": "system",
+  "系统设置": "system-settings",
+  "用户登陆注册": "user-auth",
+  "用户管理": "user-management",
+  "两步验证": "two-factor-auth",
+  "安全验证": "security-verification",
+  "OAuth": "oauth",
+  "渠道管理": "channel-management",
+  "模型管理": "model-management",
+  "令牌管理": "token-management",
+  "兑换码": "redemption",
+  "充值": "payment",
+  "日志": "logs",
+  "数据统计": "statistics",
+  "分组": "groups",
+  "任务": "tasks",
+  "供应商": "vendors"
+}

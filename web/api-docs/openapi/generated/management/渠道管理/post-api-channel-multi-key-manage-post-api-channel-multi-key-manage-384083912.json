@@ -1,0 +1,66 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "管理多密钥",
+    "version": "1.0.0",
+    "description": "👨‍💼 需要管理员权限（Admin）"
+  },
+  "tags": [
+    {
+      "name": "渠道管理"
+    }
+  ],
+  "paths": {
+    "/api/channel/multi_key/manage": {
+      "post": {
+        "tags": [
+          "渠道管理"
+        ],
+        "summary": "管理多密钥",
+        "description": "👨‍💼 需要管理员权限（Admin）",
+        "operationId": "post-api-channel-multi-key-manage",
+        "parameters": [],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "channel_id": {
+                    "type": "integer"
+                  },
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "get_key_status",
+                      "disable_key",
+                      "enable_key",
+                      "delete_key",
+                      "delete_disabled_keys",
+                      "enable_all_keys",
+                      "disable_all_keys"
+                    ]
+                  },
+                  "key_index": {
+                    "type": "integer"
+                  }
+                },
+                "x-apifox-orders": [
+                  "channel_id",
+                  "action",
+                  "key_index"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

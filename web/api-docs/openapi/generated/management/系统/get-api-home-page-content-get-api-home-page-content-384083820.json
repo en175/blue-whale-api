@@ -1,0 +1,31 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "获取首页内容",
+    "version": "1.0.0",
+    "description": "🔓 无需鉴权"
+  },
+  "tags": [
+    {
+      "name": "系统"
+    }
+  ],
+  "paths": {
+    "/api/home_page_content": {
+      "get": {
+        "tags": [
+          "系统"
+        ],
+        "summary": "获取首页内容",
+        "description": "🔓 无需鉴权",
+        "operationId": "get-api-home-page-content",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

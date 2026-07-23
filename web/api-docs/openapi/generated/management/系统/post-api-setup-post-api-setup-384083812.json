@@ -1,0 +1,53 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "初始化系统",
+    "version": "1.0.0",
+    "description": "🔓 无需鉴权"
+  },
+  "tags": [
+    {
+      "name": "系统"
+    }
+  ],
+  "paths": {
+    "/api/setup": {
+      "post": {
+        "tags": [
+          "系统"
+        ],
+        "summary": "初始化系统",
+        "description": "🔓 无需鉴权",
+        "operationId": "post-api-setup",
+        "parameters": [],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "username": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "type": "string"
+                  }
+                },
+                "x-apifox-orders": [
+                  "username",
+                  "password"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

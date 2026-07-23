@@ -1,0 +1,31 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "获取2FA状态",
+    "version": "1.0.0",
+    "description": "🔐 需要登录（User权限）"
+  },
+  "tags": [
+    {
+      "name": "两步验证"
+    }
+  ],
+  "paths": {
+    "/api/user/2fa/status": {
+      "get": {
+        "tags": [
+          "两步验证"
+        ],
+        "summary": "获取2FA状态",
+        "description": "🔐 需要登录（User权限）",
+        "operationId": "get-api-user-2fa-status",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

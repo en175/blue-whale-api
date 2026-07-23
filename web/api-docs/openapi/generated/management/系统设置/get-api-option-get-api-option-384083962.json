@@ -1,0 +1,31 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "获取系统选项",
+    "version": "1.0.0",
+    "description": "👑 需要超级管理员权限（Root）"
+  },
+  "tags": [
+    {
+      "name": "系统设置"
+    }
+  ],
+  "paths": {
+    "/api/option/": {
+      "get": {
+        "tags": [
+          "系统设置"
+        ],
+        "summary": "获取系统选项",
+        "description": "👑 需要超级管理员权限（Root）",
+        "operationId": "get-api-option",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "获取所有兑换码",
+    "version": "1.0.0",
+    "description": "👨‍💼 需要管理员权限（Admin）"
+  },
+  "tags": [
+    {
+      "name": "兑换码"
+    }
+  ],
+  "paths": {
+    "/api/redemption/": {
+      "get": {
+        "tags": [
+          "兑换码"
+        ],
+        "summary": "获取所有兑换码",
+        "description": "👨‍💼 需要管理员权限（Admin）",
+        "operationId": "get-api-redemption",
+        "parameters": [
+          {
+            "name": "p",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

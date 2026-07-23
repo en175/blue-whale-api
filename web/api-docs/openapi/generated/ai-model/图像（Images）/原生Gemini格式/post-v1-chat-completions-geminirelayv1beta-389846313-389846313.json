@@ -1,0 +1,263 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "OpenAI聊天格式",
+    "version": "1.0.0",
+    "description": "Gemini 图片生成"
+  },
+  "tags": [
+    {
+      "name": "图像（Images）/原生Gemini格式"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "使用 Bearer Token 认证。\n格式: `Authorization: Bearer sk-xxxxxx`\n"
+      }
+    }
+  },
+  "paths": {
+    "/v1/chat/completions": {
+      "post": {
+        "tags": [
+          "图像（Images）/原生Gemini格式"
+        ],
+        "summary": "OpenAI聊天格式",
+        "description": "Gemini 图片生成",
+        "operationId": "geminirelayv1beta-389846313",
+        "parameters": [],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "model": {
+                    "type": "string"
+                  },
+                  "stream": {
+                    "type": "boolean"
+                  },
+                  "messages": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "role": {
+                          "type": "string"
+                        },
+                        "content": {
+                          "type": "string"
+                        }
+                      },
+                      "x-apifox-orders": [
+                        "role",
+                        "content"
+                      ]
+                    }
+                  },
+                  "extra_body": {
+                    "type": "object",
+                    "properties": {
+                      "google": {
+                        "type": "object",
+                        "properties": {
+                          "image_config": {
+                            "type": "object",
+                            "properties": {
+                              "aspect_ratio": {
+                                "type": "string"
+                              },
+                              "image_size": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "aspect_ratio",
+                              "image_size"
+                            ],
+                            "x-apifox-orders": [
+                              "aspect_ratio",
+                              "image_size"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "image_config"
+                        ],
+                        "x-apifox-orders": [
+                          "image_config"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "google"
+                    ],
+                    "x-apifox-orders": [
+                      "google"
+                    ]
+                  },
+                  "contents": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "role": {
+                          "type": "string"
+                        },
+                        "parts": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "text": {
+                                "type": "string"
+                              }
+                            },
+                            "x-apifox-orders": [
+                              "text"
+                            ]
+                          }
+                        }
+                      },
+                      "x-apifox-orders": [
+                        "role",
+                        "parts"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "model",
+                  "stream",
+                  "messages",
+                  "contents"
+                ],
+                "x-apifox-orders": [
+                  "model",
+                  "stream",
+                  "messages",
+                  "extra_body",
+                  "contents"
+                ]
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "model": {
+                      "type": "string"
+                    },
+                    "object": {
+                      "type": "string"
+                    },
+                    "created": {
+                      "type": "integer"
+                    },
+                    "choices": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "index": {
+                            "type": "integer"
+                          },
+                          "message": {
+                            "type": "object",
+                            "properties": {
+                              "role": {
+                                "type": "string"
+                              },
+                              "content": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "role",
+                              "content"
+                            ],
+                            "x-apifox-orders": [
+                              "role",
+                              "content"
+                            ]
+                          },
+                          "finish_reason": {
+                            "type": "string"
+                          }
+                        },
+                        "x-apifox-orders": [
+                          "index",
+                          "message",
+                          "finish_reason"
+                        ]
+                      }
+                    },
+                    "usage": {
+                      "type": "object",
+                      "properties": {
+                        "prompt_tokens": {
+                          "type": "integer"
+                        },
+                        "completion_tokens": {
+                          "type": "integer"
+                        },
+                        "total_tokens": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "prompt_tokens",
+                        "completion_tokens",
+                        "total_tokens"
+                      ],
+                      "x-apifox-orders": [
+                        "prompt_tokens",
+                        "completion_tokens",
+                        "total_tokens"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "model",
+                    "object",
+                    "created",
+                    "choices",
+                    "usage"
+                  ],
+                  "x-apifox-orders": [
+                    "id",
+                    "model",
+                    "object",
+                    "created",
+                    "choices",
+                    "usage"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

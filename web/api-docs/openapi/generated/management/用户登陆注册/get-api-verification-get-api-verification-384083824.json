@@ -1,0 +1,40 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "发送邮箱验证码",
+    "version": "1.0.0",
+    "description": "🔓 无需鉴权"
+  },
+  "tags": [
+    {
+      "name": "用户登陆注册"
+    }
+  ],
+  "paths": {
+    "/api/verification": {
+      "get": {
+        "tags": [
+          "用户登陆注册"
+        ],
+        "summary": "发送邮箱验证码",
+        "description": "🔓 无需鉴权",
+        "operationId": "get-api-verification",
+        "parameters": [
+          {
+            "name": "email",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

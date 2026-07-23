@@ -1,0 +1,31 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "易支付回调",
+    "version": "1.0.0",
+    "description": "🔓 无需鉴权（支付回调）"
+  },
+  "tags": [
+    {
+      "name": "充值"
+    }
+  ],
+  "paths": {
+    "/api/user/epay/notify": {
+      "get": {
+        "tags": [
+          "充值"
+        ],
+        "summary": "易支付回调",
+        "description": "🔓 无需鉴权（支付回调）",
+        "operationId": "get-api-user-epay-notify",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

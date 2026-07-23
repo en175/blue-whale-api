@@ -1,0 +1,31 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "获取所有分组",
+    "version": "1.0.0",
+    "description": "👨‍💼 需要管理员权限（Admin）"
+  },
+  "tags": [
+    {
+      "name": "分组"
+    }
+  ],
+  "paths": {
+    "/api/group/": {
+      "get": {
+        "tags": [
+          "分组"
+        ],
+        "summary": "获取所有分组",
+        "description": "👨‍💼 需要管理员权限（Admin）",
+        "operationId": "get-api-group",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

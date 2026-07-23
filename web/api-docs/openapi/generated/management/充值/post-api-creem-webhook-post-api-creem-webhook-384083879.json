@@ -1,0 +1,31 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Creem Webhook",
+    "version": "1.0.0",
+    "description": "🔓 无需鉴权（Webhook回调）"
+  },
+  "tags": [
+    {
+      "name": "充值"
+    }
+  ],
+  "paths": {
+    "/api/creem/webhook": {
+      "post": {
+        "tags": [
+          "充值"
+        ],
+        "summary": "Creem Webhook",
+        "description": "🔓 无需鉴权（Webhook回调）",
+        "operationId": "post-api-creem-webhook",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

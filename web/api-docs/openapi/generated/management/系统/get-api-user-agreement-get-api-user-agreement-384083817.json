@@ -1,0 +1,31 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "获取用户协议",
+    "version": "1.0.0",
+    "description": "🔓 无需鉴权"
+  },
+  "tags": [
+    {
+      "name": "系统"
+    }
+  ],
+  "paths": {
+    "/api/user-agreement": {
+      "get": {
+        "tags": [
+          "系统"
+        ],
+        "summary": "获取用户协议",
+        "description": "🔓 无需鉴权",
+        "operationId": "get-api-user-agreement",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

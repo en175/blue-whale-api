@@ -1,0 +1,31 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "发起易支付",
+    "version": "1.0.0",
+    "description": "🔐 需要登录（User权限）"
+  },
+  "tags": [
+    {
+      "name": "充值"
+    }
+  ],
+  "paths": {
+    "/api/user/pay": {
+      "post": {
+        "tags": [
+          "充值"
+        ],
+        "summary": "发起易支付",
+        "description": "🔐 需要登录（User权限）",
+        "operationId": "post-api-user-pay",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

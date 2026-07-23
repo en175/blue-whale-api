@@ -1,0 +1,31 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "获取倍率配置",
+    "version": "1.0.0",
+    "description": "🔓 无需鉴权"
+  },
+  "tags": [
+    {
+      "name": "系统"
+    }
+  ],
+  "paths": {
+    "/api/ratio_config": {
+      "get": {
+        "tags": [
+          "系统"
+        ],
+        "summary": "获取倍率配置",
+        "description": "🔓 无需鉴权",
+        "operationId": "get-api-ratio-config",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

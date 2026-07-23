@@ -1,0 +1,31 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "获取隐私政策",
+    "version": "1.0.0",
+    "description": "🔓 无需鉴权"
+  },
+  "tags": [
+    {
+      "name": "系统"
+    }
+  ],
+  "paths": {
+    "/api/privacy-policy": {
+      "get": {
+        "tags": [
+          "系统"
+        ],
+        "summary": "获取隐私政策",
+        "description": "🔓 无需鉴权",
+        "operationId": "get-api-privacy-policy",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

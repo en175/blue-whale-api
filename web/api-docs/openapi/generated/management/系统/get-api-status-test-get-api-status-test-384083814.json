@@ -1,0 +1,31 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "测试系统状态",
+    "version": "1.0.0",
+    "description": "👨‍💼 需要管理员权限（Admin）"
+  },
+  "tags": [
+    {
+      "name": "系统"
+    }
+  ],
+  "paths": {
+    "/api/status/test": {
+      "get": {
+        "tags": [
+          "系统"
+        ],
+        "summary": "测试系统状态",
+        "description": "👨‍💼 需要管理员权限（Admin）",
+        "operationId": "get-api-status-test",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

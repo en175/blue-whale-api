@@ -1,0 +1,251 @@
+name: Auto Translate Documents
+
+on:
+  # 当推送到 main 分支时触发
+  push:
+    branches: ['main']
+    paths:
+      # 中文文档变更时触发
+      - 'content/docs/zh/**/*.md'
+      - 'content/docs/zh/**/*.mdx'
+      # 翻译文件被删除时也触发（用于自动补全）
+      - 'content/docs/en/**/*.md'
+      - 'content/docs/en/**/*.mdx'
+      - 'content/docs/ja/**/*.md'
+      - 'content/docs/ja/**/*.mdx'
+
+  # 允许手动触发
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: '翻译模式 / Translation Mode'
+        required: true
+        type: choice
+        default: 'changed'
+        options:
+          - changed # 只翻译变更的文件
+          - force_all # 强制重新翻译所有文件
+          - missing_only # 只翻译缺失的文件
+          - specific_path # 翻译指定路径
+      path:
+        description: '指定路径 / Specific Path (文件夹如: api, 单个文件如: api/ai-model/list-models/list-models.mdx)'
+        required: false
+        type: string
+        default: ''
+
+# 设置权限
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  translate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2 # 获取最近2次提交，用于检测手动翻译
+
+      - name: 🔧 Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: 📦 Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: 🔍 Get changed files
+        id: changed-files
+        run: |
+          MODE="${{ github.event.inputs.mode }}"
+
+          # 如果是 push 触发，默认为 changed 模式
+          if [ -z "$MODE" ]; then
+            MODE="changed"
+          fi
+
+          echo "📋 翻译模式: $MODE"
+
+          # 创建临时文件存储文件列表（避免路径中特殊字符问题）
+          FILES_LIST=$(mktemp)
+
+          if [ "$MODE" = "force_all" ]; then
+            # 强制翻译所有文档
+            echo "📚 获取所有中文文档文件..."
+            find content/docs/zh -name "*.md" -o -name "*.mdx" > "$FILES_LIST"
+
+          elif [ "$MODE" = "specific_path" ]; then
+            # 翻译指定路径
+            SPECIFIC_PATH="${{ github.event.inputs.path }}"
+            if [ -z "$SPECIFIC_PATH" ]; then
+              echo "❌ 错误: specific_path 模式需要指定路径"
+              exit 1
+            fi
+
+            # 构建完整路径
+            FULL_PATH="content/docs/zh/$SPECIFIC_PATH"
+
+            if [ ! -e "$FULL_PATH" ]; then
+              echo "❌ 错误: 路径不存在: $FULL_PATH"
+              exit 1
+            fi
+
+            echo "📁 翻译指定路径: $FULL_PATH"
+
+            if [ -d "$FULL_PATH" ]; then
+              # 是目录，收集所有 markdown 文件
+              find "$FULL_PATH" \( -name "*.md" -o -name "*.mdx" \) > "$FILES_LIST"
+            else
+              # 是文件
+              echo "$FULL_PATH" > "$FILES_LIST"
+            fi
+
+          elif [ "$MODE" = "missing_only" ]; then
+            # 只翻译缺失的文档
+            echo "🔍 检测缺失的翻译文件..."
+
+            # 遍历所有中文文档（使用 -print0 和 read 处理特殊字符）
+            while IFS= read -r -d '' zh_file; do
+              # 计算相对路径
+              rel_path="${zh_file#content/docs/zh/}"
+
+              # 检查英文和日文翻译是否存在
+              en_file="content/docs/en/$rel_path"
+              ja_file="content/docs/ja/$rel_path"
+
+              if [ ! -f "$en_file" ] || [ ! -f "$ja_file" ]; then
+                echo "$zh_file" >> "$FILES_LIST"
+                if [ ! -f "$en_file" ]; then
+                  echo "  ❌ 缺失英文翻译: $en_file"
+                fi
+                if [ ! -f "$ja_file" ]; then
+                  echo "  ❌ 缺失日文翻译: $ja_file"
+                fi
+              fi
+            done < <(find content/docs/zh \( -name "*.md" -o -name "*.mdx" \) -print0)
+
+          else
+            # 正常模式：检测变更和缺失
+            echo "📝 检测变更和缺失的翻译..."
+
+            # 1. 获取变更的中文文档
+            git diff --name-only HEAD~1 HEAD | grep -E '^content/docs/zh/.*\.(md|mdx)$' >> "$FILES_LIST" || true
+
+            # 2. 获取被删除的翻译文件对应的中文源文件
+            DELETED_TRANSLATIONS=$(git diff --name-only HEAD~1 HEAD | grep -E '^content/docs/(en|ja)/.*\.(md|mdx)$' || echo "")
+
+            if [ ! -z "$DELETED_TRANSLATIONS" ]; then
+              echo "🗑️ 检测到翻译文件被删除:"
+              echo "$DELETED_TRANSLATIONS" | while IFS= read -r trans_file; do
+                [ -z "$trans_file" ] && continue
+                echo "  - $trans_file"
+                # 提取相对路径
+                if [[ "$trans_file" == content/docs/en/* ]]; then
+                  rel_path="${trans_file#content/docs/en/}"
+                elif [[ "$trans_file" == content/docs/ja/* ]]; then
+                  rel_path="${trans_file#content/docs/ja/}"
+                fi
+
+                # 构建对应的中文源文件路径
+                zh_file="content/docs/zh/$rel_path"
+
+                # 如果中文源文件存在，添加到待翻译列表
+                if [ -f "$zh_file" ]; then
+                  echo "$zh_file" >> "$FILES_LIST"
+                  echo "  ✓ 找到对应的中文源文件: $zh_file"
+                fi
+              done
+            fi
+
+            # 去重
+            sort -u "$FILES_LIST" -o "$FILES_LIST"
+          fi
+
+          # 检查是否有文件需要翻译
+          if [ ! -s "$FILES_LIST" ]; then
+            echo "✅ 没有需要翻译的文档文件"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            rm -f "$FILES_LIST"
+          else
+            echo "📊 待翻译文件:"
+            cat "$FILES_LIST"
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            # 保存文件列表路径供后续步骤使用
+            cp "$FILES_LIST" /tmp/translate_files.txt
+            rm -f "$FILES_LIST"
+          fi
+
+      - name: 🌐 Translate documents
+        if: steps.changed-files.outputs.has_changes == 'true'
+        run: |
+          MODE="${{ github.event.inputs.mode }}"
+          IS_PUSH="${{ github.event_name == 'push' }}"
+
+          # 读取文件列表并用 xargs 正确处理特殊字符
+          if [ "$MODE" = "force_all" ]; then
+            echo "🔄 强制重新翻译所有文件..."
+            FORCE_TRANSLATE=true xargs -d '\n' bun run translate < /tmp/translate_files.txt
+          elif [ "$MODE" = "specific_path" ]; then
+            echo "📁 翻译指定路径: ${{ github.event.inputs.path }}"
+            FORCE_TRANSLATE=true xargs -d '\n' bun run translate < /tmp/translate_files.txt
+          elif [ "$IS_PUSH" = "true" ]; then
+            echo "🌐 翻译文件（push 触发，强制模式）..."
+            FORCE_TRANSLATE=true xargs -d '\n' bun run translate < /tmp/translate_files.txt
+          else
+            echo "🌐 翻译文件..."
+            xargs -d '\n' bun run translate < /tmp/translate_files.txt
+          fi
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+          OPENAI_MODEL: ${{ secrets.OPENAI_MODEL || 'gemini-2.5-flash' }}
+          MAX_RETRIES: ${{ secrets.MAX_RETRIES || '3' }}
+          RETRY_DELAY: ${{ secrets.RETRY_DELAY || '2' }}
+          RETRY_BACKOFF: ${{ secrets.RETRY_BACKOFF || '2.0' }}
+          MAX_WORKERS: ${{ secrets.MAX_WORKERS || '3' }}
+
+      - name: 📝 Create Pull Request
+        if: steps.changed-files.outputs.has_changes == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: |
+            🌐 docs: auto-translate documents
+
+            Generated by GitHub Actions workflow
+          branch: auto-translate-${{ github.run_id }}
+          delete-branch: true
+          title: '🌐 Auto-translate documentation'
+          body: |
+            ## 📝 Auto Translation
+
+            **Trigger**: ${{ github.event_name }}
+            **Mode**: ${{ github.event.inputs.mode || 'changed' }}
+            **Workflow**: [#${{ github.run_id }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+            See workflow run for translated files list.
+          labels: |
+            documentation
+            auto-translation
+          assignees: ${{ github.actor }}
+
+      - name: 📊 Summary
+        if: always()
+        run: |
+          if [ "${{ steps.changed-files.outputs.has_changes }}" = "true" ]; then
+            echo "### 🌐 Translation Results" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Changed files:**" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            if [ -f /tmp/translate_files.txt ]; then
+              cat /tmp/translate_files.txt >> $GITHUB_STEP_SUMMARY
+            fi
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "✅ Translation completed successfully!" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ℹ️ No Translation Needed" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "No Chinese documents were changed in this commit." >> $GITHUB_STEP_SUMMARY
+          fi

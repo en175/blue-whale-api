@@ -1,0 +1,42 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "更新兑换码",
+    "version": "1.0.0",
+    "description": "👨‍💼 需要管理员权限（Admin）"
+  },
+  "tags": [
+    {
+      "name": "兑换码"
+    }
+  ],
+  "paths": {
+    "/api/redemption/": {
+      "put": {
+        "tags": [
+          "兑换码"
+        ],
+        "summary": "更新兑换码",
+        "description": "👨‍💼 需要管理员权限（Admin）",
+        "operationId": "put-api-redemption",
+        "parameters": [],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "description": "Unresolved $ref: #/definitions/224188813"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

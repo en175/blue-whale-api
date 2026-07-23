@@ -1,0 +1,166 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "原生OpenAI格式",
+    "version": "1.0.0",
+    "description": "将文本转换为向量嵌入"
+  },
+  "tags": [
+    {
+      "name": "嵌入（Embeddings）"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "使用 Bearer Token 认证。\n格式: `Authorization: Bearer sk-xxxxxx`\n"
+      }
+    }
+  },
+  "paths": {
+    "/v1/embeddings": {
+      "post": {
+        "tags": [
+          "嵌入（Embeddings）"
+        ],
+        "summary": "原生OpenAI格式",
+        "description": "将文本转换为向量嵌入",
+        "operationId": "createembedding",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "model",
+                  "input"
+                ],
+                "properties": {
+                  "model": {
+                    "type": "string",
+                    "examples": [
+                      "text-embedding-ada-002"
+                    ]
+                  },
+                  "input": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    ],
+                    "description": "要嵌入的文本"
+                  },
+                  "encoding_format": {
+                    "type": "string",
+                    "enum": [
+                      "float",
+                      "base64"
+                    ],
+                    "default": "float"
+                  },
+                  "dimensions": {
+                    "type": "integer",
+                    "description": "输出向量维度"
+                  }
+                },
+                "x-apifox-orders": [
+                  "model",
+                  "input",
+                  "encoding_format",
+                  "dimensions"
+                ]
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功创建嵌入",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "object": {
+                      "type": "string",
+                      "examples": [
+                        "list"
+                      ]
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "object": {
+                            "type": "string",
+                            "examples": [
+                              "embedding"
+                            ]
+                          },
+                          "index": {
+                            "type": "integer"
+                          },
+                          "embedding": {
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            }
+                          }
+                        },
+                        "x-apifox-orders": [
+                          "object",
+                          "index",
+                          "embedding"
+                        ]
+                      }
+                    },
+                    "model": {
+                      "type": "string"
+                    },
+                    "usage": {
+                      "type": "object",
+                      "properties": {
+                        "prompt_tokens": {
+                          "type": "integer"
+                        },
+                        "total_tokens": {
+                          "type": "integer"
+                        }
+                      },
+                      "x-apifox-orders": [
+                        "prompt_tokens",
+                        "total_tokens"
+                      ]
+                    }
+                  },
+                  "x-apifox-orders": [
+                    "object",
+                    "data",
+                    "model",
+                    "usage"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

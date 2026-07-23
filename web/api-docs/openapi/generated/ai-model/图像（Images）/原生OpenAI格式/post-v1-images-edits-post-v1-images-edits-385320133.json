@@ -1,0 +1,126 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "编辑图像",
+    "version": "1.0.0",
+    "description": "在给定原始图像和提示的情况下创建编辑或扩展图像。\n\n"
+  },
+  "tags": [
+    {
+      "name": "图像（Images）/原生OpenAI格式"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "Bearer": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  },
+  "paths": {
+    "/v1/images/edits/": {
+      "post": {
+        "tags": [
+          "图像（Images）/原生OpenAI格式"
+        ],
+        "summary": "编辑图像",
+        "description": "在给定原始图像和提示的情况下创建编辑或扩展图像。\n\n",
+        "operationId": "post-v1-images-edits",
+        "parameters": [],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "image": {
+                    "description": "要编辑的图像。必须是有效的 PNG 文件，小于 4MB，并且是方形的。如果未提供遮罩，图像必须具有透明度，将用作遮罩。",
+                    "type": "string",
+                    "format": "binary",
+                    "examples": [
+                      "cmMtdXBsb2FkLTE2ODc4MzMzNDc3NTEtMjA=/31225951_59371037e9_small.png"
+                    ]
+                  },
+                  "mask": {
+                    "description": "附加图像，其完全透明区域（例如，alpha 为零的区域）指示image应编辑的位置。必须是有效的 PNG 文件，小于 4MB，并且尺寸与原始image相同。",
+                    "type": "string",
+                    "format": "binary",
+                    "examples": [
+                      []
+                    ]
+                  },
+                  "prompt": {
+                    "description": "所需图像的文本描述。最大长度为 1000 个字符。",
+                    "type": "string",
+                    "examples": [
+                      "A cute baby sea otter wearing a beret."
+                    ]
+                  },
+                  "n": {
+                    "description": "要生成的图像数。必须介于 1 和 10 之间。",
+                    "type": "string",
+                    "examples": [
+                      "1"
+                    ]
+                  },
+                  "size": {
+                    "description": "生成图像的大小。必须是`256x256`、`512x512`或 `1024x1024`之一。",
+                    "type": "string",
+                    "examples": [
+                      "1024x1024"
+                    ]
+                  },
+                  "response_format": {
+                    "description": "生成的图像返回的格式。必须是`url`或`b64_json`。",
+                    "type": "string",
+                    "examples": [
+                      "url"
+                    ]
+                  },
+                  "user": {
+                    "description": "代表您的最终用户的唯一标识符，可以帮助 OpenAI 监控和检测滥用行为。[了解更多](https://platform.openai.com/docs/guides/safety-best-practices/end-user-ids)。",
+                    "type": "string",
+                    "examples": [
+                      ""
+                    ]
+                  },
+                  "model": {
+                    "type": "string",
+                    "examples": [
+                      "dall-e-2"
+                    ]
+                  }
+                },
+                "required": [
+                  "image",
+                  "prompt"
+                ]
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {},
+                  "x-apifox-orders": []
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

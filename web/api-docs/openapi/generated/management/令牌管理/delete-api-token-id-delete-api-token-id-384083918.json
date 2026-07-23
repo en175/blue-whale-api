@@ -1,0 +1,40 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "删除令牌",
+    "version": "1.0.0",
+    "description": "🔐 需要登录（User权限）"
+  },
+  "tags": [
+    {
+      "name": "令牌管理"
+    }
+  ],
+  "paths": {
+    "/api/token/{id}": {
+      "delete": {
+        "tags": [
+          "令牌管理"
+        ],
+        "summary": "删除令牌",
+        "description": "🔐 需要登录（User权限）",
+        "operationId": "delete-api-token-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,117 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "文本转语音",
+    "version": "1.0.0",
+    "description": "将文本转换为音频"
+  },
+  "tags": [
+    {
+      "name": "音频（Audio）/原生OpenAI格式"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "使用 Bearer Token 认证。\n格式: `Authorization: Bearer sk-xxxxxx`\n"
+      }
+    }
+  },
+  "paths": {
+    "/v1/audio/speech": {
+      "post": {
+        "tags": [
+          "音频（Audio）/原生OpenAI格式"
+        ],
+        "summary": "文本转语音",
+        "description": "将文本转换为音频",
+        "operationId": "createspeech",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "model",
+                  "input",
+                  "voice"
+                ],
+                "properties": {
+                  "model": {
+                    "type": "string",
+                    "examples": [
+                      "tts-1"
+                    ]
+                  },
+                  "input": {
+                    "type": "string",
+                    "description": "要转换的文本",
+                    "maxLength": 4096
+                  },
+                  "voice": {
+                    "type": "string",
+                    "enum": [
+                      "alloy",
+                      "echo",
+                      "fable",
+                      "onyx",
+                      "nova",
+                      "shimmer"
+                    ]
+                  },
+                  "response_format": {
+                    "type": "string",
+                    "enum": [
+                      "mp3",
+                      "opus",
+                      "aac",
+                      "flac",
+                      "wav",
+                      "pcm"
+                    ],
+                    "default": "mp3"
+                  },
+                  "speed": {
+                    "type": "number",
+                    "minimum": 0.25,
+                    "maximum": 4,
+                    "default": 1
+                  }
+                },
+                "x-apifox-orders": [
+                  "model",
+                  "input",
+                  "voice",
+                  "response_format",
+                  "speed"
+                ]
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功生成音频",
+            "content": {
+              "audio/mpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

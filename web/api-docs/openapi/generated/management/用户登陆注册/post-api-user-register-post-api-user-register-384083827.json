@@ -1,0 +1,65 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "用户注册",
+    "version": "1.0.0",
+    "description": "🔓 无需鉴权"
+  },
+  "tags": [
+    {
+      "name": "用户登陆注册"
+    }
+  ],
+  "paths": {
+    "/api/user/register": {
+      "post": {
+        "tags": [
+          "用户登陆注册"
+        ],
+        "summary": "用户注册",
+        "description": "🔓 无需鉴权",
+        "operationId": "post-api-user-register",
+        "parameters": [],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "username": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "type": "string"
+                  },
+                  "email": {
+                    "type": "string"
+                  },
+                  "verification_code": {
+                    "type": "string"
+                  },
+                  "aff_code": {
+                    "type": "string"
+                  }
+                },
+                "x-apifox-orders": [
+                  "username",
+                  "password",
+                  "email",
+                  "verification_code",
+                  "aff_code"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

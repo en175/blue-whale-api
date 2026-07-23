@@ -1,0 +1,40 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "删除供应商",
+    "version": "1.0.0",
+    "description": "👨‍💼 需要管理员权限（Admin）"
+  },
+  "tags": [
+    {
+      "name": "供应商"
+    }
+  ],
+  "paths": {
+    "/api/vendors/{id}": {
+      "delete": {
+        "tags": [
+          "供应商"
+        ],
+        "summary": "删除供应商",
+        "description": "👨‍💼 需要管理员权限（Admin）",
+        "operationId": "delete-api-vendors-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

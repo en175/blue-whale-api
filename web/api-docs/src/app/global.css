@@ -1,0 +1,92 @@
+@import 'tailwindcss';
+@import 'fumadocs-ui/css/neutral.css';
+@import 'fumadocs-ui/css/preset.css';
+@import 'fumadocs-openapi/css/preset.css';
+@plugin 'tailwindcss-animate';
+
+@theme {
+  --spacing-fd-container: 1436px;
+
+  /* Blue Whale 品牌色（对齐 web/default --primary oklch hue 243 ≈ #3b82f6）*/
+  --color-brand: hsl(217, 91%, 60%);
+  --color-brand-foreground: white;
+  --color-brand-secondary: hsl(213, 94%, 68%);
+  --color-brand-secondary-foreground: hsl(222, 47%, 20%);
+  --color-brand-200: hsl(213, 96%, 78%);
+
+  /* Fumadocs UI theme color (for navigation, TOC, etc.) */
+  --color-fd-primary: hsl(217, 91%, 60%);
+  --color-fd-primary-foreground: white;
+
+  --color-landing-foreground: #2e3a4b;
+  --color-landing-foreground-200: #6b7a8f;
+
+  /* System fonts */
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica,
+    Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
+  --font-mono:
+    ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono',
+    monospace;
+}
+
+.dark {
+  --color-landing-foreground: #cfdcef;
+  --color-landing-foreground-200: #93a8c4;
+
+  /* Blue Whale 品牌色（dark mode）*/
+  --color-brand: hsl(213, 94%, 68%);
+  --color-brand-secondary: hsl(217, 91%, 60%);
+  --color-brand-secondary-foreground: hsl(222, 47%, 15%);
+  --color-brand-foreground: black;
+  --color-brand-200: hsl(213, 96%, 78%);
+
+  /* Fumadocs UI theme color (for navigation, TOC, etc. - dark mode) */
+  --color-fd-primary: hsl(213, 94%, 68%);
+  --color-fd-primary-foreground: black;
+}
+
+@theme inline {
+  --default-mono-font-family: var(--font-mono);
+}
+
+body {
+  overscroll-behavior-y: none;
+  background-color: var(--color-fd-background);
+  font-feature-settings:
+    'rlig' 1,
+    'calt' 1;
+}
+
+/* Homepage card enhanced styles */
+[data-card] {
+  transition: all 0.3s cubic-bezier(0.165, 0.84, 0.44, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+[data-card]:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  border-color: var(--color-brand);
+}
+
+/* Card icon container enhancement */
+[data-card] > div:first-child {
+  transition: all 0.3s ease;
+}
+
+[data-card]:hover > div:first-child {
+  transform: scale(1.1);
+  background-color: var(--color-brand);
+  color: var(--color-brand-foreground);
+}
+
+/* Cards grid layout optimization */
+.prose
+  :where([data-card]):not(
+    :where([class~='not-prose'], [class~='not-prose'] *)
+  ) {
+  margin-top: 0;
+  margin-bottom: 0;
+}

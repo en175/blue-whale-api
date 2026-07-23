@@ -1,0 +1,31 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "获取模型列表",
+    "version": "1.0.0",
+    "description": "🔐 需要登录（User权限）"
+  },
+  "tags": [
+    {
+      "name": "系统"
+    }
+  ],
+  "paths": {
+    "/api/models": {
+      "get": {
+        "tags": [
+          "系统"
+        ],
+        "summary": "获取模型列表",
+        "description": "🔐 需要登录（User权限）",
+        "operationId": "get-api-models-384083822",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

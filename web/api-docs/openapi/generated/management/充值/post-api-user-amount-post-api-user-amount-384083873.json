@@ -1,0 +1,31 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "获取支付金额",
+    "version": "1.0.0",
+    "description": "🔐 需要登录（User权限）"
+  },
+  "tags": [
+    {
+      "name": "充值"
+    }
+  ],
+  "paths": {
+    "/api/user/amount": {
+      "post": {
+        "tags": [
+          "充值"
+        ],
+        "summary": "获取支付金额",
+        "description": "🔐 需要登录（User权限）",
+        "operationId": "post-api-user-amount",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

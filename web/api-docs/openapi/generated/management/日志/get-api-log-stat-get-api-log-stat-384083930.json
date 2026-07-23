@@ -1,0 +1,31 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "获取日志统计",
+    "version": "1.0.0",
+    "description": "👨‍💼 需要管理员权限（Admin）"
+  },
+  "tags": [
+    {
+      "name": "日志"
+    }
+  ],
+  "paths": {
+    "/api/log/stat": {
+      "get": {
+        "tags": [
+          "日志"
+        ],
+        "summary": "获取日志统计",
+        "description": "👨‍💼 需要管理员权限（Admin）",
+        "operationId": "get-api-log-stat",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

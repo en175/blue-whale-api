@@ -1,0 +1,129 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "原生OpenAI格式",
+    "version": "1.0.0",
+    "description": "检查文本内容是否违反使用政策"
+  },
+  "tags": [
+    {
+      "name": "审查（Moderations）"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "使用 Bearer Token 认证。\n格式: `Authorization: Bearer sk-xxxxxx`\n"
+      }
+    }
+  },
+  "paths": {
+    "/v1/moderations": {
+      "post": {
+        "tags": [
+          "审查（Moderations）"
+        ],
+        "summary": "原生OpenAI格式",
+        "description": "检查文本内容是否违反使用政策",
+        "operationId": "createmoderation",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "input"
+                ],
+                "properties": {
+                  "input": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    ]
+                  },
+                  "model": {
+                    "type": "string",
+                    "examples": [
+                      "text-moderation-latest"
+                    ]
+                  }
+                },
+                "x-apifox-orders": [
+                  "input",
+                  "model"
+                ]
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功审核",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "model": {
+                      "type": "string"
+                    },
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "flagged": {
+                            "type": "boolean"
+                          },
+                          "categories": {
+                            "type": "object",
+                            "properties": {},
+                            "x-apifox-orders": []
+                          },
+                          "category_scores": {
+                            "type": "object",
+                            "properties": {},
+                            "x-apifox-orders": []
+                          }
+                        },
+                        "x-apifox-orders": [
+                          "flagged",
+                          "categories",
+                          "category_scores"
+                        ]
+                      }
+                    }
+                  },
+                  "x-apifox-orders": [
+                    "id",
+                    "model",
+                    "results"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

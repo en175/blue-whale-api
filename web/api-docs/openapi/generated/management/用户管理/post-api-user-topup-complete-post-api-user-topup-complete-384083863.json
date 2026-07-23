@@ -1,0 +1,31 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "管理员完成充值",
+    "version": "1.0.0",
+    "description": "👨‍💼 需要管理员权限（Admin）"
+  },
+  "tags": [
+    {
+      "name": "用户管理"
+    }
+  ],
+  "paths": {
+    "/api/user/topup/complete": {
+      "post": {
+        "tags": [
+          "用户管理"
+        ],
+        "summary": "管理员完成充值",
+        "description": "👨‍💼 需要管理员权限（Admin）",
+        "operationId": "post-api-user-topup-complete",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

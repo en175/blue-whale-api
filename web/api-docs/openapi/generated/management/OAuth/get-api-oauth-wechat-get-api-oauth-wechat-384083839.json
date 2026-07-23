@@ -1,0 +1,31 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "微信OAuth登录",
+    "version": "1.0.0",
+    "description": "🔓 无需鉴权（OAuth回调）"
+  },
+  "tags": [
+    {
+      "name": "OAuth"
+    }
+  ],
+  "paths": {
+    "/api/oauth/wechat": {
+      "get": {
+        "tags": [
+          "OAuth"
+        ],
+        "summary": "微信OAuth登录",
+        "description": "🔓 无需鉴权（OAuth回调）",
+        "operationId": "get-api-oauth-wechat",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

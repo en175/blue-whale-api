@@ -1,0 +1,31 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "绑定Telegram",
+    "version": "1.0.0",
+    "description": "🔓 无需鉴权"
+  },
+  "tags": [
+    {
+      "name": "OAuth"
+    }
+  ],
+  "paths": {
+    "/api/oauth/telegram/bind": {
+      "get": {
+        "tags": [
+          "OAuth"
+        ],
+        "summary": "绑定Telegram",
+        "description": "🔓 无需鉴权",
+        "operationId": "get-api-oauth-telegram-bind",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

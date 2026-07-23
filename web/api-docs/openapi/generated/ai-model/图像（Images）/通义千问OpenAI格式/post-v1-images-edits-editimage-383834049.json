@@ -1,0 +1,178 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "编辑图像",
+    "version": "1.0.0",
+    "description": " 百炼qwen-image系列图片编辑"
+  },
+  "tags": [
+    {
+      "name": "图像（Images）/通义千问OpenAI格式"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "使用 Bearer Token 认证。\n格式: `Authorization: Bearer sk-xxxxxx`\n"
+      }
+    }
+  },
+  "paths": {
+    "/v1/images/edits": {
+      "post": {
+        "tags": [
+          "图像（Images）/通义千问OpenAI格式"
+        ],
+        "summary": "编辑图像",
+        "description": " 百炼qwen-image系列图片编辑",
+        "operationId": "editimage",
+        "parameters": [],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "model": {
+                    "type": "string"
+                  },
+                  "input": {
+                    "type": "object",
+                    "properties": {
+                      "messages": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "role": {
+                              "type": "string"
+                            },
+                            "content": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "image": {
+                                    "type": "string"
+                                  },
+                                  "text": {
+                                    "type": "string"
+                                  }
+                                },
+                                "x-apifox-orders": [
+                                  "image",
+                                  "text"
+                                ]
+                              }
+                            }
+                          },
+                          "x-apifox-orders": [
+                            "role",
+                            "content"
+                          ]
+                        }
+                      }
+                    },
+                    "required": [
+                      "messages"
+                    ],
+                    "x-apifox-orders": [
+                      "messages"
+                    ]
+                  },
+                  "parameters": {
+                    "type": "object",
+                    "properties": {
+                      "n": {
+                        "type": "integer"
+                      },
+                      "negative_prompt": {
+                        "type": "string"
+                      },
+                      "prompt_extend": {
+                        "type": "boolean"
+                      },
+                      "watermark": {
+                        "type": "boolean"
+                      },
+                      "size": {
+                        "type": "string"
+                      }
+                    },
+                    "x-apifox-orders": [
+                      "n",
+                      "negative_prompt",
+                      "prompt_extend",
+                      "watermark",
+                      "size"
+                    ]
+                  }
+                },
+                "required": [
+                  "model",
+                  "input"
+                ],
+                "x-apifox-orders": [
+                  "model",
+                  "input",
+                  "parameters"
+                ]
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功生成图像",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "created": {
+                      "type": "integer"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "url": {
+                            "type": "string"
+                          },
+                          "b64_json": {
+                            "type": "string"
+                          },
+                          "revised_prompt": {
+                            "type": "string"
+                          }
+                        },
+                        "x-apifox-orders": [
+                          "url",
+                          "b64_json",
+                          "revised_prompt"
+                        ]
+                      }
+                    }
+                  },
+                  "x-apifox-orders": [
+                    "created",
+                    "data"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

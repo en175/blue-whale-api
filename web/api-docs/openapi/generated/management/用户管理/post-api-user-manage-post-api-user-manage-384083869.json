@@ -1,0 +1,60 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "管理用户状态",
+    "version": "1.0.0",
+    "description": "👨‍💼 需要管理员权限（Admin）"
+  },
+  "tags": [
+    {
+      "name": "用户管理"
+    }
+  ],
+  "paths": {
+    "/api/user/manage": {
+      "post": {
+        "tags": [
+          "用户管理"
+        ],
+        "summary": "管理用户状态",
+        "description": "👨‍💼 需要管理员权限（Admin）",
+        "operationId": "post-api-user-manage",
+        "parameters": [],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "integer"
+                  },
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "disable",
+                      "enable",
+                      "delete",
+                      "promote",
+                      "demote"
+                    ]
+                  }
+                },
+                "x-apifox-orders": [
+                  "id",
+                  "action"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

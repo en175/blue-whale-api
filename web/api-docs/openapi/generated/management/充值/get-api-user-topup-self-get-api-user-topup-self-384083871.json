@@ -1,0 +1,31 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "获取用户充值记录",
+    "version": "1.0.0",
+    "description": "🔐 需要登录（User权限）"
+  },
+  "tags": [
+    {
+      "name": "充值"
+    }
+  ],
+  "paths": {
+    "/api/user/topup/self": {
+      "get": {
+        "tags": [
+          "充值"
+        ],
+        "summary": "获取用户充值记录",
+        "description": "🔐 需要登录（User权限）",
+        "operationId": "get-api-user-topup-self",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

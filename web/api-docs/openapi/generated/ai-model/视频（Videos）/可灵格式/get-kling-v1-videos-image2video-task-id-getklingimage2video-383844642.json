@@ -1,0 +1,221 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "获取 Kling 图生视频任务状态",
+    "version": "1.0.0",
+    "description": "查询 Kling 图生视频任务的状态和结果。"
+  },
+  "tags": [
+    {
+      "name": "视频（Videos）/可灵格式"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "使用 Bearer Token 认证。\n格式: `Authorization: Bearer sk-xxxxxx`\n"
+      }
+    }
+  },
+  "paths": {
+    "/kling/v1/videos/image2video/{task_id}": {
+      "get": {
+        "tags": [
+          "视频（Videos）/可灵格式"
+        ],
+        "summary": "获取 Kling 图生视频任务状态",
+        "description": "查询 Kling 图生视频任务的状态和结果。",
+        "operationId": "getklingimage2video",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "description": "任务 ID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功获取任务状态",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "视频任务状态查询响应",
+                  "properties": {
+                    "task_id": {
+                      "type": "string",
+                      "description": "任务 ID",
+                      "examples": [
+                        "abcd1234efgh"
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "description": "任务状态",
+                      "enum": [
+                        "queued",
+                        "in_progress",
+                        "completed",
+                        "failed"
+                      ],
+                      "examples": [
+                        "completed"
+                      ]
+                    },
+                    "url": {
+                      "type": "string",
+                      "description": "视频资源 URL（成功时）",
+                      "examples": [
+                        "https://example.com/video.mp4"
+                      ]
+                    },
+                    "format": {
+                      "type": "string",
+                      "description": "视频格式",
+                      "examples": [
+                        "mp4"
+                      ]
+                    },
+                    "metadata": {
+                      "type": "object",
+                      "description": "视频任务元数据",
+                      "properties": {
+                        "duration": {
+                          "type": "number",
+                          "description": "实际生成的视频时长",
+                          "examples": [
+                            5
+                          ]
+                        },
+                        "fps": {
+                          "type": "integer",
+                          "description": "实际帧率",
+                          "examples": [
+                            30
+                          ]
+                        },
+                        "width": {
+                          "type": "integer",
+                          "description": "实际宽度",
+                          "examples": [
+                            1280
+                          ]
+                        },
+                        "height": {
+                          "type": "integer",
+                          "description": "实际高度",
+                          "examples": [
+                            720
+                          ]
+                        },
+                        "seed": {
+                          "type": "integer",
+                          "description": "使用的随机种子",
+                          "examples": [
+                            20231234
+                          ]
+                        }
+                      },
+                      "x-apifox-orders": [
+                        "duration",
+                        "fps",
+                        "width",
+                        "height",
+                        "seed"
+                      ]
+                    },
+                    "error": {
+                      "type": "object",
+                      "description": "视频任务错误信息",
+                      "properties": {
+                        "code": {
+                          "type": "integer",
+                          "description": "错误码"
+                        },
+                        "message": {
+                          "type": "string",
+                          "description": "错误信息"
+                        }
+                      },
+                      "x-apifox-orders": [
+                        "code",
+                        "message"
+                      ]
+                    }
+                  },
+                  "x-apifox-orders": [
+                    "task_id",
+                    "status",
+                    "url",
+                    "format",
+                    "metadata",
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "任务不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string",
+                          "description": "错误信息"
+                        },
+                        "type": {
+                          "type": "string",
+                          "description": "错误类型"
+                        },
+                        "param": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "description": "相关参数"
+                        },
+                        "code": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "description": "错误代码"
+                        }
+                      },
+                      "x-apifox-orders": [
+                        "message",
+                        "type",
+                        "param",
+                        "code"
+                      ]
+                    }
+                  },
+                  "x-apifox-orders": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

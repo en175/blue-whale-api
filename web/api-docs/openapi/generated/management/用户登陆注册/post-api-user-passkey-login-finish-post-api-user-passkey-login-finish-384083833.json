@@ -1,0 +1,31 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "完成Passkey登录",
+    "version": "1.0.0",
+    "description": "🔓 无需鉴权"
+  },
+  "tags": [
+    {
+      "name": "用户登陆注册"
+    }
+  ],
+  "paths": {
+    "/api/user/passkey/login/finish": {
+      "post": {
+        "tags": [
+          "用户登陆注册"
+        ],
+        "summary": "完成Passkey登录",
+        "description": "🔓 无需鉴权",
+        "operationId": "post-api-user-passkey-login-finish",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

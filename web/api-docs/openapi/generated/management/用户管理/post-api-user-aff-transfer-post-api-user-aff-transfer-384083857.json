@@ -1,0 +1,49 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "转换邀请额度",
+    "version": "1.0.0",
+    "description": "🔐 需要登录（User权限）"
+  },
+  "tags": [
+    {
+      "name": "用户管理"
+    }
+  ],
+  "paths": {
+    "/api/user/aff_transfer": {
+      "post": {
+        "tags": [
+          "用户管理"
+        ],
+        "summary": "转换邀请额度",
+        "description": "🔐 需要登录（User权限）",
+        "operationId": "post-api-user-aff-transfer",
+        "parameters": [],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "quota": {
+                    "type": "integer"
+                  }
+                },
+                "x-apifox-orders": [
+                  "quota"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

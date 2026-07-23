@@ -1,0 +1,243 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "原生OpenAI格式",
+    "version": "1.0.0",
+    "description": "基于给定提示创建文本补全"
+  },
+  "tags": [
+    {
+      "name": "补全（Completions）"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "使用 Bearer Token 认证。\n格式: `Authorization: Bearer sk-xxxxxx`\n"
+      }
+    }
+  },
+  "paths": {
+    "/v1/completions": {
+      "post": {
+        "tags": [
+          "补全（Completions）"
+        ],
+        "summary": "原生OpenAI格式",
+        "description": "基于给定提示创建文本补全",
+        "operationId": "createcompletion",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "model",
+                  "prompt"
+                ],
+                "properties": {
+                  "model": {
+                    "type": "string"
+                  },
+                  "prompt": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    ]
+                  },
+                  "max_tokens": {
+                    "type": "integer"
+                  },
+                  "temperature": {
+                    "type": "number"
+                  },
+                  "top_p": {
+                    "type": "number"
+                  },
+                  "n": {
+                    "type": "integer"
+                  },
+                  "stream": {
+                    "type": "boolean"
+                  },
+                  "stop": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    ]
+                  },
+                  "suffix": {
+                    "type": "string"
+                  },
+                  "echo": {
+                    "type": "boolean"
+                  }
+                },
+                "x-apifox-orders": [
+                  "model",
+                  "prompt",
+                  "max_tokens",
+                  "temperature",
+                  "top_p",
+                  "n",
+                  "stream",
+                  "stop",
+                  "suffix",
+                  "echo"
+                ]
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功创建响应",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "object": {
+                      "type": "string",
+                      "examples": [
+                        "text_completion"
+                      ]
+                    },
+                    "created": {
+                      "type": "integer"
+                    },
+                    "model": {
+                      "type": "string"
+                    },
+                    "choices": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "text": {
+                            "type": "string"
+                          },
+                          "index": {
+                            "type": "integer"
+                          },
+                          "finish_reason": {
+                            "type": "string"
+                          }
+                        },
+                        "x-apifox-orders": [
+                          "text",
+                          "index",
+                          "finish_reason"
+                        ]
+                      }
+                    },
+                    "usage": {
+                      "type": "object",
+                      "properties": {
+                        "prompt_tokens": {
+                          "type": "integer",
+                          "description": "提示词 Token 数"
+                        },
+                        "completion_tokens": {
+                          "type": "integer",
+                          "description": "补全 Token 数"
+                        },
+                        "total_tokens": {
+                          "type": "integer",
+                          "description": "总 Token 数"
+                        },
+                        "prompt_tokens_details": {
+                          "type": "object",
+                          "properties": {
+                            "cached_tokens": {
+                              "type": "integer"
+                            },
+                            "text_tokens": {
+                              "type": "integer"
+                            },
+                            "audio_tokens": {
+                              "type": "integer"
+                            },
+                            "image_tokens": {
+                              "type": "integer"
+                            }
+                          },
+                          "x-apifox-orders": [
+                            "cached_tokens",
+                            "text_tokens",
+                            "audio_tokens",
+                            "image_tokens"
+                          ]
+                        },
+                        "completion_tokens_details": {
+                          "type": "object",
+                          "properties": {
+                            "text_tokens": {
+                              "type": "integer"
+                            },
+                            "audio_tokens": {
+                              "type": "integer"
+                            },
+                            "reasoning_tokens": {
+                              "type": "integer"
+                            }
+                          },
+                          "x-apifox-orders": [
+                            "text_tokens",
+                            "audio_tokens",
+                            "reasoning_tokens"
+                          ]
+                        }
+                      },
+                      "x-apifox-orders": [
+                        "prompt_tokens",
+                        "completion_tokens",
+                        "total_tokens",
+                        "prompt_tokens_details",
+                        "completion_tokens_details"
+                      ]
+                    }
+                  },
+                  "x-apifox-orders": [
+                    "id",
+                    "object",
+                    "created",
+                    "model",
+                    "choices",
+                    "usage"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,101 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "原生Gemini格式",
+    "version": "1.0.0",
+    "description": "以 Gemini API 格式返回可用模型列表"
+  },
+  "tags": [
+    {
+      "name": "模型（Models）/列出模型"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "使用 Bearer Token 认证。\n格式: `Authorization: Bearer sk-xxxxxx`\n"
+      }
+    }
+  },
+  "paths": {
+    "/v1beta/models": {
+      "get": {
+        "tags": [
+          "模型（Models）/列出模型"
+        ],
+        "summary": "原生Gemini格式",
+        "description": "以 Gemini API 格式返回可用模型列表",
+        "operationId": "listmodelsgemini",
+        "parameters": [],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功获取模型列表",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "models": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "examples": [
+                              "models/gemini-pro"
+                            ]
+                          },
+                          "version": {
+                            "type": "string"
+                          },
+                          "displayName": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "inputTokenLimit": {
+                            "type": "integer"
+                          },
+                          "outputTokenLimit": {
+                            "type": "integer"
+                          },
+                          "supportedGenerationMethods": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "x-apifox-orders": [
+                          "name",
+                          "version",
+                          "displayName",
+                          "description",
+                          "inputTokenLimit",
+                          "outputTokenLimit",
+                          "supportedGenerationMethods"
+                        ]
+                      }
+                    }
+                  },
+                  "x-apifox-orders": [
+                    "models"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,176 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "即梦视频生成",
+    "version": "1.0.0",
+    "description": "即梦官方 API 格式的视频生成接口。\n\n支持通过 Action 参数指定操作类型：\n- `CVSync2AsyncSubmitTask`: 提交视频生成任务\n- `CVSync2AsyncGetResult`: 获取任务结果\n\n需要在查询参数中指定 Action 和 Version。\n"
+  },
+  "tags": [
+    {
+      "name": "视频（Videos）/即梦格式"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "使用 Bearer Token 认证。\n格式: `Authorization: Bearer sk-xxxxxx`\n"
+      }
+    }
+  },
+  "paths": {
+    "/jimeng/": {
+      "post": {
+        "tags": [
+          "视频（Videos）/即梦格式"
+        ],
+        "summary": "即梦视频生成",
+        "description": "即梦官方 API 格式的视频生成接口。\n\n支持通过 Action 参数指定操作类型：\n- `CVSync2AsyncSubmitTask`: 提交视频生成任务\n- `CVSync2AsyncGetResult`: 获取任务结果\n\n需要在查询参数中指定 Action 和 Version。\n",
+        "operationId": "createjimengvideo",
+        "parameters": [
+          {
+            "name": "Action",
+            "in": "query",
+            "required": true,
+            "description": "API 操作类型",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "CVSync2AsyncSubmitTask",
+                "CVSync2AsyncGetResult"
+              ]
+            }
+          },
+          {
+            "name": "Version",
+            "in": "query",
+            "required": true,
+            "description": "API 版本",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "description": "即梦官方 API 请求格式",
+                "properties": {
+                  "req_key": {
+                    "type": "string",
+                    "description": "请求类型标识"
+                  },
+                  "prompt": {
+                    "type": "string",
+                    "description": "文本描述"
+                  },
+                  "binary_data_base64": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Base64 编码的图片数据"
+                  }
+                },
+                "x-apifox-orders": [
+                  "req_key",
+                  "prompt",
+                  "binary_data_base64"
+                ]
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功处理请求",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "integer",
+                      "description": "响应码"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "响应消息"
+                    },
+                    "data": {
+                      "type": "object",
+                      "description": "响应数据",
+                      "x-apifox-orders": []
+                    }
+                  },
+                  "x-apifox-orders": [
+                    "code",
+                    "message",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求参数错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string",
+                          "description": "错误信息"
+                        },
+                        "type": {
+                          "type": "string",
+                          "description": "错误类型"
+                        },
+                        "param": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "description": "相关参数"
+                        },
+                        "code": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "description": "错误代码"
+                        }
+                      },
+                      "x-apifox-orders": [
+                        "message",
+                        "type",
+                        "param",
+                        "code"
+                      ]
+                    }
+                  },
+                  "x-apifox-orders": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

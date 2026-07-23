@@ -1,0 +1,31 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "通用安全验证",
+    "version": "1.0.0",
+    "description": "🔐 需要登录（User权限）"
+  },
+  "tags": [
+    {
+      "name": "安全验证"
+    }
+  ],
+  "paths": {
+    "/api/verify": {
+      "post": {
+        "tags": [
+          "安全验证"
+        ],
+        "summary": "通用安全验证",
+        "description": "🔐 需要登录（User权限）",
+        "operationId": "post-api-verify",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

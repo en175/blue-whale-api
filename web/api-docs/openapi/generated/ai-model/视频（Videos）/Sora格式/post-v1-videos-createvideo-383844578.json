@@ -1,0 +1,302 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "创建视频 ",
+    "version": "1.0.0",
+    "description": "OpenAI 兼容的视频生成接口。\n\n参考文档: https://platform.openai.com/docs/api-reference/videos/create\n"
+  },
+  "tags": [
+    {
+      "name": "视频（Videos）/Sora格式"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "使用 Bearer Token 认证。\n格式: `Authorization: Bearer sk-xxxxxx`\n"
+      }
+    }
+  },
+  "paths": {
+    "/v1/videos": {
+      "post": {
+        "tags": [
+          "视频（Videos）/Sora格式"
+        ],
+        "summary": "创建视频 ",
+        "description": "OpenAI 兼容的视频生成接口。\n\n参考文档: https://platform.openai.com/docs/api-reference/videos/create\n",
+        "operationId": "createvideo",
+        "parameters": [],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "description": "视频生成请求",
+                "properties": {
+                  "model": {
+                    "type": "string",
+                    "description": "模型/风格 ID",
+                    "examples": [
+                      "kling-v1"
+                    ]
+                  },
+                  "prompt": {
+                    "type": "string",
+                    "description": "文本描述提示词",
+                    "examples": [
+                      "宇航员站起身走了"
+                    ]
+                  },
+                  "image": {
+                    "type": "string",
+                    "description": "图片输入 (URL 或 Base64)",
+                    "examples": [
+                      "https://example.com/image.jpg"
+                    ]
+                  },
+                  "duration": {
+                    "type": "number",
+                    "description": "视频时长（秒）",
+                    "examples": [
+                      5
+                    ]
+                  },
+                  "width": {
+                    "type": "integer",
+                    "description": "视频宽度",
+                    "examples": [
+                      1280
+                    ]
+                  },
+                  "height": {
+                    "type": "integer",
+                    "description": "视频高度",
+                    "examples": [
+                      720
+                    ]
+                  },
+                  "fps": {
+                    "type": "integer",
+                    "description": "视频帧率",
+                    "examples": [
+                      30
+                    ]
+                  },
+                  "seed": {
+                    "type": "integer",
+                    "description": "随机种子",
+                    "examples": [
+                      20231234
+                    ]
+                  },
+                  "n": {
+                    "type": "integer",
+                    "description": "生成视频数量",
+                    "examples": [
+                      1
+                    ]
+                  },
+                  "response_format": {
+                    "type": "string",
+                    "description": "响应格式",
+                    "examples": [
+                      "url"
+                    ]
+                  },
+                  "user": {
+                    "type": "string",
+                    "description": "用户标识",
+                    "examples": [
+                      "user-1234"
+                    ]
+                  },
+                  "metadata": {
+                    "type": "object",
+                    "description": "扩展参数 (如 negative_prompt, style, quality_level 等)",
+                    "additionalProperties": true,
+                    "properties": {},
+                    "x-apifox-orders": []
+                  }
+                },
+                "x-apifox-orders": [
+                  "model",
+                  "prompt",
+                  "image",
+                  "duration",
+                  "width",
+                  "height",
+                  "fps",
+                  "seed",
+                  "n",
+                  "response_format",
+                  "user",
+                  "metadata"
+                ]
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功创建视频任务",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "description": "视频 ID"
+                    },
+                    "object": {
+                      "type": "string",
+                      "description": "对象类型"
+                    },
+                    "model": {
+                      "type": "string",
+                      "description": "使用的模型"
+                    },
+                    "status": {
+                      "type": "string",
+                      "description": "任务状态"
+                    },
+                    "progress": {
+                      "type": "integer",
+                      "description": "进度百分比"
+                    },
+                    "created_at": {
+                      "type": "integer",
+                      "description": "创建时间戳"
+                    },
+                    "seconds": {
+                      "type": "string",
+                      "description": "视频时长"
+                    },
+                    "completed_at": {
+                      "type": "integer",
+                      "description": "完成时间戳"
+                    },
+                    "expires_at": {
+                      "type": "integer",
+                      "description": "过期时间戳"
+                    },
+                    "size": {
+                      "type": "string",
+                      "description": "视频尺寸"
+                    },
+                    "error": {
+                      "type": "object",
+                      "description": "OpenAI 视频错误信息",
+                      "properties": {
+                        "message": {
+                          "type": "string",
+                          "description": "错误信息"
+                        },
+                        "code": {
+                          "type": "string",
+                          "description": "错误码"
+                        }
+                      },
+                      "x-apifox-orders": [
+                        "message",
+                        "code"
+                      ]
+                    },
+                    "metadata": {
+                      "type": "object",
+                      "description": "额外元数据",
+                      "additionalProperties": true,
+                      "x-apifox-orders": [],
+                      "properties": {}
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "object",
+                    "model",
+                    "status",
+                    "progress",
+                    "created_at",
+                    "seconds"
+                  ],
+                  "x-apifox-orders": [
+                    "id",
+                    "object",
+                    "model",
+                    "status",
+                    "progress",
+                    "created_at",
+                    "seconds",
+                    "completed_at",
+                    "expires_at",
+                    "size",
+                    "error",
+                    "metadata"
+                  ],
+                  "x-apifox-refs": {}
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求参数错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string",
+                          "description": "错误信息"
+                        },
+                        "type": {
+                          "type": "string",
+                          "description": "错误类型"
+                        },
+                        "param": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "description": "相关参数"
+                        },
+                        "code": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "description": "错误代码"
+                        }
+                      },
+                      "x-apifox-orders": [
+                        "message",
+                        "type",
+                        "param",
+                        "code"
+                      ]
+                    }
+                  },
+                  "x-apifox-orders": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "生成OAuth State",
+    "version": "1.0.0",
+    "description": "🔓 无需鉴权"
+  },
+  "tags": [
+    {
+      "name": "OAuth"
+    }
+  ],
+  "paths": {
+    "/api/oauth/state": {
+      "get": {
+        "tags": [
+          "OAuth"
+        ],
+        "summary": "生成OAuth State",
+        "description": "🔓 无需鉴权",
+        "operationId": "get-api-oauth-state",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

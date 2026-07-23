@@ -1,0 +1,31 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "删除Passkey",
+    "version": "1.0.0",
+    "description": "🔐 需要登录（User权限）"
+  },
+  "tags": [
+    {
+      "name": "用户管理"
+    }
+  ],
+  "paths": {
+    "/api/user/passkey": {
+      "delete": {
+        "tags": [
+          "用户管理"
+        ],
+        "summary": "删除Passkey",
+        "description": "🔐 需要登录（User权限）",
+        "operationId": "delete-api-user-passkey",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

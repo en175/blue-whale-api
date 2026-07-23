@@ -1,0 +1,40 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "搜索令牌",
+    "version": "1.0.0",
+    "description": "🔐 需要登录（User权限）"
+  },
+  "tags": [
+    {
+      "name": "令牌管理"
+    }
+  ],
+  "paths": {
+    "/api/token/search": {
+      "get": {
+        "tags": [
+          "令牌管理"
+        ],
+        "summary": "搜索令牌",
+        "description": "🔐 需要登录（User权限）",
+        "operationId": "get-api-token-search",
+        "parameters": [
+          {
+            "name": "keyword",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

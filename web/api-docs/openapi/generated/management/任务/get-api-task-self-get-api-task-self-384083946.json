@@ -1,0 +1,31 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "获取个人任务",
+    "version": "1.0.0",
+    "description": "🔐 需要登录（User权限）"
+  },
+  "tags": [
+    {
+      "name": "任务"
+    }
+  ],
+  "paths": {
+    "/api/task/self": {
+      "get": {
+        "tags": [
+          "任务"
+        ],
+        "summary": "获取个人任务",
+        "description": "🔐 需要登录（User权限）",
+        "operationId": "get-api-task-self",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

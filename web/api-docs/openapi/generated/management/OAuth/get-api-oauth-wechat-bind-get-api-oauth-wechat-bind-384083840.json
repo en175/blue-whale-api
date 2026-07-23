@@ -1,0 +1,31 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "绑定微信",
+    "version": "1.0.0",
+    "description": "🔓 无需鉴权"
+  },
+  "tags": [
+    {
+      "name": "OAuth"
+    }
+  ],
+  "paths": {
+    "/api/oauth/wechat/bind": {
+      "get": {
+        "tags": [
+          "OAuth"
+        ],
+        "summary": "绑定微信",
+        "description": "🔓 无需鉴权",
+        "operationId": "get-api-oauth-wechat-bind",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,149 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "文档重排序",
+    "version": "1.0.0",
+    "description": "根据查询对文档列表进行相关性重排序"
+  },
+  "tags": [
+    {
+      "name": "重排序（Rerank）"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "使用 Bearer Token 认证。\n格式: `Authorization: Bearer sk-xxxxxx`\n"
+      }
+    }
+  },
+  "paths": {
+    "/v1/rerank": {
+      "post": {
+        "tags": [
+          "重排序（Rerank）"
+        ],
+        "summary": "文档重排序",
+        "description": "根据查询对文档列表进行相关性重排序",
+        "operationId": "creatererank",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "model",
+                  "query",
+                  "documents"
+                ],
+                "properties": {
+                  "model": {
+                    "type": "string",
+                    "examples": [
+                      "rerank-english-v2.0"
+                    ]
+                  },
+                  "query": {
+                    "type": "string",
+                    "description": "查询文本"
+                  },
+                  "documents": {
+                    "type": "array",
+                    "items": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {},
+                          "x-apifox-orders": []
+                        }
+                      ]
+                    },
+                    "description": "要重排序的文档列表"
+                  },
+                  "top_n": {
+                    "type": "integer",
+                    "description": "返回前 N 个结果"
+                  },
+                  "return_documents": {
+                    "type": "boolean",
+                    "default": false
+                  }
+                },
+                "x-apifox-orders": [
+                  "model",
+                  "query",
+                  "documents",
+                  "top_n",
+                  "return_documents"
+                ]
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功重排序",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "index": {
+                            "type": "integer"
+                          },
+                          "relevance_score": {
+                            "type": "number"
+                          },
+                          "document": {
+                            "type": "object",
+                            "properties": {},
+                            "x-apifox-orders": []
+                          }
+                        },
+                        "x-apifox-orders": [
+                          "index",
+                          "relevance_score",
+                          "document"
+                        ]
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {},
+                      "x-apifox-orders": []
+                    }
+                  },
+                  "x-apifox-orders": [
+                    "id",
+                    "results",
+                    "meta"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "删除已禁用渠道",
+    "version": "1.0.0",
+    "description": "👨‍💼 需要管理员权限（Admin）"
+  },
+  "tags": [
+    {
+      "name": "渠道管理"
+    }
+  ],
+  "paths": {
+    "/api/channel/disabled": {
+      "delete": {
+        "tags": [
+          "渠道管理"
+        ],
+        "summary": "删除已禁用渠道",
+        "description": "👨‍💼 需要管理员权限（Admin）",
+        "operationId": "delete-api-channel-disabled",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

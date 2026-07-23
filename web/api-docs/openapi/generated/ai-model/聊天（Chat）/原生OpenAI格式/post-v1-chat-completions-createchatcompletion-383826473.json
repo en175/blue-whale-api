@@ -1,0 +1,904 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "ChatCompletions格式",
+    "version": "1.0.0",
+    "description": "根据对话历史创建模型响应。支持流式和非流式响应。\n\n兼容 OpenAI Chat Completions API。\n"
+  },
+  "tags": [
+    {
+      "name": "聊天（Chat）/原生OpenAI格式"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "使用 Bearer Token 认证。\n格式: `Authorization: Bearer sk-xxxxxx`\n"
+      }
+    }
+  },
+  "paths": {
+    "/v1/chat/completions": {
+      "post": {
+        "tags": [
+          "聊天（Chat）/原生OpenAI格式"
+        ],
+        "summary": "ChatCompletions格式",
+        "description": "根据对话历史创建模型响应。支持流式和非流式响应。\n\n兼容 OpenAI Chat Completions API。\n",
+        "operationId": "createchatcompletion",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "model",
+                  "messages"
+                ],
+                "properties": {
+                  "model": {
+                    "type": "string",
+                    "description": "模型 ID",
+                    "examples": [
+                      "gpt-4"
+                    ]
+                  },
+                  "messages": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "role",
+                        "content"
+                      ],
+                      "properties": {
+                        "role": {
+                          "type": "string",
+                          "enum": [
+                            "system",
+                            "user",
+                            "assistant",
+                            "tool",
+                            "developer"
+                          ],
+                          "description": "消息角色"
+                        },
+                        "content": {
+                          "oneOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "text",
+                                      "image_url",
+                                      "input_audio",
+                                      "file",
+                                      "video_url"
+                                    ]
+                                  },
+                                  "text": {
+                                    "type": "string"
+                                  },
+                                  "image_url": {
+                                    "type": "object",
+                                    "properties": {
+                                      "url": {
+                                        "type": "string",
+                                        "description": "图片 URL 或 base64"
+                                      },
+                                      "detail": {
+                                        "type": "string",
+                                        "enum": [
+                                          "low",
+                                          "high",
+                                          "auto"
+                                        ]
+                                      }
+                                    },
+                                    "x-apifox-orders": [
+                                      "url",
+                                      "detail"
+                                    ]
+                                  },
+                                  "input_audio": {
+                                    "type": "object",
+                                    "properties": {
+                                      "data": {
+                                        "type": "string",
+                                        "description": "Base64 编码的音频数据"
+                                      },
+                                      "format": {
+                                        "type": "string",
+                                        "enum": [
+                                          "wav",
+                                          "mp3"
+                                        ]
+                                      }
+                                    },
+                                    "x-apifox-orders": [
+                                      "data",
+                                      "format"
+                                    ]
+                                  },
+                                  "file": {
+                                    "type": "object",
+                                    "properties": {
+                                      "filename": {
+                                        "type": "string"
+                                      },
+                                      "file_data": {
+                                        "type": "string"
+                                      },
+                                      "file_id": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "x-apifox-orders": [
+                                      "filename",
+                                      "file_data",
+                                      "file_id"
+                                    ]
+                                  },
+                                  "video_url": {
+                                    "type": "object",
+                                    "properties": {
+                                      "url": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "x-apifox-orders": [
+                                      "url"
+                                    ]
+                                  }
+                                },
+                                "x-apifox-orders": [
+                                  "type",
+                                  "text",
+                                  "image_url",
+                                  "input_audio",
+                                  "file",
+                                  "video_url"
+                                ]
+                              }
+                            }
+                          ],
+                          "description": "消息内容"
+                        },
+                        "name": {
+                          "type": "string",
+                          "description": "发送者名称"
+                        },
+                        "tool_calls": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string",
+                                "examples": [
+                                  "function"
+                                ]
+                              },
+                              "function": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "arguments": {
+                                    "type": "string"
+                                  }
+                                },
+                                "x-apifox-orders": [
+                                  "name",
+                                  "arguments"
+                                ]
+                              }
+                            },
+                            "x-apifox-orders": [
+                              "id",
+                              "type",
+                              "function"
+                            ]
+                          }
+                        },
+                        "tool_call_id": {
+                          "type": "string",
+                          "description": "工具调用 ID（用于 tool 角色消息）"
+                        },
+                        "reasoning_content": {
+                          "type": "string",
+                          "description": "推理内容"
+                        }
+                      },
+                      "x-apifox-orders": [
+                        "role",
+                        "content",
+                        "name",
+                        "tool_calls",
+                        "tool_call_id",
+                        "reasoning_content"
+                      ]
+                    },
+                    "description": "对话消息列表"
+                  },
+                  "temperature": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 2,
+                    "default": 1,
+                    "description": "采样温度"
+                  },
+                  "top_p": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "default": 1,
+                    "description": "核采样参数"
+                  },
+                  "n": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "default": 1,
+                    "description": "生成数量"
+                  },
+                  "stream": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "是否流式响应"
+                  },
+                  "stream_options": {
+                    "type": "object",
+                    "properties": {
+                      "include_usage": {
+                        "type": "boolean"
+                      }
+                    },
+                    "x-apifox-orders": [
+                      "include_usage"
+                    ]
+                  },
+                  "stop": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    ],
+                    "description": "停止序列"
+                  },
+                  "max_tokens": {
+                    "type": "integer",
+                    "description": "最大生成 Token 数"
+                  },
+                  "max_completion_tokens": {
+                    "type": "integer",
+                    "description": "最大补全 Token 数"
+                  },
+                  "presence_penalty": {
+                    "type": "number",
+                    "minimum": -2,
+                    "maximum": 2,
+                    "default": 0
+                  },
+                  "frequency_penalty": {
+                    "type": "number",
+                    "minimum": -2,
+                    "maximum": 2,
+                    "default": 0
+                  },
+                  "logit_bias": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "number"
+                    },
+                    "properties": {},
+                    "x-apifox-orders": []
+                  },
+                  "user": {
+                    "type": "string"
+                  },
+                  "tools": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "examples": [
+                            "function"
+                          ]
+                        },
+                        "function": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string"
+                            },
+                            "description": {
+                              "type": "string"
+                            },
+                            "parameters": {
+                              "type": "object",
+                              "description": "JSON Schema 格式的参数定义",
+                              "properties": {},
+                              "x-apifox-orders": []
+                            }
+                          },
+                          "x-apifox-orders": [
+                            "name",
+                            "description",
+                            "parameters"
+                          ]
+                        }
+                      },
+                      "x-apifox-orders": [
+                        "type",
+                        "function"
+                      ]
+                    }
+                  },
+                  "tool_choice": {
+                    "oneOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "none",
+                          "auto",
+                          "required"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string"
+                          },
+                          "function": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              }
+                            },
+                            "x-apifox-orders": [
+                              "name"
+                            ]
+                          }
+                        },
+                        "x-apifox-orders": [
+                          "type",
+                          "function"
+                        ]
+                      }
+                    ]
+                  },
+                  "response_format": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "text",
+                          "json_object",
+                          "json_schema"
+                        ]
+                      },
+                      "json_schema": {
+                        "type": "object",
+                        "description": "JSON Schema 定义",
+                        "properties": {},
+                        "x-apifox-orders": []
+                      }
+                    },
+                    "x-apifox-orders": [
+                      "type",
+                      "json_schema"
+                    ]
+                  },
+                  "seed": {
+                    "type": "integer"
+                  },
+                  "reasoning_effort": {
+                    "type": "string",
+                    "enum": [
+                      "low",
+                      "medium",
+                      "high"
+                    ],
+                    "description": "推理强度 (用于支持推理的模型)"
+                  },
+                  "modalities": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "text",
+                        "audio"
+                      ]
+                    }
+                  },
+                  "audio": {
+                    "type": "object",
+                    "properties": {
+                      "voice": {
+                        "type": "string"
+                      },
+                      "format": {
+                        "type": "string"
+                      }
+                    },
+                    "x-apifox-orders": [
+                      "voice",
+                      "format"
+                    ]
+                  }
+                },
+                "x-apifox-orders": [
+                  "model",
+                  "messages",
+                  "temperature",
+                  "top_p",
+                  "n",
+                  "stream",
+                  "stream_options",
+                  "stop",
+                  "max_tokens",
+                  "max_completion_tokens",
+                  "presence_penalty",
+                  "frequency_penalty",
+                  "logit_bias",
+                  "user",
+                  "tools",
+                  "tool_choice",
+                  "response_format",
+                  "seed",
+                  "reasoning_effort",
+                  "modalities",
+                  "audio"
+                ]
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功创建响应",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "object": {
+                      "type": "string",
+                      "examples": [
+                        "chat.completion"
+                      ]
+                    },
+                    "created": {
+                      "type": "integer"
+                    },
+                    "model": {
+                      "type": "string"
+                    },
+                    "choices": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "index": {
+                            "type": "integer"
+                          },
+                          "message": {
+                            "type": "object",
+                            "required": [
+                              "role",
+                              "content"
+                            ],
+                            "properties": {
+                              "role": {
+                                "type": "string",
+                                "enum": [
+                                  "system",
+                                  "user",
+                                  "assistant",
+                                  "tool",
+                                  "developer"
+                                ],
+                                "description": "消息角色"
+                              },
+                              "content": {
+                                "oneOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "type": {
+                                          "type": "string",
+                                          "enum": [
+                                            "text",
+                                            "image_url",
+                                            "input_audio",
+                                            "file",
+                                            "video_url"
+                                          ]
+                                        },
+                                        "text": {
+                                          "type": "string"
+                                        },
+                                        "image_url": {
+                                          "type": "object",
+                                          "properties": {
+                                            "url": {
+                                              "type": "string",
+                                              "description": "图片 URL 或 base64"
+                                            },
+                                            "detail": {
+                                              "type": "string",
+                                              "enum": [
+                                                "low",
+                                                "high",
+                                                "auto"
+                                              ]
+                                            }
+                                          },
+                                          "x-apifox-orders": [
+                                            "url",
+                                            "detail"
+                                          ]
+                                        },
+                                        "input_audio": {
+                                          "type": "object",
+                                          "properties": {
+                                            "data": {
+                                              "type": "string",
+                                              "description": "Base64 编码的音频数据"
+                                            },
+                                            "format": {
+                                              "type": "string",
+                                              "enum": [
+                                                "wav",
+                                                "mp3"
+                                              ]
+                                            }
+                                          },
+                                          "x-apifox-orders": [
+                                            "data",
+                                            "format"
+                                          ]
+                                        },
+                                        "file": {
+                                          "type": "object",
+                                          "properties": {
+                                            "filename": {
+                                              "type": "string"
+                                            },
+                                            "file_data": {
+                                              "type": "string"
+                                            },
+                                            "file_id": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "x-apifox-orders": [
+                                            "filename",
+                                            "file_data",
+                                            "file_id"
+                                          ]
+                                        },
+                                        "video_url": {
+                                          "type": "object",
+                                          "properties": {
+                                            "url": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "x-apifox-orders": [
+                                            "url"
+                                          ]
+                                        }
+                                      },
+                                      "x-apifox-orders": [
+                                        "type",
+                                        "text",
+                                        "image_url",
+                                        "input_audio",
+                                        "file",
+                                        "video_url"
+                                      ]
+                                    }
+                                  }
+                                ],
+                                "description": "消息内容"
+                              },
+                              "name": {
+                                "type": "string",
+                                "description": "发送者名称"
+                              },
+                              "tool_calls": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "type": {
+                                      "type": "string",
+                                      "examples": [
+                                        "function"
+                                      ]
+                                    },
+                                    "function": {
+                                      "type": "object",
+                                      "properties": {
+                                        "name": {
+                                          "type": "string"
+                                        },
+                                        "arguments": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "x-apifox-orders": [
+                                        "name",
+                                        "arguments"
+                                      ]
+                                    }
+                                  },
+                                  "x-apifox-orders": [
+                                    "id",
+                                    "type",
+                                    "function"
+                                  ]
+                                }
+                              },
+                              "tool_call_id": {
+                                "type": "string",
+                                "description": "工具调用 ID（用于 tool 角色消息）"
+                              },
+                              "reasoning_content": {
+                                "type": "string",
+                                "description": "推理内容"
+                              }
+                            },
+                            "x-apifox-orders": [
+                              "role",
+                              "content",
+                              "name",
+                              "tool_calls",
+                              "tool_call_id",
+                              "reasoning_content"
+                            ]
+                          },
+                          "finish_reason": {
+                            "type": "string",
+                            "enum": [
+                              "stop",
+                              "length",
+                              "tool_calls",
+                              "content_filter"
+                            ]
+                          }
+                        },
+                        "x-apifox-orders": [
+                          "index",
+                          "message",
+                          "finish_reason"
+                        ]
+                      }
+                    },
+                    "usage": {
+                      "type": "object",
+                      "properties": {
+                        "prompt_tokens": {
+                          "type": "integer",
+                          "description": "提示词 Token 数"
+                        },
+                        "completion_tokens": {
+                          "type": "integer",
+                          "description": "补全 Token 数"
+                        },
+                        "total_tokens": {
+                          "type": "integer",
+                          "description": "总 Token 数"
+                        },
+                        "prompt_tokens_details": {
+                          "type": "object",
+                          "properties": {
+                            "cached_tokens": {
+                              "type": "integer"
+                            },
+                            "text_tokens": {
+                              "type": "integer"
+                            },
+                            "audio_tokens": {
+                              "type": "integer"
+                            },
+                            "image_tokens": {
+                              "type": "integer"
+                            }
+                          },
+                          "x-apifox-orders": [
+                            "cached_tokens",
+                            "text_tokens",
+                            "audio_tokens",
+                            "image_tokens"
+                          ]
+                        },
+                        "completion_tokens_details": {
+                          "type": "object",
+                          "properties": {
+                            "text_tokens": {
+                              "type": "integer"
+                            },
+                            "audio_tokens": {
+                              "type": "integer"
+                            },
+                            "reasoning_tokens": {
+                              "type": "integer"
+                            }
+                          },
+                          "x-apifox-orders": [
+                            "text_tokens",
+                            "audio_tokens",
+                            "reasoning_tokens"
+                          ]
+                        }
+                      },
+                      "x-apifox-orders": [
+                        "prompt_tokens",
+                        "completion_tokens",
+                        "total_tokens",
+                        "prompt_tokens_details",
+                        "completion_tokens_details"
+                      ]
+                    },
+                    "system_fingerprint": {
+                      "type": "string"
+                    }
+                  },
+                  "x-apifox-orders": [
+                    "id",
+                    "object",
+                    "created",
+                    "model",
+                    "choices",
+                    "usage",
+                    "system_fingerprint"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求参数错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string",
+                          "description": "错误信息"
+                        },
+                        "type": {
+                          "type": "string",
+                          "description": "错误类型"
+                        },
+                        "param": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "description": "相关参数"
+                        },
+                        "code": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "description": "错误代码"
+                        }
+                      },
+                      "x-apifox-orders": [
+                        "message",
+                        "type",
+                        "param",
+                        "code"
+                      ]
+                    }
+                  },
+                  "x-apifox-orders": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "请求频率限制",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string",
+                          "description": "错误信息"
+                        },
+                        "type": {
+                          "type": "string",
+                          "description": "错误类型"
+                        },
+                        "param": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "description": "相关参数"
+                        },
+                        "code": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "description": "错误代码"
+                        }
+                      },
+                      "x-apifox-orders": [
+                        "message",
+                        "type",
+                        "param",
+                        "code"
+                      ]
+                    }
+                  },
+                  "x-apifox-orders": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

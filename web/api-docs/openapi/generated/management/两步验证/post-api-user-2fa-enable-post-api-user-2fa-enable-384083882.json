@@ -1,0 +1,49 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "启用2FA",
+    "version": "1.0.0",
+    "description": "🔐 需要登录（User权限）"
+  },
+  "tags": [
+    {
+      "name": "两步验证"
+    }
+  ],
+  "paths": {
+    "/api/user/2fa/enable": {
+      "post": {
+        "tags": [
+          "两步验证"
+        ],
+        "summary": "启用2FA",
+        "description": "🔐 需要登录（User权限）",
+        "operationId": "post-api-user-2fa-enable",
+        "parameters": [],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  }
+                },
+                "x-apifox-orders": [
+                  "code"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

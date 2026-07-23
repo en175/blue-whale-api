@@ -1,0 +1,271 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Gemini媒体识别",
+    "version": "1.0.0",
+    "description": "Gemini图像、PDF、音频、视频识别请求\n\n⚠️注意：仅支持通过 inlineData 以 base64 方式上传图像、PDF、音频、视频，不支持 fileData.fileUri 或 File API。"
+  },
+  "tags": [
+    {
+      "name": "聊天（Chat）/原生Gemini格式"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "使用 Bearer Token 认证。\n格式: `Authorization: Bearer sk-xxxxxx`\n"
+      }
+    }
+  },
+  "paths": {
+    "/v1beta/models/{model}:generateContent": {
+      "post": {
+        "tags": [
+          "聊天（Chat）/原生Gemini格式"
+        ],
+        "summary": "Gemini媒体识别",
+        "description": "Gemini图像、PDF、音频、视频识别请求\n\n⚠️注意：仅支持通过 inlineData 以 base64 方式上传图像、PDF、音频、视频，不支持 fileData.fileUri 或 File API。",
+        "operationId": "geminirelayv1beta-391536411",
+        "parameters": [
+          {
+            "name": "model",
+            "in": "path",
+            "required": true,
+            "description": "模型名称",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "contents": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "role": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "model"
+                          ]
+                        },
+                        "parts": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "text": {
+                                "type": "string"
+                              },
+                              "inlineData": {
+                                "type": "object",
+                                "properties": {
+                                  "mimeType": {
+                                    "type": "string"
+                                  },
+                                  "data": {
+                                    "type": "string"
+                                  }
+                                },
+                                "x-apifox-orders": [
+                                  "mimeType",
+                                  "data"
+                                ]
+                              }
+                            },
+                            "x-apifox-orders": [
+                              "text",
+                              "inlineData"
+                            ]
+                          }
+                        }
+                      },
+                      "x-apifox-orders": [
+                        "role",
+                        "parts"
+                      ]
+                    }
+                  },
+                  "generationConfig": {
+                    "type": "object",
+                    "properties": {
+                      "temperature": {
+                        "type": "number"
+                      },
+                      "topP": {
+                        "type": "number"
+                      },
+                      "topK": {
+                        "type": "integer"
+                      },
+                      "maxOutputTokens": {
+                        "type": "integer"
+                      },
+                      "stopSequences": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "x-apifox-orders": [
+                      "temperature",
+                      "topP",
+                      "topK",
+                      "maxOutputTokens",
+                      "stopSequences"
+                    ]
+                  },
+                  "safetySettings": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "category": {
+                          "type": "string"
+                        },
+                        "threshold": {
+                          "type": "string"
+                        }
+                      },
+                      "x-apifox-orders": [
+                        "category",
+                        "threshold"
+                      ]
+                    }
+                  },
+                  "tools": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {},
+                      "x-apifox-orders": []
+                    }
+                  },
+                  "systemInstruction": {
+                    "type": "object",
+                    "properties": {
+                      "parts": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {},
+                          "x-apifox-orders": []
+                        }
+                      }
+                    },
+                    "x-apifox-orders": [
+                      "parts"
+                    ]
+                  }
+                },
+                "x-apifox-orders": [
+                  "contents",
+                  "generationConfig",
+                  "safetySettings",
+                  "tools",
+                  "systemInstruction"
+                ]
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "candidates": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "content": {
+                            "type": "object",
+                            "properties": {
+                              "role": {
+                                "type": "string"
+                              },
+                              "parts": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {},
+                                  "x-apifox-orders": []
+                                }
+                              }
+                            },
+                            "x-apifox-orders": [
+                              "role",
+                              "parts"
+                            ]
+                          },
+                          "finishReason": {
+                            "type": "string"
+                          },
+                          "safetyRatings": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {},
+                              "x-apifox-orders": []
+                            }
+                          }
+                        },
+                        "x-apifox-orders": [
+                          "content",
+                          "finishReason",
+                          "safetyRatings"
+                        ]
+                      }
+                    },
+                    "usageMetadata": {
+                      "type": "object",
+                      "properties": {
+                        "promptTokenCount": {
+                          "type": "integer"
+                        },
+                        "candidatesTokenCount": {
+                          "type": "integer"
+                        },
+                        "totalTokenCount": {
+                          "type": "integer"
+                        }
+                      },
+                      "x-apifox-orders": [
+                        "promptTokenCount",
+                        "candidatesTokenCount",
+                        "totalTokenCount"
+                      ]
+                    }
+                  },
+                  "x-apifox-orders": [
+                    "candidates",
+                    "usageMetadata"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

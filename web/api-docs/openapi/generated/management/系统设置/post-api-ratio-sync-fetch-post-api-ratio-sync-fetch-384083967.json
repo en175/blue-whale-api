@@ -1,0 +1,31 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "获取上游倍率",
+    "version": "1.0.0",
+    "description": "👑 需要超级管理员权限（Root）"
+  },
+  "tags": [
+    {
+      "name": "系统设置"
+    }
+  ],
+  "paths": {
+    "/api/ratio_sync/fetch": {
+      "post": {
+        "tags": [
+          "系统设置"
+        ],
+        "summary": "获取上游倍率",
+        "description": "👑 需要超级管理员权限（Root）",
+        "operationId": "post-api-ratio-sync-fetch",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "重新生成备用码",
+    "version": "1.0.0",
+    "description": "🔐 需要登录（User权限）"
+  },
+  "tags": [
+    {
+      "name": "两步验证"
+    }
+  ],
+  "paths": {
+    "/api/user/2fa/backup_codes": {
+      "post": {
+        "tags": [
+          "两步验证"
+        ],
+        "summary": "重新生成备用码",
+        "description": "🔐 需要登录（User权限）",
+        "operationId": "post-api-user-2fa-backup-codes",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

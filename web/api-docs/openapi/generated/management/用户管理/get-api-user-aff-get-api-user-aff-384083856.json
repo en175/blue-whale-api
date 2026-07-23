@@ -1,0 +1,31 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "获取邀请码",
+    "version": "1.0.0",
+    "description": "🔐 需要登录（User权限）"
+  },
+  "tags": [
+    {
+      "name": "用户管理"
+    }
+  ],
+  "paths": {
+    "/api/user/aff": {
+      "get": {
+        "tags": [
+          "用户管理"
+        ],
+        "summary": "获取邀请码",
+        "description": "🔐 需要登录（User权限）",
+        "operationId": "get-api-user-aff",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

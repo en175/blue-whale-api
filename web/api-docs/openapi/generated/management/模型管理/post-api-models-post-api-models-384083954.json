@@ -1,0 +1,31 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "创建模型元数据",
+    "version": "1.0.0",
+    "description": "👨‍💼 需要管理员权限（Admin）"
+  },
+  "tags": [
+    {
+      "name": "模型管理"
+    }
+  ],
+  "paths": {
+    "/api/models/": {
+      "post": {
+        "tags": [
+          "模型管理"
+        ],
+        "summary": "创建模型元数据",
+        "description": "👨‍💼 需要管理员权限（Admin）",
+        "operationId": "post-api-models",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

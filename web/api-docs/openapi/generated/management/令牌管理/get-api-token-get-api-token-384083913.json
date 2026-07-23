@@ -1,0 +1,48 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "获取所有令牌",
+    "version": "1.0.0",
+    "description": "🔐 需要登录（User权限）"
+  },
+  "tags": [
+    {
+      "name": "令牌管理"
+    }
+  ],
+  "paths": {
+    "/api/token/": {
+      "get": {
+        "tags": [
+          "令牌管理"
+        ],
+        "summary": "获取所有令牌",
+        "description": "🔐 需要登录（User权限）",
+        "operationId": "get-api-token",
+        "parameters": [
+          {
+            "name": "p",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

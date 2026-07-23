@@ -1,0 +1,40 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "获取渠道密钥",
+    "version": "1.0.0",
+    "description": "👑 需要超级管理员权限（Root）+ 安全验证"
+  },
+  "tags": [
+    {
+      "name": "渠道管理"
+    }
+  ],
+  "paths": {
+    "/api/channel/{id}/key": {
+      "post": {
+        "tags": [
+          "渠道管理"
+        ],
+        "summary": "获取渠道密钥",
+        "description": "👑 需要超级管理员权限（Root）+ 安全验证",
+        "operationId": "post-api-channel-id-key",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

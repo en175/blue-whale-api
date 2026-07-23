@@ -1,0 +1,42 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "更新令牌",
+    "version": "1.0.0",
+    "description": "🔐 需要登录（User权限）"
+  },
+  "tags": [
+    {
+      "name": "令牌管理"
+    }
+  ],
+  "paths": {
+    "/api/token/": {
+      "put": {
+        "tags": [
+          "令牌管理"
+        ],
+        "summary": "更新令牌",
+        "description": "🔐 需要登录（User权限）",
+        "operationId": "put-api-token",
+        "parameters": [],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "description": "Unresolved $ref: #/definitions/224188812"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}

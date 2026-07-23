@@ -1,0 +1,31 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "删除无效兑换码",
+    "version": "1.0.0",
+    "description": "👨‍💼 需要管理员权限（Admin）"
+  },
+  "tags": [
+    {
+      "name": "兑换码"
+    }
+  ],
+  "paths": {
+    "/api/redemption/invalid": {
+      "delete": {
+        "tags": [
+          "兑换码"
+        ],
+        "summary": "删除无效兑换码",
+        "description": "👨‍💼 需要管理员权限（Admin）",
+        "operationId": "delete-api-redemption-invalid",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    }
+  }
+}
