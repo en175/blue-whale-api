@@ -6,12 +6,15 @@ WORKDIR /build
 # Install bun (project convention from blue_whale_api/Dockerfile)
 RUN npm install -g bun
 
-# Install deps — postinstall runs fumadocs-mdx to generate .source/
+# Install deps (skip postinstall — fumadocs-mdx needs source files not yet present)
 COPY package.json bun.lock ./
-RUN bun install --frozen-lockfile
+RUN bun install --frozen-lockfile --ignore-scripts
 
 # Copy source
 COPY . .
+
+# Generate fumadocs .source/ index (was postinstall, now explicit)
+RUN npx fumadocs-mdx
 
 # Generate changelog from GitHub API (fails gracefully)
 RUN bun run prebuild
