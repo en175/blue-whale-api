@@ -35,7 +35,6 @@ const OPERATIONS_SECTIONS = [
         defaultValues={{
           DefaultCollapseSidebar: settings.DefaultCollapseSidebar,
           DemoSiteEnabled: settings.DemoSiteEnabled,
-          SelfUseModeEnabled: settings.SelfUseModeEnabled,
         }}
       />
     ),
