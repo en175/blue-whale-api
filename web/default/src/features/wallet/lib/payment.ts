@@ -87,6 +87,19 @@ export function isWaffoPancakePayment(paymentType: string): boolean {
 }
 
 /**
+ * Check if payment method is BlueWhalePay (支付宝/微信 via blue-whale-pay)
+ *
+ * BlueWhalePay methods are configured under the generic PayMethods list with a
+ * `bluewhalepay_` type prefix (bluewhalepay_alipay / bluewhalepay_wechat) and
+ * are routed to the dedicated blue-whale-pay QR checkout flow rather than the
+ * generic epay form submission, so they must be special-cased in payment
+ * dispatch logic.
+ */
+export function isBlueWhalePayPayment(paymentType: string): boolean {
+  return paymentType.startsWith('bluewhalepay_')
+}
+
+/**
  * Get default payment type from topup info
  */
 export function getDefaultPaymentType(topupInfo: TopupInfo | null): string {
@@ -124,6 +137,10 @@ export function getMinTopupAmount(topupInfo: TopupInfo | null): number {
 
   if (topupInfo.enable_online_topup) {
     return topupInfo.min_topup
+  }
+
+  if (topupInfo.enable_bluewhalepay_topup) {
+    return topupInfo.min_topup || DEFAULT_MIN_TOPUP
   }
 
   if (topupInfo.enable_stripe_topup) {

@@ -152,6 +152,13 @@ const BILLING_SECTIONS = [
           CreemWebhookSecret: settings.CreemWebhookSecret,
           CreemTestMode: settings.CreemTestMode,
           CreemProducts: settings.CreemProducts,
+          BlueWhalePayEnabled: settings.BlueWhalePayEnabled ?? false,
+          BlueWhalePayPayUrl: settings.BlueWhalePayPayUrl ?? '',
+          BlueWhalePayMchNo: settings.BlueWhalePayMchNo ?? 'BLUEWHALE',
+          BlueWhalePayAppId: settings.BlueWhalePayAppId ?? 'BLUEWHALE_APP',
+          BlueWhalePayAppSecret: settings.BlueWhalePayAppSecret ?? '',
+          BlueWhalePayServerBaseUrl: settings.BlueWhalePayServerBaseUrl ?? '',
+          BlueWhalePayWayCode: settings.BlueWhalePayWayCode ?? 'ALI_QR',
         }}
         waffoDefaultValues={{
           WaffoEnabled: settings.WaffoEnabled ?? false,

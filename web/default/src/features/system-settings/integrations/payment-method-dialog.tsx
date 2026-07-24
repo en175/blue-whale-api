@@ -71,6 +71,8 @@ const PAYMENT_TYPE_ICON_NAMES: Record<string, string> = {
   stripe: 'SiStripe',
   waffo_pancake: 'LuCreditCard',
   wxpay: 'SiWechat',
+  bluewhalepay_alipay: 'SiAlipay',
+  bluewhalepay_wechat: 'SiWechat',
 }
 
 const getDefaultIconName = (type: string) => PAYMENT_TYPE_ICON_NAMES[type] ?? ''
@@ -108,6 +110,18 @@ export function PaymentMethodDialog({
       label: 'Waffo Pancake (waffo_pancake)',
       name: 'Waffo Pancake',
       value: 'waffo_pancake',
+    },
+    {
+      iconName: 'SiAlipay',
+      label: `${t('Alipay')} BlueWhale (bluewhalepay_alipay)`,
+      name: `${t('Alipay')} BlueWhale`,
+      value: 'bluewhalepay_alipay',
+    },
+    {
+      iconName: 'SiWechat',
+      label: `${t('WeChat Pay')} BlueWhale (bluewhalepay_wechat)`,
+      name: `${t('WeChat Pay')} BlueWhale`,
+      value: 'bluewhalepay_wechat',
     },
   ]
   const getPaymentTypeOption = (value: string) =>

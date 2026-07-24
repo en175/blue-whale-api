@@ -105,7 +105,21 @@ export function getPaymentIcon(
           style={{ color: PAYMENT_ICON_COLORS[PAYMENT_TYPES.ALIPAY] }}
         />
       )
+    case 'bluewhalepay_alipay':
+      return (
+        <SiAlipay
+          className={className}
+          style={{ color: PAYMENT_ICON_COLORS[PAYMENT_TYPES.ALIPAY] }}
+        />
+      )
     case PAYMENT_TYPES.WECHAT:
+      return (
+        <SiWechat
+          className={className}
+          style={{ color: PAYMENT_ICON_COLORS[PAYMENT_TYPES.WECHAT] }}
+        />
+      )
+    case 'bluewhalepay_wechat':
       return (
         <SiWechat
           className={className}

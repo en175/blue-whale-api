@@ -325,6 +325,13 @@ export type BillingSettings = {
   // section (saved via /api/option/waffo-pancake/save).
   WaffoPancakeStoreID: string
   WaffoPancakeProductID: string
+  BlueWhalePayEnabled: boolean
+  BlueWhalePayPayUrl: string
+  BlueWhalePayMchNo: string
+  BlueWhalePayAppId: string
+  BlueWhalePayAppSecret: string
+  BlueWhalePayServerBaseUrl: string
+  BlueWhalePayWayCode: string
   'checkin_setting.enabled': boolean
   'checkin_setting.min_quota': number
   'checkin_setting.max_quota': number

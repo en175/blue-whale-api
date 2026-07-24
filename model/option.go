@@ -93,6 +93,13 @@ func InitOptionMap() {
 	common.OptionMap["CreemProducts"] = setting.CreemProducts
 	common.OptionMap["CreemTestMode"] = strconv.FormatBool(setting.CreemTestMode)
 	common.OptionMap["CreemWebhookSecret"] = setting.CreemWebhookSecret
+	common.OptionMap["BlueWhalePayEnabled"] = strconv.FormatBool(setting.BlueWhalePayEnabled)
+	common.OptionMap["BlueWhalePayPayUrl"] = setting.BlueWhalePayPayUrl
+	common.OptionMap["BlueWhalePayMchNo"] = setting.BlueWhalePayMchNo
+	common.OptionMap["BlueWhalePayAppId"] = setting.BlueWhalePayAppId
+	common.OptionMap["BlueWhalePayAppSecret"] = setting.BlueWhalePayAppSecret
+	common.OptionMap["BlueWhalePayServerBaseUrl"] = setting.BlueWhalePayServerBaseUrl
+	common.OptionMap["BlueWhalePayWayCode"] = setting.BlueWhalePayWayCode
 	common.OptionMap["WaffoEnabled"] = strconv.FormatBool(setting.WaffoEnabled)
 	common.OptionMap["WaffoApiKey"] = setting.WaffoApiKey
 	common.OptionMap["WaffoPrivateKey"] = setting.WaffoPrivateKey
@@ -421,6 +428,20 @@ func updateOptionMap(key string, value string) (err error) {
 		setting.CreemTestMode = value == "true"
 	case "CreemWebhookSecret":
 		setting.CreemWebhookSecret = value
+	case "BlueWhalePayEnabled":
+		setting.BlueWhalePayEnabled = value == "true"
+	case "BlueWhalePayPayUrl":
+		setting.BlueWhalePayPayUrl = value
+	case "BlueWhalePayMchNo":
+		setting.BlueWhalePayMchNo = value
+	case "BlueWhalePayAppId":
+		setting.BlueWhalePayAppId = value
+	case "BlueWhalePayAppSecret":
+		setting.BlueWhalePayAppSecret = value
+	case "BlueWhalePayServerBaseUrl":
+		setting.BlueWhalePayServerBaseUrl = value
+	case "BlueWhalePayWayCode":
+		setting.BlueWhalePayWayCode = value
 	case "WaffoEnabled":
 		setting.WaffoEnabled = value == "true"
 	case "WaffoApiKey":

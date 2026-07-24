@@ -41,11 +41,13 @@ import {
   useCreemPayment,
   useWaffoPayment,
   useWaffoPancakePayment,
+  useBlueWhalePayPayment,
 } from './hooks'
 import {
   getDefaultPaymentType,
   getMinTopupAmount,
   isWaffoPancakePayment,
+  isBlueWhalePayPayment,
 } from './lib'
 import type {
   UserWalletData,
@@ -104,6 +106,14 @@ export function Wallet(props: WalletProps) {
   const { processWaffoPayment } = useWaffoPayment()
   const { processing: pancakeProcessing, processWaffoPancakePayment } =
     useWaffoPancakePayment()
+  const {
+    loadingWayCode: blueWhaleLoadingWay,
+    processBlueWhalePayPayment,
+    qrCode: blueWhaleQrCode,
+    closeQrCode: closeBlueWhaleQrCode,
+    qrCodeWayCode: blueWhaleQrWayCode,
+    orderInfo: blueWhaleOrderInfo,
+  } = useBlueWhalePayPayment()
 
   // Fetch and refresh user data
   const fetchUser = useCallback(async () => {
@@ -187,10 +197,25 @@ export function Wallet(props: WalletProps) {
   const handlePaymentConfirm = async () => {
     if (!selectedPaymentMethod) return
 
+    const isBlueWhale = isBlueWhalePayPayment(selectedPaymentMethod.type)
+    // bluewhalepay_alipay → ALI_QR, bluewhalepay_wechat → WX_JSAPI,
+    // any other bluewhalepay_ prefix → suffix uppercased (e.g. ALI_QR).
+    const blueWhaleChannel = selectedPaymentMethod.type.replace(
+      'bluewhalepay_',
+      ''
+    )
+    const wayCode =
+      blueWhaleChannel === 'alipay'
+        ? 'ALI_QR'
+        : blueWhaleChannel === 'wechat'
+          ? 'WX_JSAPI'
+          : blueWhaleChannel.toUpperCase()
     const isPancake = isWaffoPancakePayment(selectedPaymentMethod.type)
-    const success = isPancake
-      ? await processWaffoPancakePayment(topupAmount)
-      : await processPayment(topupAmount, selectedPaymentMethod.type)
+    const success = isBlueWhale
+      ? await processBlueWhalePayPayment(topupAmount, wayCode)
+      : isPancake
+        ? await processWaffoPancakePayment(topupAmount)
+        : await processPayment(topupAmount, selectedPaymentMethod.type)
 
     if (success) {
       setConfirmDialogOpen(false)
@@ -305,6 +330,10 @@ export function Wallet(props: WalletProps) {
                   enableWaffoPancakeTopup={
                     topupInfo?.enable_waffo_pancake_topup
                   }
+                  blueWhaleQrCode={blueWhaleQrCode}
+                  blueWhaleQrWayCode={blueWhaleQrWayCode}
+                  blueWhaleOrderInfo={blueWhaleOrderInfo}
+                  onCloseBlueWhaleQrCode={closeBlueWhaleQrCode}
                 />
               </div>
 
@@ -337,7 +366,7 @@ export function Wallet(props: WalletProps) {
         paymentAmount={paymentAmount}
         paymentMethod={selectedPaymentMethod}
         calculating={calculating}
-        processing={processing || pancakeProcessing}
+        processing={processing || pancakeProcessing || !!blueWhaleLoadingWay}
         discountRate={getDiscountRate()}
         usdExchangeRate={effectiveUsdExchangeRate}
       />

@@ -176,6 +176,13 @@ const paymentSchema = z.object({
   WaffoPancakeMerchantID: z.string(),
   WaffoPancakePrivateKey: z.string(),
   WaffoPancakeReturnURL: z.string(),
+  BlueWhalePayEnabled: z.boolean(),
+  BlueWhalePayPayUrl: z.string(),
+  BlueWhalePayMchNo: z.string(),
+  BlueWhalePayAppId: z.string(),
+  BlueWhalePayAppSecret: z.string(),
+  BlueWhalePayServerBaseUrl: z.string(),
+  BlueWhalePayWayCode: z.string(),
 })
 
 type PaymentFormValues = z.infer<typeof paymentSchema>
@@ -457,6 +464,15 @@ export function PaymentSettingsSection({
       WaffoPancakeReturnURL: removeTrailingSlash(
         values.WaffoPancakeReturnURL.trim()
       ),
+      BlueWhalePayEnabled: values.BlueWhalePayEnabled,
+      BlueWhalePayPayUrl: values.BlueWhalePayPayUrl.trim(),
+      BlueWhalePayMchNo: values.BlueWhalePayMchNo.trim(),
+      BlueWhalePayAppId: values.BlueWhalePayAppId.trim(),
+      BlueWhalePayAppSecret: values.BlueWhalePayAppSecret.trim(),
+      BlueWhalePayServerBaseUrl: removeTrailingSlash(
+        values.BlueWhalePayServerBaseUrl.trim()
+      ),
+      BlueWhalePayWayCode: values.BlueWhalePayWayCode.trim(),
     }
 
     const initial = {
@@ -504,6 +520,15 @@ export function PaymentSettingsSection({
       WaffoPancakeReturnURL: removeTrailingSlash(
         initialRef.current.WaffoPancakeReturnURL.trim()
       ),
+      BlueWhalePayEnabled: initialRef.current.BlueWhalePayEnabled,
+      BlueWhalePayPayUrl: initialRef.current.BlueWhalePayPayUrl.trim(),
+      BlueWhalePayMchNo: initialRef.current.BlueWhalePayMchNo.trim(),
+      BlueWhalePayAppId: initialRef.current.BlueWhalePayAppId.trim(),
+      BlueWhalePayAppSecret: initialRef.current.BlueWhalePayAppSecret.trim(),
+      BlueWhalePayServerBaseUrl: removeTrailingSlash(
+        initialRef.current.BlueWhalePayServerBaseUrl.trim()
+      ),
+      BlueWhalePayWayCode: initialRef.current.BlueWhalePayWayCode.trim(),
     }
 
     const updates: Array<{ key: string; value: string | number | boolean }> = []
@@ -560,6 +585,31 @@ export function PaymentSettingsSection({
         key: 'payment_setting.amount_discount',
         value: sanitized.AmountDiscount,
       })
+    }
+
+    if (sanitized.BlueWhalePayEnabled !== initial.BlueWhalePayEnabled) {
+      updates.push({ key: 'BlueWhalePayEnabled', value: sanitized.BlueWhalePayEnabled })
+    }
+    if (sanitized.BlueWhalePayPayUrl !== initial.BlueWhalePayPayUrl) {
+      updates.push({ key: 'BlueWhalePayPayUrl', value: sanitized.BlueWhalePayPayUrl })
+    }
+    if (sanitized.BlueWhalePayMchNo !== initial.BlueWhalePayMchNo) {
+      updates.push({ key: 'BlueWhalePayMchNo', value: sanitized.BlueWhalePayMchNo })
+    }
+    if (sanitized.BlueWhalePayAppId !== initial.BlueWhalePayAppId) {
+      updates.push({ key: 'BlueWhalePayAppId', value: sanitized.BlueWhalePayAppId })
+    }
+    if (
+      sanitized.BlueWhalePayAppSecret &&
+      sanitized.BlueWhalePayAppSecret !== initial.BlueWhalePayAppSecret
+    ) {
+      updates.push({ key: 'BlueWhalePayAppSecret', value: sanitized.BlueWhalePayAppSecret })
+    }
+    if (sanitized.BlueWhalePayServerBaseUrl !== initial.BlueWhalePayServerBaseUrl) {
+      updates.push({ key: 'BlueWhalePayServerBaseUrl', value: sanitized.BlueWhalePayServerBaseUrl })
+    }
+    if (sanitized.BlueWhalePayWayCode !== initial.BlueWhalePayWayCode) {
+      updates.push({ key: 'BlueWhalePayWayCode', value: sanitized.BlueWhalePayWayCode })
     }
 
     if (
@@ -877,13 +927,14 @@ export function PaymentSettingsSection({
           />
           <Tabs defaultValue='general' className='min-w-0'>
             <div className='overflow-x-auto pb-1'>
-              <TabsList className='grid min-w-[44rem] grid-cols-6'>
+              <TabsList className='grid min-w-[44rem] grid-cols-7'>
                 <TabsTrigger value='general'>{t('General')}</TabsTrigger>
                 <TabsTrigger value='epay'>Epay</TabsTrigger>
                 <TabsTrigger value='stripe'>{t('Stripe')}</TabsTrigger>
                 <TabsTrigger value='creem'>Creem</TabsTrigger>
                 <TabsTrigger value='waffo-pancake'>Waffo Pancake</TabsTrigger>
                 <TabsTrigger value='waffo'>Waffo</TabsTrigger>
+                <TabsTrigger value='bluewhalepay'>BlueWhale</TabsTrigger>
               </TabsList>
             </div>
 
@@ -1238,6 +1289,163 @@ export function PaymentSettingsSection({
                     )}
                   />
                 </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value='bluewhalepay' className={paymentTabContentClassName}>
+              <div className='space-y-4'>
+                <div>
+                  <h3 className='text-lg font-medium'>BlueWhale</h3>
+                  <p className='text-muted-foreground text-sm'>
+                    blue-whale-pay（支付宝/微信）渠道配置，客户端走 HTTP notifyUrl 回调。
+                  </p>
+                </div>
+
+                <div className='rounded-md bg-blue-50 p-4 text-sm text-blue-900 dark:bg-blue-950 dark:text-blue-100'>
+                  <p className='mb-2 font-medium'>回调配置：</p>
+                  <ul className='list-inside list-disc space-y-1'>
+                    <li>
+                      商户通知 URL：{' '}
+                      <code className='rounded bg-blue-100 px-1 py-0.5 text-xs dark:bg-blue-900'>
+                        {'<ServerBaseUrl>/api/bluewhalepay/notify'}
+                      </code>
+                    </li>
+                    <li>支付成功后 pay 自动 POST 该地址（query 带 sign），blue_whale_api 验签加额度</li>
+                    <li>appSecret = blue-whale-pay t_mch_app.BLUEWHALE_APP.app_secret（下单签名 + 回调验签共用）</li>
+                  </ul>
+                </div>
+
+                <FormField
+                  control={form.control}
+                  name='BlueWhalePayEnabled'
+                  render={({ field }) => (
+                    <FormItem className='flex flex-row items-center justify-between rounded-lg border p-4'>
+                      <div className='space-y-0.5'>
+                        <FormLabel>启用 BlueWhalePay</FormLabel>
+                        <FormDescription>
+                          开启后用户充值页显示支付宝/微信渠道
+                        </FormDescription>
+                      </div>
+                      <FormControl>
+                        <Switch
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+
+                <div className='grid gap-6 md:grid-cols-2'>
+                  <FormField
+                    control={form.control}
+                    name='BlueWhalePayPayUrl'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>pay 服务地址</FormLabel>
+                        <FormControl>
+                          <Input placeholder='http://localhost:8083' {...field} />
+                        </FormControl>
+                        <FormDescription>blue-whale-pay HTTP 地址</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name='BlueWhalePayServerBaseUrl'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>blue_whale_api 公网基址</FormLabel>
+                        <FormControl>
+                          <Input placeholder='https://api.example.com' {...field} />
+                        </FormControl>
+                        <FormDescription>
+                          拼 /api/bluewhalepay/notify 作 notifyUrl 回调入口
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name='BlueWhalePayMchNo'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>商户号</FormLabel>
+                        <FormControl>
+                          <Input placeholder='BLUEWHALE' {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name='BlueWhalePayAppId'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>应用 ID</FormLabel>
+                        <FormControl>
+                          <Input placeholder='BLUEWHALE_APP' {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name='BlueWhalePayAppSecret'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>appSecret</FormLabel>
+                        <FormControl>
+                          <Input
+                            type='password'
+                            autoComplete='new-password'
+                            placeholder={t('leave blank unless updating')}
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          商户应用私钥（签名/验签，留空不更新）
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name='BlueWhalePayWayCode'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>默认支付方式</FormLabel>
+                        <FormControl>
+                          <Input placeholder='ALI_QR' {...field} />
+                        </FormControl>
+                        <FormDescription>
+                          ALI_QR（支付宝）/ WX_JSAPI（微信）
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <Alert>
+                  <ShieldAlert className='h-4 w-4' />
+                  <AlertDescription>
+                    支付宝/微信收款方式请在「常规 → 支付方式」中以 type=
+                    <code className='bg-muted rounded px-1 py-0.5 text-xs'>
+                      bluewhalepay_alipay
+                    </code>
+                    {' / '}
+                    <code className='bg-muted rounded px-1 py-0.5 text-xs'>
+                      bluewhalepay_wechat
+                    </code>{' '}
+                    配置，前端按 type 前缀路由到 BlueWhalePay 下单。
+                  </AlertDescription>
+                </Alert>
               </div>
             </TabsContent>
 

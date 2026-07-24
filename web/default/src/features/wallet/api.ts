@@ -169,6 +169,30 @@ export async function requestWaffoPancakePayment(
   return res.data
 }
 
+export interface BlueWhalePaymentRequest {
+  amount: number
+  way_code: string
+}
+
+export interface BlueWhalePaymentResponse extends ApiResponse {
+  data?: {
+    pay_data: string
+    order_id: string
+  }
+}
+
+/**
+ * Request BlueWhalePay payment（blue-whale-pay：支付宝 ALI_QR / 微信 WX_JSAPI）
+ */
+export async function requestBlueWhalePayment(
+  request: BlueWhalePaymentRequest
+): Promise<BlueWhalePaymentResponse> {
+  const res = await api.post('/api/user/bluewhalepay/pay', request, {
+    skipBusinessError: true,
+  } as Record<string, unknown>)
+  return res.data
+}
+
 /**
  * Get affiliate code
  */

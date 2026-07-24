@@ -52,6 +52,15 @@ import type {
   WaffoPayMethod,
 } from '../types'
 import { CreemProductsSection } from './creem-products-section'
+import { SiAlipay, SiWechat } from 'react-icons/si'
+import { QRCodeSVG } from 'qrcode.react'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import type { BlueWhalePayOrderInfo } from '../hooks'
 
 interface RechargeFormCardProps {
   topupInfo: TopupInfo | null
@@ -81,6 +90,10 @@ interface RechargeFormCardProps {
   waffoMinTopup?: number
   onWaffoMethodSelect?: (method: WaffoPayMethod, index: number) => void
   enableWaffoPancakeTopup?: boolean
+  blueWhaleQrCode: string | null
+  blueWhaleQrWayCode: string | null
+  blueWhaleOrderInfo: BlueWhalePayOrderInfo | null
+  onCloseBlueWhaleQrCode: () => void
 }
 
 export function RechargeFormCard({
@@ -111,9 +124,30 @@ export function RechargeFormCard({
   waffoMinTopup,
   onWaffoMethodSelect,
   enableWaffoPancakeTopup,
+  blueWhaleQrCode,
+  blueWhaleQrWayCode,
+  blueWhaleOrderInfo,
+  onCloseBlueWhaleQrCode,
 }: RechargeFormCardProps) {
   const { t } = useTranslation()
   const [localAmount, setLocalAmount] = useState(topupAmount.toString())
+  const [countdown, setCountdown] = useState('')
+  useEffect(() => {
+    if (!blueWhaleOrderInfo) {
+      setCountdown('')
+      return
+    }
+    const expire = blueWhaleOrderInfo.createdAt + 2 * 60 * 60 * 1000 // pay 订单 2h 超时
+    const update = () => {
+      const remain = Math.max(0, expire - Date.now())
+      const m = Math.floor(remain / 60000)
+      const s = Math.floor((remain % 60000) / 1000)
+      setCountdown(`${m}:${s.toString().padStart(2, '0')}`)
+    }
+    update()
+    const timer = setInterval(update, 1000)
+    return () => clearInterval(timer)
+  }, [blueWhaleOrderInfo])
 
   useEffect(() => {
     setLocalAmount(topupAmount.toString())
@@ -127,17 +161,21 @@ export function RechargeFormCard({
     }
   }
 
+  const enableBlueWhalePay = !!topupInfo?.enable_bluewhalepay_topup
   const hasConfigurableTopup =
     topupInfo?.enable_online_topup ||
     topupInfo?.enable_stripe_topup ||
     enableWaffoTopup ||
-    enableWaffoPancakeTopup
+    enableWaffoPancakeTopup ||
+    enableBlueWhalePay
   const hasAnyTopup = hasConfigurableTopup || enableCreemTopup
   const hasStandardPaymentMethods =
     Array.isArray(topupInfo?.pay_methods) && topupInfo.pay_methods.length > 0
   const hasWaffoPaymentMethods =
     Array.isArray(waffoPayMethods) && waffoPayMethods.length > 0
   const minTopup = getMinTopupAmount(topupInfo)
+  // 自定义金额输入框暂时隐藏，等以后优化；恢复显示把 enableCustomAmount 改为 true
+  const enableCustomAmount = false
   const redemptionEnabled = topupInfo?.enable_redemption !== false
 
   if (loading) {
@@ -278,37 +316,39 @@ export function RechargeFormCard({
                 </div>
               )}
 
-              <div className='space-y-2.5 sm:space-y-3'>
-                <Label
-                  htmlFor='topup-amount'
-                  className='text-muted-foreground text-xs font-medium tracking-wider uppercase'
-                >
-                  {t('Custom Amount')}
-                </Label>
-                <div className='grid grid-cols-[minmax(0,1fr)_minmax(110px,0.55fr)] gap-2 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center'>
-                  <Input
-                    id='topup-amount'
-                    type='number'
-                    value={localAmount}
-                    onChange={(e) => handleAmountChange(e.target.value)}
-                    min={minTopup}
-                    placeholder={`Minimum ${minTopup}`}
-                    className='h-9 text-base sm:h-10 sm:text-lg'
-                  />
-                  <div className='bg-muted/30 flex min-h-9 items-center justify-between gap-2 rounded-md border px-3 lg:min-w-52'>
-                    <span className='text-muted-foreground truncate text-xs'>
-                      {t('Amount to pay:')}
-                    </span>
-                    {calculating ? (
-                      <Skeleton className='h-5 w-16' />
-                    ) : (
-                      <span className='text-sm font-semibold'>
-                        {formatCurrency(paymentAmount)}
+              {enableCustomAmount && (
+                <div className='space-y-2.5 sm:space-y-3'>
+                  <Label
+                    htmlFor='topup-amount'
+                    className='text-muted-foreground text-xs font-medium tracking-wider uppercase'
+                  >
+                    {t('Custom Amount')}
+                  </Label>
+                  <div className='grid grid-cols-[minmax(0,1fr)_minmax(110px,0.55fr)] gap-2 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center'>
+                    <Input
+                      id='topup-amount'
+                      type='number'
+                      value={localAmount}
+                      onChange={(e) => handleAmountChange(e.target.value)}
+                      min={minTopup}
+                      placeholder={`Minimum ${minTopup}`}
+                      className='h-9 text-base sm:h-10 sm:text-lg'
+                    />
+                    <div className='bg-muted/30 flex min-h-9 items-center justify-between gap-2 rounded-md border px-3 lg:min-w-52'>
+                      <span className='text-muted-foreground truncate text-xs'>
+                        {t('Amount to pay:')}
                       </span>
-                    )}
+                      {calculating ? (
+                        <Skeleton className='h-5 w-16' />
+                      ) : (
+                        <span className='text-sm font-semibold'>
+                          {formatCurrency(paymentAmount)}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               <div className='space-y-2.5 sm:space-y-3'>
                 <Label className='text-muted-foreground text-xs font-medium tracking-wider uppercase'>
@@ -378,7 +418,7 @@ export function RechargeFormCard({
                     })}
                   </div>
                 ) : null}
-                {!hasStandardPaymentMethods && !hasWaffoPaymentMethods && (
+                {!hasAnyTopup && (
                   <Alert>
                     <AlertDescription>
                       {t(
@@ -468,6 +508,70 @@ export function RechargeFormCard({
                     </div>
                   </div>
                 )}
+
+              {/* 扫码支付弹窗：bluewhalepay_alipay / bluewhalepay_wechat 选定后，
+                  由 Wallet handlePaymentConfirm 调 hook 下单，此处仅展示二维码。 */}
+              <Dialog
+                open={!!blueWhaleQrCode}
+                onOpenChange={(open) => !open && onCloseBlueWhaleQrCode()}
+              >
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle className='flex items-center justify-center gap-2'>
+                      {blueWhaleQrWayCode === 'ALI_QR' ? (
+                        <SiAlipay
+                          className='h-5 w-5'
+                          style={{ color: '#1677FF' }}
+                        />
+                      ) : blueWhaleQrWayCode === 'WX_JSAPI' ? (
+                        <SiWechat
+                          className='h-5 w-5'
+                          style={{ color: '#07C160' }}
+                        />
+                      ) : null}
+                      {blueWhaleQrWayCode === 'ALI_QR'
+                        ? '支付宝支付'
+                        : blueWhaleQrWayCode === 'WX_JSAPI'
+                          ? '微信支付'
+                          : '扫码支付'}
+                    </DialogTitle>
+                  </DialogHeader>
+                  <div className='flex flex-col items-center gap-3 py-4'>
+                    <p className='text-2xl font-bold'>
+                      {formatCurrency(paymentAmount)}
+                    </p>
+                    {blueWhaleQrCode && (
+                      <div className='rounded-lg border p-3'>
+                        <QRCodeSVG value={blueWhaleQrCode} size={220} />
+                      </div>
+                    )}
+                    <p className='text-muted-foreground text-sm'>
+                      请使用
+                      {blueWhaleQrWayCode === 'ALI_QR' ? '支付宝' : '微信'}扫描二维码完成支付
+                    </p>
+                    {blueWhaleOrderInfo?.orderId && (
+                      <p className='text-muted-foreground text-xs'>
+                        订单号：{blueWhaleOrderInfo.orderId}
+                      </p>
+                    )}
+                    {countdown && (
+                      <p className='text-muted-foreground text-xs'>
+                        剩余支付时间：{countdown}
+                      </p>
+                    )}
+                    <p className='text-muted-foreground text-xs'>
+                      支付完成后额度将自动到账，请勿关闭此窗口
+                    </p>
+                    <Button
+                      variant='outline'
+                      size='sm'
+                      onClick={() => onCloseBlueWhaleQrCode()}
+                    >
+                      我已支付完成
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
             </>
           )}
         </div>

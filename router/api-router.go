@@ -60,6 +60,9 @@ func SetApiRouter(router *gin.Engine) {
 		// :env separates test vs prod URLs so the operator can register each
 		// in Pancake's matching webhook slot; handler enforces env match.
 		apiRouter.POST("/waffo-pancake/webhook/:env", anonymousRequestBodyLimit, controller.WaffoPancakeWebhook)
+		// bluewhalepay（blue-whale-pay）商户通知回调：pay confirmSuccess → GET notifyUrl（query 带 sign）。
+		apiRouter.POST("/bluewhalepay/notify", anonymousRequestBodyLimit, controller.BlueWhalePayNotify)
+		apiRouter.GET("/bluewhalepay/notify", controller.BlueWhalePayNotify)
 
 		// Universal secure verification routes
 		apiRouter.POST("/verify", middleware.UserAuth(), middleware.CriticalRateLimit(), controller.UniversalVerify)
@@ -105,6 +108,7 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.POST("/waffo/pay", middleware.CriticalRateLimit(), controller.RequestWaffoPay)
 				selfRoute.POST("/waffo-pancake/amount", controller.RequestWaffoPancakeAmount)
 				selfRoute.POST("/waffo-pancake/pay", middleware.CriticalRateLimit(), controller.RequestWaffoPancakePay)
+				selfRoute.POST("/bluewhalepay/pay", middleware.CriticalRateLimit(), controller.RequestBlueWhalePayPay)
 				selfRoute.POST("/aff_transfer", controller.TransferAffQuota)
 				selfRoute.PUT("/setting", controller.UpdateUserSetting)
 

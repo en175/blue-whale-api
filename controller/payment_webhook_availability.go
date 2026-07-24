@@ -108,3 +108,14 @@ func isEpayWebhookConfigured() bool {
 func isEpayWebhookEnabled() bool {
 	return isEpayTopUpEnabled()
 }
+
+// bluewhalepay 走 HTTP notifyUrl 回调（非 MQ），需 pay 地址 + appSecret + 回调基址齐全。
+func isBlueWhalePayEnabled() bool {
+	if !isPaymentComplianceConfirmed() {
+		return false
+	}
+	return setting.BlueWhalePayEnabled &&
+		strings.TrimSpace(setting.BlueWhalePayPayUrl) != "" &&
+		strings.TrimSpace(setting.BlueWhalePayAppSecret) != "" &&
+		strings.TrimSpace(setting.BlueWhalePayServerBaseUrl) != ""
+}
