@@ -161,6 +161,11 @@ export function ModelsTable() {
     totalCount,
     initialColumnVisibility: {
       description: false,
+      endpoints: false,
+      sync_official: false,
+      name_rule: false,
+      created_time: false,
+      updated_time: false,
       bound_channels: false,
       quota_types: false,
     },

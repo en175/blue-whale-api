@@ -80,10 +80,10 @@ export function getModelStatusOptions(t: TFunction) {
 
 export function getModelStatusConfig(
   t: TFunction
-): Record<ModelStatus, { label: string; variant: 'success' | 'neutral' }> {
+): Record<ModelStatus, { label: string; variant: 'success' | 'neutral' | 'danger' }> {
   return {
     1: { label: t('Enabled'), variant: 'success' },
-    0: { label: t('Disabled'), variant: 'neutral' },
+    0: { label: t('Disabled'), variant: 'danger' },
   }
 }
 
