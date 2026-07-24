@@ -4,4 +4,5 @@ import client from './api-page.client';
 
 export const APIPage = createAPIPage(openapi, {
   client,
+  playground: { enabled: false },
 });

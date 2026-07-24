@@ -56,21 +56,6 @@ const CHANGELOG_I18N = {
     downloadResources: 'Download Resources',
     noData: 'No version data available, please try again later.',
   },
-  ja: {
-    title: '# 📝 変更履歴',
-    warningTitle: 'バージョンログ情報 · データ更新日時',
-    warningDesc: `すべての履歴バージョンを表示するには、[GitHub Releases ページ](https://github.com/${SOURCE_REPO}/releases)をご覧ください。このページは定期的に最新の更新情報を取得します。`,
-    unknownVersion: '不明なバージョン',
-    noReleaseNotes: 'リリースノートなし',
-    publishedAt: '公開日',
-    timeSuffix: '(UTC+8)',
-    latestPre: '最新プレリリース版',
-    latest: '最新リリース版',
-    pre: 'プレリリース版',
-    normal: 'リリース版',
-    downloadResources: 'Download Resources',
-    noData: 'バージョンデータがありません。後でもう一度お試しください。',
-  },
 };
 
 async function fetchGitHubReleases(): Promise<Release[]> {
@@ -210,7 +195,6 @@ function formatReleasesMarkdown(
   const titleMap = {
     zh: '更新日志',
     en: 'Changelog',
-    ja: '変更履歴',
   };
   let markdown = `---\ntitle: ${titleMap[lang]}\n---\n\n`;
 
@@ -274,7 +258,7 @@ async function generateChangelog() {
     const releases = await fetchGitHubReleases();
 
     // Generate files for each language
-    const languages = ['zh', 'en', 'ja'] as const;
+    const languages = ['zh', 'en'] as const;
 
     for (const lang of languages) {
       console.log(`\n📝 Generating ${lang.toUpperCase()} version...`);

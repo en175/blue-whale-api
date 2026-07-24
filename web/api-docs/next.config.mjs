@@ -11,7 +11,7 @@ const config = {
     return [
       {
         // Apply charset to HTML pages
-        source: '/:lang(en|zh|ja)/:path*',
+        source: '/:lang(en|zh)/:path*',
         headers: [
           {
             key: 'Content-Type',

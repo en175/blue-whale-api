@@ -49,21 +49,6 @@ const i18nText: Record<
     api: { text: 'API 参考', desc: '完整的 API 文档和参考指南。' },
     apps: { text: 'AI 应用', desc: 'AI 应用集成指南。' },
   },
-  ja: {
-    title: { text: 'ドキュメント', desc: '' },
-    start: {
-      text: 'はじめに',
-      desc: 'Blue Whale API ドキュメントを始める。',
-    },
-    api: {
-      text: 'API リファレンス',
-      desc: '完全な API ドキュメントとリファレンス。',
-    },
-    apps: {
-      text: 'AI アプリケーション',
-      desc: 'AI アプリケーション統合ガイド。',
-    },
-  },
 };
 
 // Get localized text

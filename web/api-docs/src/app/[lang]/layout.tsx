@@ -23,18 +23,6 @@ const { provider } = defineI18nUI(i18n, {
       previousPage: '上一页',
       tocNoHeadings: '目录为空',
     },
-    ja: {
-      displayName: '日本語',
-      search: 'ドキュメントを検索',
-      searchNoResult: '結果が見つかりません',
-      toc: '目次',
-      lastUpdate: '最終更新',
-      chooseTheme: 'テーマを選択',
-      chooseLanguage: '言語を選択',
-      nextPage: '次のページ',
-      previousPage: '前のページ',
-      tocNoHeadings: '見出しがありません',
-    },
   },
 });
 
@@ -53,12 +41,6 @@ const titleMap: Record<
     template: '%s | Blue Whale API',
     description:
       '统一的 AI 模型接口文档与网关。连接所有 AI 服务商，快速接入，轻松扩展。',
-  },
-  ja: {
-    default: 'Blue Whale API - AI モデル API ドキュメント',
-    template: '%s | Blue Whale API',
-    description:
-      '統合された AI モデル API ドキュメントとゲートウェイ。すべての AI プロバイダーを接続、数分でデプロイ、簡単にスケール。',
   },
 };
 
@@ -97,7 +79,6 @@ export async function generateMetadata({
       languages: {
         en: '/en',
         zh: '/zh',
-        ja: '/ja',
       },
     },
     openGraph: {

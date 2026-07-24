@@ -61,18 +61,6 @@ const translations: Record<string, FooterTranslation> = {
     copyright:
       '© 2023-2026 Blue Whale API Docs. All Rights Reserved.',
   },
-  ja: {
-    sections: {
-      docs: {
-        title: 'ドキュメント',
-        apiDocs: 'APIドキュメント',
-      },
-      relatedProjects: '関連プロジェクト',
-      friendshipLinks: '友好リンク',
-    },
-    copyright:
-      '© 2023-2026 Blue Whale API Docs. All Rights Reserved.',
-  },
 };
 
 // ============================================

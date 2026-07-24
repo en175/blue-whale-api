@@ -27,13 +27,6 @@ const contentMap: Record<
     highlight: '连接所有模型',
     getStarted: '快速开始',
   },
-  ja: {
-    badge: 'Blue Whale API',
-    title: '統合された AI モデル API ドキュメント、',
-    subtitle: 'ひとつのプラットフォームで',
-    highlight: 'すべてのモデルを接続',
-    getStarted: 'はじめに',
-  },
 } as const;
 
 export default async function Page({

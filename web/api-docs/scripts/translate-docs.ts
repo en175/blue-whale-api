@@ -26,7 +26,6 @@ const INCREMENTAL_TRANSLATE =
 
 const LANGUAGES = {
   en: { name: 'English', nativeName: '英文', dir: 'en' },
-  ja: { name: 'Japanese', nativeName: '日文', dir: 'ja' },
 } as const;
 
 const GLOSSARY = `
@@ -675,7 +674,7 @@ async function translateDocs(specificPaths?: string[]) {
     for (const inputPath of specificPaths) {
       const resolvedPath = path.resolve(inputPath);
 
-      // Check if it's a translated directory (en/ja)
+      // Check if it's a translated directory (en)
       if (languageDirs.some((dir) => resolvedPath.includes(dir))) {
         console.log(`⏭  Skipping translated path: ${resolvedPath}`);
         continue;

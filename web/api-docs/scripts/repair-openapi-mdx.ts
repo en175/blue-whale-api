@@ -2,20 +2,20 @@
  * Repair translated OpenAPI MDX files.
  *
  * Problem:
- * - Some translated MDX files (en/ja) have `<APIPage document={"openapi/generated/..."} />`
+ * - Some translated MDX files (en) have `<APIPage document={"openapi/generated/..."} />`
  *   paths that no longer match the actual JSON file location under `openapi/generated/**`.
  * - This causes prerender failures like: "Cannot destructure property 'dereferenced' ... undefined".
  *
  * This script:
  * - Builds an index of all JSON files under `openapi/generated/` (recursive) by basename.
- * - Scans `content/docs/{en,ja}/api/` (recursive) MDX files for `document={"...json"}` paths.
+ * - Scans `content/docs/{en}/api/` (recursive) MDX files for `document={"...json"}` paths.
  * - If a referenced JSON doesn't exist, it rewrites it to the unique matching JSON path by basename.
  */
 
 import { readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-type Locale = 'en' | 'ja';
+type Locale = 'en';
 
 function toPosix(p: string): string {
   return p.split(path.sep).join('/');
@@ -132,7 +132,7 @@ async function repairLocale(locale: Locale, index: Map<string, string[]>) {
 
 async function main() {
   const index = await buildOpenApiIndex();
-  const locales: Locale[] = ['en', 'ja'];
+  const locales: Locale[] = ['en'];
   const results = [];
   for (const locale of locales) {
     // eslint-disable-next-line no-await-in-loop
