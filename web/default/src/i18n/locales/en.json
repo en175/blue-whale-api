@@ -2025,7 +2025,7 @@
     "footer.columns.related.links.oneApi": "One API",
     "footer.columns.related.title": "Related Projects",
     "footer.defaultCopyright": "All rights reserved.",
-    "footer.new\u0061pi.projectAttributionSuffix": "All rights reserved. Designed and developed by the project contributors.",
+    "footer.newapi.projectAttributionSuffix": "All rights reserved. Designed and developed by the project contributors.",
     "For channels added after May 10, 2025, no need to remove \".\" from model names during deployment": "For channels added after May 10, 2025, no need to remove \".\" from model names during deployment",
     "For private deployments, format: https://fastgpt.run/api/openapi": "For private deployments, format: https://fastgpt.run/api/openapi",
     "Force a syntactically valid JSON response": "Force a syntactically valid JSON response",
@@ -5178,6 +5178,22 @@
     "Zero retention": "Zero retention",
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V4",
-    "Zoom": "Zoom"
+    "Zoom": "Zoom",
+    "Model ID": "Model ID",
+    "Input Price": "Input Price",
+    "Output Price": "Output Price",
+    "Cache Create": "Cache Create",
+    "Savings": "Savings",
+    "Vendors": "Vendors",
+    "No models": "No models",
+    "Price list": "Price list",
+    "Price group": "Price group",
+    "Directory view": "Directory view",
+    "Other billing models": "Other billing models",
+    "Unit: RMB / {{unit}} tokens": "Unit: RMB / {{unit}} tokens",
+    "Select a group to view RMB prices for each model.": "Select a group to view RMB prices for each model.",
+    "Per-request, per-second and other models are listed separately.": "Per-request, per-second and other models are listed separately.",
+    "Latest": "Latest",
+    "Prev": "Prev"
   }
 }

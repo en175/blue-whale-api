@@ -2031,7 +2031,7 @@
     "footer.columns.related.links.oneApi": "One API",
     "footer.columns.related.title": "相关项目",
     "footer.defaultCopyright": "版权所有。",
-    "footer.new\u0061pi.projectAttributionSuffix": "版权所有，由项目贡献者设计与开发。",
+    "footer.newapi.projectAttributionSuffix": "版权所有，由项目贡献者设计与开发。",
     "For channels added after May 10, 2025, no need to remove \".\" from model names during deployment": "对于 2025 年 5 月 10 日之后添加的渠道，在部署时无需从模型名称中移除 \".\"",
     "For private deployments, format: https://fastgpt.run/api/openapi": "对于私有部署，格式为：https://fastgpt.run/api/openapi",
     "Force a syntactically valid JSON response": "强制返回语法合法的 JSON",
@@ -5188,6 +5188,22 @@
     "Zero retention": "零数据保留",
     "Zhipu": "智谱",
     "Zhipu V4": "智谱 V4",
-    "Zoom": "缩放"
+    "Zoom": "缩放",
+    "Model ID": "模型 ID",
+    "Input Price": "输入价格",
+    "Output Price": "输出价格",
+    "Cache Create": "缓存创建",
+    "Savings": "节省幅度",
+    "Vendors": "厂商",
+    "No models": "暂无模型",
+    "Price list": "价格列表",
+    "Price group": "价格分组",
+    "Directory view": "目录视图",
+    "Other billing models": "其他计费模式",
+    "Unit: RMB / {{unit}} tokens": "单位：人民币 / {{unit}} tokens",
+    "Select a group to view RMB prices for each model.": "选择分组后，直接查看每个模型的人民币价格。",
+    "Per-request, per-second and other models are listed separately.": "按次、按秒等模型单独列出，不与 token 价格混排。",
+    "Latest": "最新",
+    "Prev": "上一页"
   }
 }

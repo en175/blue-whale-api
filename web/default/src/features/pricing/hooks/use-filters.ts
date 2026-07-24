@@ -48,6 +48,9 @@ function normalizeViewMode(value: unknown): ViewMode {
   if (value === VIEW_MODES.TABLE) {
     return VIEW_MODES.TABLE
   }
+  if (value === VIEW_MODES.DIRECTORY) {
+    return VIEW_MODES.DIRECTORY
+  }
   return VIEW_MODES.CARD
 }
 

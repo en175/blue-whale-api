@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { ArrowUpDown, Check, Filter, Grid2X2, Table2 } from 'lucide-react'
+import { ArrowUpDown, Check, Filter, Grid2X2, ListOrdered, Table2 } from 'lucide-react'
 import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -264,6 +264,11 @@ export function PricingToolbar(props: PricingToolbarProps) {
                 value: VIEW_MODES.TABLE,
                 icon: Table2,
                 tooltip: t('Table view'),
+              },
+              {
+                value: VIEW_MODES.DIRECTORY,
+                icon: ListOrdered,
+                tooltip: t('Directory view'),
               },
             ]}
             value={props.viewMode}

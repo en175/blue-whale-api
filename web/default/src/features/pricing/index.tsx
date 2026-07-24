@@ -30,6 +30,7 @@ import {
   PricingSidebar,
   PricingToolbar,
   ModelCardGrid,
+  ModelDirectory,
   ModelDetailsDrawer,
 } from './components'
 import { EXCLUDED_GROUPS, VIEW_MODES } from './constants'
@@ -154,6 +155,47 @@ export function Pricing() {
         <div className='mx-auto w-full max-w-[1800px] px-3 pt-16 pb-8 sm:px-6 sm:pt-20 sm:pb-10 xl:px-8'>
           <LoadingSkeleton viewMode={viewMode} />
         </div>
+      </PublicLayout>
+    )
+  }
+
+  // DIRECTORY 视图：竞品式厂商导航 + 分组下拉 + 精简价表，独立布局，不走 sidebar/toolbar。
+  if (viewMode === VIEW_MODES.DIRECTORY) {
+    return (
+      <PublicLayout showMainContainer={false}>
+        <ModelDirectory
+          models={models || []}
+          vendors={vendors || []}
+          groupRatio={groupRatio || {}}
+          usableGroup={usableGroup || {}}
+          priceRate={priceRate ?? 1}
+          usdExchangeRate={usdExchangeRate ?? 1}
+          tokenUnit={tokenUnit}
+          onModelClick={handleModelClick}
+          onViewModeChange={setViewMode}
+        />
+        {selectedModel && (
+          <ModelDetailsDrawer
+            open={Boolean(selectedModel)}
+            onOpenChange={(open) => {
+              if (!open) setSelectedModelName(null)
+            }}
+            model={selectedModel}
+            groupRatio={groupRatio || {}}
+            usableGroup={usableGroup || {}}
+            endpointMap={
+              (endpointMap as Record<
+                string,
+                { path?: string; method?: string }
+              >) || {}
+            }
+            autoGroups={autoGroups || []}
+            priceRate={priceRate ?? 1}
+            usdExchangeRate={usdExchangeRate ?? 1}
+            tokenUnit={tokenUnit}
+            showRechargePrice={showRechargePrice}
+          />
+        )}
       </PublicLayout>
     )
   }
