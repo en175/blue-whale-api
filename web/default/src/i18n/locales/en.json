@@ -2682,6 +2682,14 @@
     "Model prices": "Model prices",
     "Model prices reset successfully": "Model prices reset successfully",
     "Model Pricing": "Model Pricing",
+    "Prices are displayed in RMB by default, making it easy to compare official and group prices.": "Prices are displayed in RMB by default, making it easy to compare official and group prices.",
+    "Group Price": "Group Price",
+    "Official Price": "Official Price",
+    "Official {{price}}": "Official {{price}}",
+    "Select a model type": "Select a model type",
+    "Text models": "Text models",
+    "Image models": "Image models",
+    "Video models": "Video models",
     "Model pull failed: {{msg}}": "Model pull failed: {{msg}}",
     "Model ratio": "Model ratio",
     "Model ratios": "Model ratios",
@@ -5194,6 +5202,13 @@
     "Select a group to view RMB prices for each model.": "Select a group to view RMB prices for each model.",
     "Per-request, per-second and other models are listed separately.": "Per-request, per-second and other models are listed separately.",
     "Latest": "Latest",
-    "Prev": "Prev"
+    "Prev": "Prev",
+    "Pricing rules": "Pricing rules",
+    "Official prices are converted at $1 = ¥7": "Official prices are converted at $1 = ¥7",
+    "Group price = official price × group ratio ÷ 7": "Group price = official price × group ratio ÷ 7",
+    "For example: official input price ¥35.00 becomes ¥5.00 for the default group.": "For example: official input price ¥35.00 becomes ¥5.00 for the default group.",
+    "Select a price group": "Select a price group",
+    "{{discount}} tenths": "{{discount}} tenths",
+    "{{ratio}}x ratio · approximately {{discount}} tenths of the official price": "{{ratio}}x ratio · approximately {{discount}} tenths of the official price"
   }
 }

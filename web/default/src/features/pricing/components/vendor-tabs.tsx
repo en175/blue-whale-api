@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { getLobeIcon } from '@/lib/lobe-icon'
 import { cn } from '@/lib/utils'
 
 import type { PricingModel, PricingVendor } from '../types'
@@ -30,60 +31,70 @@ import type { PricingModel, PricingVendor } from '../types'
 interface VendorCatalogItem {
   key: string
   name: string
+  fallbackIcon: string
   match: (model: PricingModel, vendor: PricingVendor | undefined) => boolean
 }
 
 /** 固定厂商目录，顺序对标竞品布局。未启用厂商灰禁显示。 */
 const VENDOR_CATALOG: VendorCatalogItem[] = [
   {
+    key: 'doubao',
+    name: '豆包',
+    fallbackIcon: 'Doubao.Color',
+    match: (m) => /^doubao/i.test(m.model_name),
+  },
+  {
     key: 'claude',
     name: 'Claude',
+    fallbackIcon: 'Claude.Color',
     match: (m, v) =>
       /claude/i.test(m.model_name) || /anthropic/i.test(v?.name || ''),
   },
   {
     key: 'chatgpt',
     name: 'ChatGPT',
+    fallbackIcon: 'OpenAI',
     match: (m, v) =>
       /^(gpt|o\d|chatgpt)/i.test(m.model_name) || /openai/i.test(v?.name || ''),
   },
   {
     key: 'grok',
     name: 'Grok',
+    fallbackIcon: 'Grok',
     match: (m, v) => /^grok/i.test(m.model_name) || /xai/i.test(v?.name || ''),
   },
   {
     key: 'gemini',
     name: 'Gemini',
+    fallbackIcon: 'Gemini.Color',
     match: (m, v) =>
       /^gemini/i.test(m.model_name) || /google/i.test(v?.name || ''),
   },
   {
     key: 'zhipu',
     name: '智谱',
+    fallbackIcon: 'Zhipu.Color',
     match: (m, v) =>
       /^glm/i.test(m.model_name) || /zhipu|智谱/i.test(v?.name || ''),
   },
   {
     key: 'kimi',
     name: 'Kimi',
+    fallbackIcon: 'Kimi.Color',
     match: (m, v) =>
       /^(kimi|moonshot)/i.test(m.model_name) || /moonshot/i.test(v?.name || ''),
   },
   {
     key: 'deepseek',
     name: 'DeepSeek',
+    fallbackIcon: 'DeepSeek.Color',
     match: (m, v) =>
       /^deepseek/i.test(m.model_name) || /deepseek/i.test(v?.name || ''),
   },
   {
-    key: 'doubao',
-    name: '字节跳动',
-    match: (m) => /^doubao/i.test(m.model_name),
-  },
-  {
     key: 'minimax',
     name: 'MiniMax',
+    fallbackIcon: 'Minimax.Color',
     match: (m, v) =>
       /^(minimax|abab)/i.test(m.model_name) || /minimax/i.test(v?.name || ''),
   },
@@ -129,17 +140,28 @@ export function VendorTabs({
     () => groupModelsByVendor(models, vendors),
     [models, vendors]
   )
+  const vendorMap = useMemo(
+    () => new Map(vendors.map((vendor) => [vendor.id, vendor])),
+    [vendors]
+  )
 
   return (
     <div
       role='tablist'
       aria-label={t('Vendors')}
-      className='flex gap-1 overflow-x-auto border-b'
+      className='bg-card flex gap-2 overflow-x-auto rounded-xl border p-2 shadow-sm'
     >
       {VENDOR_CATALOG.filter(
         (item) => (grouped[item.key]?.length || 0) > 0
       ).map((item) => {
-        const count = grouped[item.key]?.length || 0
+        const vendorModels = grouped[item.key] || []
+        const count = vendorModels.length
+        const vendor = vendorModels
+          .map((model) =>
+            model.vendor_id ? vendorMap.get(model.vendor_id) : undefined
+          )
+          .find(Boolean)
+        const iconKey = vendor?.icon || item.fallbackIcon
         const active = item.key === selectedKey
         return (
           <button
@@ -150,14 +172,17 @@ export function VendorTabs({
             title={t('{{count}} models', { count })}
             onClick={() => onSelect(item.key)}
             className={cn(
-              'flex shrink-0 items-center gap-2 border-b-2 px-3 pb-3 pt-1 text-sm transition-colors',
+              'flex shrink-0 items-center gap-2.5 rounded-lg border px-4 py-2.5 text-base font-semibold transition-colors sm:text-lg',
               active
-                ? 'border-foreground font-medium text-foreground'
-                : 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'
+                ? 'border-primary/50 bg-primary/10 text-primary shadow-sm'
+                : 'border-transparent text-muted-foreground hover:border-border hover:bg-muted/50 hover:text-foreground'
             )}
           >
+            <span className='flex size-6 shrink-0 items-center justify-center'>
+              {getLobeIcon(iconKey, 24)}
+            </span>
             <span>{item.name}</span>
-            <span className='text-muted-foreground/70 text-xs tabular-nums'>
+            <span className='text-muted-foreground/70 text-xs font-medium tabular-nums'>
               {count}
             </span>
           </button>
