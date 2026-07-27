@@ -48,10 +48,11 @@ function normalizeViewMode(value: unknown): ViewMode {
   if (value === VIEW_MODES.TABLE) {
     return VIEW_MODES.TABLE
   }
-  if (value === VIEW_MODES.DIRECTORY) {
-    return VIEW_MODES.DIRECTORY
+  if (value === VIEW_MODES.CARD) {
+    return VIEW_MODES.CARD
   }
-  return VIEW_MODES.CARD
+  // 默认 DIRECTORY（/pricing 无 view 参数时进新界面）
+  return VIEW_MODES.DIRECTORY
 }
 
 export function useFilters(models: PricingModel[]) {
@@ -133,7 +134,7 @@ export function useFilters(models: PricingModel[]) {
   )
   const setViewMode = useCallback(
     (v: ViewMode) =>
-      updateFilters({ view: v === VIEW_MODES.CARD ? undefined : v }),
+      updateFilters({ view: v === VIEW_MODES.DIRECTORY ? undefined : v }),
     [updateFilters]
   )
   const setShowRechargePrice = useCallback(
