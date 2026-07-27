@@ -2687,7 +2687,15 @@
     "Model Price Not Configured": "模型价格未配置",
     "Model prices": "模型价格",
     "Model prices reset successfully": "模型价格重置成功",
-    "Model Pricing": "模型定价",
+    "Model Pricing": "模型价格",
+    "Prices are displayed in RMB by default, making it easy to compare official and group prices.": "以人民币默认展示官方价格和分组价格，方便直接比较成本。",
+    "Group Price": "分组价格",
+    "Official Price": "官方价格",
+    "Official {{price}}": "官方价 {{price}}",
+    "Select a model type": "选择模型类型",
+    "Text models": "文字",
+    "Image models": "图片",
+    "Video models": "视频",
     "Model pull failed: {{msg}}": "模型拉取失败：{{msg}}",
     "Model ratio": "模型倍率",
     "Model ratios": "模型比例",
@@ -5204,6 +5212,13 @@
     "Select a group to view RMB prices for each model.": "选择分组后，直接查看每个模型的人民币价格。",
     "Per-request, per-second and other models are listed separately.": "按次、按秒等模型单独列出，不与 token 价格混排。",
     "Latest": "最新",
-    "Prev": "上一页"
+    "Prev": "上一页",
+    "Pricing rules": "计价规则",
+    "Official prices are converted at $1 = ¥7": "官方价格按 $1 = ￥7 折算",
+    "Group price = official price × group ratio ÷ 7": "分组价格 = 官方价格 × 分组倍率 ÷ 7",
+    "For example: official input price ¥35.00 becomes ¥5.00 for the default group.": "示例：输入官方价 ￥35.00，default 分组价 ￥5.00。",
+    "Select a price group": "选择价格分组",
+    "{{discount}} tenths": "{{discount}}折",
+    "{{ratio}}x ratio · approximately {{discount}} tenths of the official price": "{{ratio}}x 倍率 · 相当于约 {{discount}}折"
   }
 }
