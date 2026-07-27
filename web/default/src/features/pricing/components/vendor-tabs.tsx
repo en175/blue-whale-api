@@ -36,6 +36,11 @@ interface VendorCatalogItem {
 /** 固定厂商目录，顺序对标竞品布局。未启用厂商灰禁显示。 */
 const VENDOR_CATALOG: VendorCatalogItem[] = [
   {
+    key: 'doubao',
+    name: '豆包',
+    match: (m) => /^doubao/i.test(m.model_name),
+  },
+  {
     key: 'claude',
     name: 'Claude',
     match: (m, v) =>
@@ -75,11 +80,6 @@ const VENDOR_CATALOG: VendorCatalogItem[] = [
     name: 'DeepSeek',
     match: (m, v) =>
       /^deepseek/i.test(m.model_name) || /deepseek/i.test(v?.name || ''),
-  },
-  {
-    key: 'doubao',
-    name: '字节跳动',
-    match: (m) => /^doubao/i.test(m.model_name),
   },
   {
     key: 'minimax',

@@ -21,11 +21,9 @@ import { useTranslation } from 'react-i18next'
 
 import {
   EXCLUDED_GROUPS,
-  QUOTA_TYPE_VALUES,
   VIEW_MODES,
   type ViewMode,
 } from '../constants'
-import { isTokenBasedModel } from '../lib/model-helpers'
 import type { PricingModel, PricingVendor, TokenUnit } from '../types'
 import { DirectoryTable } from './directory-table'
 import { getVendorCatalog, groupModelsByVendor, VendorTabs } from './vendor-tabs'
@@ -127,7 +125,7 @@ export function ModelDirectory({
     return (['text', 'image', 'video'] as const).filter((tg) => tags.has(tg))
   }, [vendorModels])
 
-  // 过滤链:标签 → token 计费 → 排序 → 分页
+  // 过滤链:标签 → 排序 → 分页（按次/按秒模型与 token 模型同列展示，不再单列「其他计费」）
   const tagged = useMemo(
     () =>
       tagFilter === 'all'
@@ -135,12 +133,8 @@ export function ModelDirectory({
         : vendorModels.filter((m) => modelTag(m) === tagFilter),
     [vendorModels, tagFilter]
   )
-  const tokenModels = useMemo(
-    () => tagged.filter((m) => isTokenBasedModel(m)),
-    [tagged]
-  )
   const sorted = useMemo(() => {
-    const arr = [...tokenModels]
+    const arr = [...tagged]
     arr.sort((a, b) => {
       if (sortBy === 'latest') {
         return dateSuffix(b.model_name) - dateSuffix(a.model_name)
@@ -148,11 +142,7 @@ export function ModelDirectory({
       return a.model_name.localeCompare(b.model_name)
     })
     return arr
-  }, [tokenModels, sortBy])
-  const otherModels = useMemo(
-    () => tagged.filter((m) => !isTokenBasedModel(m)),
-    [tagged]
-  )
+  }, [tagged, sortBy])
 
   const pageCount = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE))
   const currentPage = Math.min(page, pageCount)
@@ -303,40 +293,6 @@ export function ModelDirectory({
         </div>
       )}
 
-      {otherModels.length > 0 && (
-        <section className='mt-10 border-t pt-6'>
-          <div className='flex items-center justify-between'>
-            <div>
-              <h3 className='text-sm font-medium'>
-                {t('Other billing models')}
-              </h3>
-              <p className='text-muted-foreground mt-1 text-xs'>
-                {t(
-                  'Per-request, per-second and other models are listed separately.'
-                )}
-              </p>
-            </div>
-            <span className='text-muted-foreground text-xs'>
-              {otherModels.length}
-            </span>
-          </div>
-          <div className='mt-4 divide-y border-y'>
-            {otherModels.map((model) => (
-              <div
-                key={model.model_name}
-                className='flex items-center justify-between py-3'
-              >
-                <span className='font-mono text-[13px]'>{model.model_name}</span>
-                <span className='text-muted-foreground text-xs'>
-                  {model.quota_type === QUOTA_TYPE_VALUES.REQUEST
-                    ? t('Per Request')
-                    : t('Other')}
-                </span>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
     </div>
   )
 }
