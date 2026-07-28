@@ -149,6 +149,12 @@ func setupLogin(user *model.User, c *gin.Context) {
 		return
 	}
 	recordLoginAudit(user, c)
+	// 返回用户默认 token（sk-xxx），便于调用方（如蓝鲸 Node）拿到凭证调 relay/日志/余额。
+	// DB token.Key 不含 sk- 前缀，调用方需 sk-+key，这里拼好直接可用。
+	tokenKey := ""
+	if tokens, err := model.GetAllUserTokens(user.Id, 0, 1); err == nil && len(tokens) > 0 {
+		tokenKey = "sk-" + tokens[0].Key
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"message": "",
 		"success": true,
@@ -159,6 +165,7 @@ func setupLogin(user *model.User, c *gin.Context) {
 			"role":         user.Role,
 			"status":       user.Status,
 			"group":        user.Group,
+			"token":        tokenKey,
 		},
 	})
 }
@@ -293,9 +300,17 @@ func Register(c *gin.Context) {
 		}
 	}
 
+	// 返回用户默认 token（sk-xxx），便于调用方（如蓝鲸 Node）注册后即拿到凭证。
+	registerTokenKey := ""
+	if tokens, err := model.GetAllUserTokens(insertedUser.Id, 0, 1); err == nil && len(tokens) > 0 {
+		registerTokenKey = "sk-" + tokens[0].Key
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
+		"data": gin.H{
+			"token": registerTokenKey,
+		},
 	})
 	return
 }
