@@ -23,23 +23,24 @@ import { formatRmbFixedPrice, formatRmbGroupPrice } from '../lib/price'
 import type { PricingModel, PriceType, TokenUnit } from '../types'
 
 // ----------------------------------------------------------------------------
-// DIRECTORY 视图：模型 ID / 输入 / 输出 / 缓存创建 / 缓存读取 / 节省幅度
+// DIRECTORY 视图：按模型类别渲染不同列结构
+//   文字：模型 / 输入 / 输出 / 节省
+//   图片：模型 / 价格(元/张) / 节省
+//   视频：模型 / 价格(元/百万token) / 节省
 // ----------------------------------------------------------------------------
 
 export type DirectoryPriceMode = 'group' | 'official'
+export type DirectoryCategory = 'text' | 'image' | 'video'
 
 export interface DirectoryTableProps {
   models: PricingModel[]
   selectedGroup: string
   groupRatio: Record<string, number>
   priceMode: DirectoryPriceMode
+  category: DirectoryCategory
   tokenUnit?: TokenUnit
   priceRate: number
   onModelClick: (modelName: string) => void
-}
-
-function hasRatio(value: number | null | undefined): boolean {
-  return value != null && Number.isFinite(Number(value))
 }
 
 export function DirectoryTable({
@@ -47,30 +48,45 @@ export function DirectoryTable({
   selectedGroup,
   groupRatio,
   priceMode,
+  category,
   tokenUnit = DEFAULT_TOKEN_UNIT,
   priceRate,
   onModelClick,
 }: DirectoryTableProps) {
   const { t } = useTranslation()
+  // 文字类别双列(输入/输出)，图片/视频单一价格列
+  const isText = category === 'text'
 
   return (
     <div className='overflow-x-auto border-y'>
-      <table className='w-full min-w-[860px] border-collapse text-left'>
+      <table className='w-full min-w-[640px] border-collapse text-left'>
         <colgroup>
-          <col className='w-[36%]' />
-          <col className='w-[13%]' />
-          <col className='w-[13%]' />
-          <col className='w-[13%]' />
-          <col className='w-[13%]' />
-          <col className='w-[12%]' />
+          <col className={isText ? 'w-[40%]' : 'w-[50%]'} />
+          {isText ? (
+            <>
+              <col className='w-[22%]' />
+              <col className='w-[22%]' />
+            </>
+          ) : (
+            <col className='w-[30%]' />
+          )}
+          <col className={isText ? 'w-[16%]' : 'w-[20%]'} />
         </colgroup>
         <thead>
           <tr className='text-muted-foreground h-12 border-b text-xs font-medium'>
             <th className='px-4 font-medium'>{t('Model ID')}</th>
-            <th className='px-4 text-right font-medium'>{t('Input Price')}</th>
-            <th className='px-4 text-right font-medium'>{t('Output Price')}</th>
-            <th className='px-4 text-right font-medium'>{t('Cache Create')}</th>
-            <th className='px-4 text-right font-medium'>{t('Cache Read')}</th>
+            {isText ? (
+              <>
+                <th className='px-4 text-right font-medium'>
+                  {t('Input Price')}
+                </th>
+                <th className='px-4 text-right font-medium'>
+                  {t('Output Price')}
+                </th>
+              </>
+            ) : (
+              <th className='px-4 text-right font-medium'>{t('Price')}</th>
+            )}
             <th className='px-4 text-right font-medium'>{t('Savings')}</th>
           </tr>
         </thead>
@@ -82,6 +98,7 @@ export function DirectoryTable({
               selectedGroup={selectedGroup}
               groupRatio={groupRatio}
               priceMode={priceMode}
+              category={category}
               tokenUnit={tokenUnit}
               priceRate={priceRate}
               onModelClick={onModelClick}
@@ -98,6 +115,7 @@ function DirectoryRow({
   selectedGroup,
   groupRatio,
   priceMode,
+  category,
   tokenUnit,
   priceRate,
   onModelClick,
@@ -106,12 +124,14 @@ function DirectoryRow({
   selectedGroup: string
   groupRatio: Record<string, number>
   priceMode: DirectoryPriceMode
+  category: DirectoryCategory
   tokenUnit: TokenUnit
   priceRate: number
   onModelClick: (modelName: string) => void
 }) {
   const { t } = useTranslation()
   const isRequest = model.quota_type === QUOTA_TYPE_VALUES.REQUEST
+  const isText = category === 'text'
 
   const fmtGroup = (type: PriceType) =>
     formatRmbGroupPrice(
@@ -145,40 +165,14 @@ function DirectoryRow({
         priceRate,
         officialRatio
       )
-  const officialCacheCreate =
-    !isRequest && hasRatio(model.create_cache_ratio)
-      ? formatRmbGroupPrice(
-          model,
-          selectedGroup,
-          'create_cache',
-          tokenUnit,
-          priceRate,
-          officialRatio
-        )
-      : null
-  const officialCacheRead =
-    !isRequest && hasRatio(model.cache_ratio)
-      ? formatRmbGroupPrice(
-          model,
-          selectedGroup,
-          'cache',
-          tokenUnit,
-          priceRate,
-          officialRatio
-        )
-      : null
 
   const groupedFixed = isRequest
     ? formatRmbFixedPrice(model, selectedGroup, priceRate, groupRatio)
     : null
+  // 图片(quota_type=1)与视频(quota_type=0, completion_ratio=0)都只展示单一价：
+  // 图片走固定按张价，视频走 input token 价(output 无价，不单列)。
   const groupedInput = isRequest ? groupedFixed : fmtGroup('input')
   const groupedOutput = isRequest ? null : fmtGroup('output')
-  const groupedCacheCreate =
-    !isRequest && hasRatio(model.create_cache_ratio)
-      ? fmtGroup('create_cache')
-      : null
-  const groupedCacheRead =
-    !isRequest && hasRatio(model.cache_ratio) ? fmtGroup('cache') : null
 
   const selectedRatio = groupRatio[selectedGroup] ?? 1
   const saving =
@@ -206,7 +200,7 @@ function DirectoryRow({
   }
 
   return (
-    <tr className='group hover:bg-muted/40 h-[72px] border-b transition-colors last:border-0'>
+    <tr className='group hover:bg-muted/40 h-[72px] border-b transition-colors last:border-b-0'>
       <td className='px-4'>
         <button
           type='button'
@@ -222,9 +216,7 @@ function DirectoryRow({
         )}
       </td>
       {renderPriceCell(groupedInput, officialInput)}
-      {renderPriceCell(groupedOutput, officialOutput)}
-      {renderPriceCell(groupedCacheCreate, officialCacheCreate)}
-      {renderPriceCell(groupedCacheRead, officialCacheRead)}
+      {isText && renderPriceCell(groupedOutput, officialOutput)}
       <td className='px-4 text-right font-mono text-[13px] font-medium tabular-nums'>
         {priceMode === 'group' && saving !== null ? (
           <span className='text-emerald-600 dark:text-emerald-400'>

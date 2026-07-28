@@ -169,7 +169,6 @@ export function Pricing() {
           groupRatio={groupRatio || {}}
           usableGroup={usableGroup || {}}
           priceRate={priceRate ?? 1}
-          usdExchangeRate={usdExchangeRate ?? 1}
           tokenUnit={tokenUnit}
           onModelClick={handleModelClick}
         />

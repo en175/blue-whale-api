@@ -5199,6 +5199,7 @@
     "Directory view": "Directory view",
     "Other billing models": "Other billing models",
     "Unit: RMB / {{unit}} tokens": "Unit: RMB / {{unit}} tokens",
+    "Unit: RMB / image": "Unit: RMB / image",
     "Select a group to view RMB prices for each model.": "Select a group to view RMB prices for each model.",
     "Per-request, per-second and other models are listed separately.": "Per-request, per-second and other models are listed separately.",
     "Latest": "Latest",

@@ -74,7 +74,6 @@ export interface ModelDirectoryProps {
   groupRatio: Record<string, number>
   usableGroup: Record<string, { desc: string; ratio: number }>
   priceRate: number
-  usdExchangeRate: number
   tokenUnit: TokenUnit
   onModelClick: (modelName: string) => void
 }
@@ -85,7 +84,6 @@ export function ModelDirectory({
   groupRatio,
   usableGroup,
   priceRate,
-  usdExchangeRate,
   tokenUnit,
   onModelClick,
 }: ModelDirectoryProps) {
@@ -263,9 +261,7 @@ export function ModelDirectory({
             >
               {availableGroups.map((group) => {
                 const ratio = groupRatio[group] ?? 1
-                const discount = Number(
-                  ((ratio / usdExchangeRate) * 10).toFixed(1)
-                ).toString()
+                const discount = Number((ratio * 10).toFixed(1)).toString()
                 const active = group === effectiveGroup
 
                 return (
@@ -355,7 +351,9 @@ export function ModelDirectory({
             {t('{{count}} models', { count: filteredModels.length })}
           </span>
           <span className='text-muted-foreground text-xs'>
-            {t('Unit: RMB / {{unit}} tokens', { unit: unitLabel })}
+            {category === 'image'
+              ? t('Unit: RMB / image')
+              : t('Unit: RMB / {{unit}} tokens', { unit: unitLabel })}
           </span>
         </div>
 
@@ -365,6 +363,7 @@ export function ModelDirectory({
             selectedGroup={effectiveGroup}
             groupRatio={groupRatio}
             priceMode={priceMode}
+            category={category}
             tokenUnit={tokenUnit}
             priceRate={priceRate}
             onModelClick={onModelClick}

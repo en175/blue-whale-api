@@ -5209,6 +5209,7 @@
     "Directory view": "目录视图",
     "Other billing models": "其他计费模式",
     "Unit: RMB / {{unit}} tokens": "单位：人民币 / {{unit}} tokens",
+    "Unit: RMB / image": "单位：人民币 / 张",
     "Select a group to view RMB prices for each model.": "选择分组后，直接查看每个模型的人民币价格。",
     "Per-request, per-second and other models are listed separately.": "按次、按秒等模型单独列出，不与 token 价格混排。",
     "Latest": "最新",
