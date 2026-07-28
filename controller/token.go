@@ -147,6 +147,10 @@ func GetTokenUsage(c *gin.Context) {
 		expiredAt = 0
 	}
 
+	// 附带用户级余额（users.quota），便于调用方（如蓝鲸 Node）按 quota×系数换算积分余额。
+	// unlimited token 的 total_available 不代表用户真实余额，需单独返回 users.quota。
+	userQuota, _ := model.GetUserQuota(token.UserId, false)
+
 	c.JSON(http.StatusOK, gin.H{
 		"code":    true,
 		"message": "ok",
@@ -160,6 +164,7 @@ func GetTokenUsage(c *gin.Context) {
 			"model_limits":         token.GetModelLimitsMap(),
 			"model_limits_enabled": token.ModelLimitsEnabled,
 			"expires_at":           expiredAt,
+			"user_quota":           userQuota,
 		},
 	})
 }
