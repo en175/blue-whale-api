@@ -1,0 +1,83 @@
+site_name: new-api 数据字典
+site_description: Blue-Whale new-api 数据库结构 + 业务字典
+docs_dir: docs
+theme:
+  name: material
+  language: zh
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.tracking
+    - navigation.top
+    - navigation.indexes
+    - header.autohide
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+    - toc.follow
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: 切换暗色模式
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: cyan
+      toggle:
+        icon: material/brightness-4
+        name: 切换亮色模式
+  icon:
+    logo: material/database-search
+  font: false
+plugins:
+  - search
+markdown_extensions:
+  - tables
+  - fenced_code
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight
+nav:
+  - 概览: index.md
+  - 计费与财务:
+      - options.md
+      - top_ups.md
+      - redemptions.md
+      - quota_data.md
+      - checkins.md
+      - subscription_plans.md
+      - subscription_orders.md
+      - user_subscriptions.md
+      - subscription_pre_consume_records.md
+  - 渠道与模型:
+      - channels.md
+      - abilities.md
+      - models.md
+      - vendors.md
+  - 用户与认证:
+      - users.md
+      - tokens.md
+      - authz_roles.md
+      - casbin_rule.md
+      - custom_oauth_providers.md
+      - user_oauth_bindings.md
+      - passkey_credentials.md
+      - two_fas.md
+      - two_fa_backup_codes.md
+  - 日志与任务:
+      - logs.md
+      - tasks.md
+      - midjourneys.md
+      - perf_metrics.md
+  - 系统:
+      - setups.md
+      - system_instances.md
+      - system_tasks.md
+      - system_task_locks.md
+      - prefill_groups.md
