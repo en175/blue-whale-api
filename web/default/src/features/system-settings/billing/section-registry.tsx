@@ -158,7 +158,6 @@ const BILLING_SECTIONS = [
           BlueWhalePayAppId: settings.BlueWhalePayAppId ?? 'BLUEWHALE_APP',
           BlueWhalePayAppSecret: settings.BlueWhalePayAppSecret ?? '',
           BlueWhalePayServerBaseUrl: settings.BlueWhalePayServerBaseUrl ?? '',
-          BlueWhalePayWayCode: settings.BlueWhalePayWayCode ?? 'ALI_QR',
         }}
         waffoDefaultValues={{
           WaffoEnabled: settings.WaffoEnabled ?? false,

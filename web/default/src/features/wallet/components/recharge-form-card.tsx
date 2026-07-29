@@ -523,7 +523,7 @@ export function RechargeFormCard({
                           className='h-5 w-5'
                           style={{ color: '#1677FF' }}
                         />
-                      ) : blueWhaleQrWayCode === 'WX_JSAPI' ? (
+                      ) : blueWhaleQrWayCode === 'WX_JSAPI' || blueWhaleQrWayCode === 'WX_NATIVE' ? (
                         <SiWechat
                           className='h-5 w-5'
                           style={{ color: '#07C160' }}
@@ -531,7 +531,7 @@ export function RechargeFormCard({
                       ) : null}
                       {blueWhaleQrWayCode === 'ALI_QR'
                         ? '支付宝支付'
-                        : blueWhaleQrWayCode === 'WX_JSAPI'
+                        : blueWhaleQrWayCode === 'WX_JSAPI' || blueWhaleQrWayCode === 'WX_NATIVE'
                           ? '微信支付'
                           : '扫码支付'}
                     </DialogTitle>

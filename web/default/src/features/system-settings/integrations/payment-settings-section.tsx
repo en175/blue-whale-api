@@ -182,7 +182,6 @@ const paymentSchema = z.object({
   BlueWhalePayAppId: z.string(),
   BlueWhalePayAppSecret: z.string(),
   BlueWhalePayServerBaseUrl: z.string(),
-  BlueWhalePayWayCode: z.string(),
 })
 
 type PaymentFormValues = z.infer<typeof paymentSchema>
@@ -472,7 +471,6 @@ export function PaymentSettingsSection({
       BlueWhalePayServerBaseUrl: removeTrailingSlash(
         values.BlueWhalePayServerBaseUrl.trim()
       ),
-      BlueWhalePayWayCode: values.BlueWhalePayWayCode.trim(),
     }
 
     const initial = {
@@ -528,7 +526,6 @@ export function PaymentSettingsSection({
       BlueWhalePayServerBaseUrl: removeTrailingSlash(
         initialRef.current.BlueWhalePayServerBaseUrl.trim()
       ),
-      BlueWhalePayWayCode: initialRef.current.BlueWhalePayWayCode.trim(),
     }
 
     const updates: Array<{ key: string; value: string | number | boolean }> = []
@@ -608,10 +605,6 @@ export function PaymentSettingsSection({
     if (sanitized.BlueWhalePayServerBaseUrl !== initial.BlueWhalePayServerBaseUrl) {
       updates.push({ key: 'BlueWhalePayServerBaseUrl', value: sanitized.BlueWhalePayServerBaseUrl })
     }
-    if (sanitized.BlueWhalePayWayCode !== initial.BlueWhalePayWayCode) {
-      updates.push({ key: 'BlueWhalePayWayCode', value: sanitized.BlueWhalePayWayCode })
-    }
-
     if (
       sanitized.StripeApiSecret &&
       sanitized.StripeApiSecret !== initial.StripeApiSecret
@@ -1409,22 +1402,6 @@ export function PaymentSettingsSection({
                         </FormControl>
                         <FormDescription>
                           商户应用私钥（签名/验签，留空不更新）
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name='BlueWhalePayWayCode'
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>默认支付方式</FormLabel>
-                        <FormControl>
-                          <Input placeholder='ALI_QR' {...field} />
-                        </FormControl>
-                        <FormDescription>
-                          ALI_QR（支付宝）/ WX_JSAPI（微信）
                         </FormDescription>
                         <FormMessage />
                       </FormItem>

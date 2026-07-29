@@ -331,7 +331,6 @@ export type BillingSettings = {
   BlueWhalePayAppId: string
   BlueWhalePayAppSecret: string
   BlueWhalePayServerBaseUrl: string
-  BlueWhalePayWayCode: string
   'checkin_setting.enabled': boolean
   'checkin_setting.min_quota': number
   'checkin_setting.max_quota': number

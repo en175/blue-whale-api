@@ -198,7 +198,7 @@ export function Wallet(props: WalletProps) {
     if (!selectedPaymentMethod) return
 
     const isBlueWhale = isBlueWhalePayPayment(selectedPaymentMethod.type)
-    // bluewhalepay_alipay → ALI_QR, bluewhalepay_wechat → WX_JSAPI,
+    // bluewhalepay_alipay → ALI_QR, bluewhalepay_wechat → WX_NATIVE,
     // any other bluewhalepay_ prefix → suffix uppercased (e.g. ALI_QR).
     const blueWhaleChannel = selectedPaymentMethod.type.replace(
       'bluewhalepay_',
@@ -208,7 +208,7 @@ export function Wallet(props: WalletProps) {
       blueWhaleChannel === 'alipay'
         ? 'ALI_QR'
         : blueWhaleChannel === 'wechat'
-          ? 'WX_JSAPI'
+          ? 'WX_NATIVE'
           : blueWhaleChannel.toUpperCase()
     const isPancake = isWaffoPancakePayment(selectedPaymentMethod.type)
     const success = isBlueWhale

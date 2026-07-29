@@ -39,7 +39,7 @@ export type BlueWhalePayOrderInfo = {
 }
 
 /**
- * blue-whale-pay 支付 hook（支付宝 ALI_QR / 微信 WX_JSAPI）。
+ * blue-whale-pay 支付 hook（支付宝 ALI_QR / 微信 WX_NATIVE）。
  *
  * PC 端统一二维码：pay 返二维码内容，前端 QRCodeSVG 弹窗展示。
  * loadingWayCode 区分哪个方式在 loading（只点击的按钮 spinner + "订单生成中"）。

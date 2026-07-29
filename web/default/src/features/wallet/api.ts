@@ -182,7 +182,7 @@ export interface BlueWhalePaymentResponse extends ApiResponse {
 }
 
 /**
- * Request BlueWhalePay payment（blue-whale-pay：支付宝 ALI_QR / 微信 WX_JSAPI）
+ * Request BlueWhalePay payment（blue-whale-pay：支付宝 ALI_QR / 微信 WX_NATIVE）
  */
 export async function requestBlueWhalePayment(
   request: BlueWhalePaymentRequest
