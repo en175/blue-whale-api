@@ -556,6 +556,25 @@ func (user *User) Insert(inviterId int) error {
 	return nil
 }
 
+// InsertWithDefaultToken atomically creates a user and the token required by
+// BlueWhale. Post-creation side effects run only after both records commit.
+func (user *User) InsertWithDefaultToken(inviterId int, token *Token) error {
+	if token == nil {
+		return errors.New("default token is required")
+	}
+	if err := DB.Transaction(func(tx *gorm.DB) error {
+		if err := user.InsertWithTx(tx, inviterId); err != nil {
+			return err
+		}
+		token.UserId = user.Id
+		return tx.Create(token).Error
+	}); err != nil {
+		return err
+	}
+	user.finishInsert(inviterId)
+	return nil
+}
+
 func (user *User) finishInsert(inviterId int) {
 	// 用户创建成功后，根据角色初始化边栏配置
 	// 需要重新获取用户以确保有正确的ID和Role

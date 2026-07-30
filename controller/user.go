@@ -136,6 +136,18 @@ func recordLoginAudit(user *model.User, c *gin.Context) {
 
 // setup session & cookies and then return user info
 func setupLogin(user *model.User, c *gin.Context) {
+	tokens, tokenErr := model.GetAllUserTokens(user.Id, 0, 1)
+	if constant.GenerateDefaultToken && (tokenErr != nil || len(tokens) == 0) {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"message": "account default token is not configured",
+		})
+		return
+	}
+	tokenKey := ""
+	if tokenErr == nil && len(tokens) > 0 {
+		tokenKey = "sk-" + tokens[0].Key
+	}
 	model.UpdateUserLastLoginAt(user.Id)
 	session := sessions.Default(c)
 	session.Set("id", user.Id)
@@ -149,18 +161,14 @@ func setupLogin(user *model.User, c *gin.Context) {
 		return
 	}
 	recordLoginAudit(user, c)
-	// 返回用户默认 token（sk-xxx），便于调用方（如蓝鲸 Node）拿到凭证调 relay/日志/余额。
-	// DB token.Key 不含 sk- 前缀，调用方需 sk-+key，这里拼好直接可用。
-	tokenKey := ""
-	if tokens, err := model.GetAllUserTokens(user.Id, 0, 1); err == nil && len(tokens) > 0 {
-		tokenKey = "sk-" + tokens[0].Key
-	}
 	c.JSON(http.StatusOK, gin.H{
 		"message": "",
 		"success": true,
 		"data": map[string]any{
 			"id":           user.Id,
+			"user_id":      user.Id,
 			"username":     user.Username,
+			"email":        user.Email,
 			"display_name": user.DisplayName,
 			"role":         user.Role,
 			"status":       user.Status,
@@ -256,22 +264,7 @@ func Register(c *gin.Context) {
 	if common.EmailVerificationEnabled {
 		cleanUser.Email = user.Email
 	}
-	if err := cleanUser.Insert(inviterId); err != nil {
-		if errors.Is(err, model.ErrEmailAlreadyTaken) {
-			common.ApiErrorI18n(c, i18n.MsgUserEmailAlreadyTaken)
-			return
-		}
-		common.ApiError(c, err)
-		return
-	}
-
-	// 获取插入后的用户ID
-	var insertedUser model.User
-	if err := model.DB.Where("username = ?", cleanUser.Username).First(&insertedUser).Error; err != nil {
-		common.ApiErrorI18n(c, i18n.MsgUserRegisterFailed)
-		return
-	}
-	// 生成默认令牌
+	var defaultToken *model.Token
 	if constant.GenerateDefaultToken {
 		key, err := common.GenerateKey()
 		if err != nil {
@@ -280,8 +273,7 @@ func Register(c *gin.Context) {
 			return
 		}
 		// 生成默认令牌
-		token := model.Token{
-			UserId:             insertedUser.Id, // 使用插入后的用户ID
+		defaultToken = &model.Token{
 			Name:               cleanUser.Username + "的初始令牌",
 			Key:                key,
 			CreatedTime:        common.GetTimestamp(),
@@ -292,27 +284,70 @@ func Register(c *gin.Context) {
 			ModelLimitsEnabled: false,
 		}
 		if setting.DefaultUseAutoGroup {
-			token.Group = "auto"
-		}
-		if err := token.Insert(); err != nil {
-			common.ApiErrorI18n(c, i18n.MsgCreateDefaultTokenErr)
-			return
+			defaultToken.Group = "auto"
 		}
 	}
-
-	// 返回用户默认 token（sk-xxx），便于调用方（如蓝鲸 Node）注册后即拿到凭证。
+	var insertErr error
+	if defaultToken != nil {
+		insertErr = cleanUser.InsertWithDefaultToken(inviterId, defaultToken)
+	} else {
+		insertErr = cleanUser.Insert(inviterId)
+	}
+	if insertErr != nil {
+		if errors.Is(insertErr, model.ErrEmailAlreadyTaken) {
+			common.ApiErrorI18n(c, i18n.MsgUserEmailAlreadyTaken)
+			return
+		}
+		common.ApiError(c, insertErr)
+		return
+	}
 	registerTokenKey := ""
-	if tokens, err := model.GetAllUserTokens(insertedUser.Id, 0, 1); err == nil && len(tokens) > 0 {
-		registerTokenKey = "sk-" + tokens[0].Key
+	if defaultToken != nil {
+		registerTokenKey = "sk-" + defaultToken.Key
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
 		"data": gin.H{
-			"token": registerTokenKey,
+			"user_id":  cleanUser.Id,
+			"username": cleanUser.Username,
+			"email":    cleanUser.Email,
+			"token":    registerTokenKey,
 		},
 	})
 	return
+}
+
+// GetTokenIdentity resolves an API token to the stable account identity used by
+// BlueWhale product ownership.
+func GetTokenIdentity(c *gin.Context) {
+	key := strings.TrimSpace(c.GetHeader("Authorization"))
+	key = strings.TrimPrefix(key, "Bearer ")
+	key = strings.TrimPrefix(key, "bearer ")
+	key = strings.TrimPrefix(key, "sk-")
+	user, err := model.ResolveUserByTokenKey(key)
+	if errors.Is(err, model.ErrTokenNotProvided) || errors.Is(err, model.ErrTokenInvalid) {
+		c.JSON(http.StatusUnauthorized, gin.H{"success": false, "message": "invalid token"})
+		return
+	}
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"success": false, "message": "account lookup failed"})
+		return
+	}
+	if user.Status != common.UserStatusEnabled {
+		c.JSON(http.StatusForbidden, gin.H{"success": false, "message": "account disabled"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data": gin.H{
+			"user_id":  user.Id,
+			"username": user.Username,
+			"email":    user.Email,
+			"status":   user.Status,
+		},
+	})
 }
 
 func GetAllUsers(c *gin.Context) {

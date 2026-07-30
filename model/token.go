@@ -232,6 +232,20 @@ func ValidateUserToken(key string) (token *Token, err error) {
 	return nil, fmt.Errorf("%w: %v", ErrDatabase, err)
 }
 
+// ResolveUserByTokenKey validates a token and resolves its owning account.
+// It is the persistence boundary used by account-facing token identity APIs.
+func ResolveUserByTokenKey(key string) (*User, error) {
+	token, err := ValidateUserToken(key)
+	if err != nil {
+		return nil, err
+	}
+	user, err := GetUserById(token.UserId, true)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrDatabase, err)
+	}
+	return user, nil
+}
+
 func GetTokenByIds(id int, userId int) (*Token, error) {
 	if id == 0 || userId == 0 {
 		return nil, errors.New("id 或 userId 为空！")
