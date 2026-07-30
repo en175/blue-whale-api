@@ -17,7 +17,7 @@ import (
 // SQLite has no FOR UPDATE syntax (the clause would be a syntax error), so it
 // is skipped there; SQLite's single-writer model makes one of two conflicting
 // transactions fail instead of both committing.
-func lockForUpdate(tx *gorm.DB) *gorm.DB {
+func LockForUpdate(tx *gorm.DB) *gorm.DB {
 	if common.UsingMainDatabase(common.DatabaseTypeSQLite) {
 		return tx
 	}
