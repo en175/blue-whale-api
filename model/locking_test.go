@@ -20,7 +20,7 @@ func TestLockForUpdateEmitsRowLock(t *testing.T) {
 	require.NoError(t, err)
 	buildSQL := func() string {
 		var rows []Redemption
-		return lockForUpdate(dummyDB).Where("id = ?", 1).Find(&rows).Statement.SQL.String()
+		return LockForUpdate(dummyDB).Where("id = ?", 1).Find(&rows).Statement.SQL.String()
 	}
 
 	t.Cleanup(func() {

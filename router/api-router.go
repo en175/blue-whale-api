@@ -187,6 +187,32 @@ func SetApiRouter(router *gin.Engine) {
 		apiRouter.GET("/subscription/epay/notify", controller.SubscriptionEpayNotify)
 		apiRouter.GET("/subscription/epay/return", controller.SubscriptionEpayReturn)
 		apiRouter.POST("/subscription/epay/return", anonymousRequestBodyLimit, controller.SubscriptionEpayReturn)
+		// 充值档位 — 用户端
+		rechargeRoute := apiRouter.Group("/recharge")
+		{
+			rechargeRoute.GET("/tiers", controller.GetRechargeTiers)
+			rechargeRoute.GET("/agreement", controller.GetRechargeAgreement)
+			// 支付回调（服务端回调，不经 TokenAuth）
+			rechargeRoute.POST("/notify", controller.RechargeBlueWhalePayNotify)
+			rechargeRoute.GET("/notify", controller.RechargeBlueWhalePayNotify)
+		}
+		rechargeUserRoute := rechargeRoute.Group("")
+		rechargeUserRoute.Use(middleware.TokenAuth())
+		{
+			rechargeUserRoute.POST("/order", middleware.CriticalRateLimit(), controller.CreateRechargeOrder)
+			rechargeUserRoute.GET("/order/:tradeNo/status", controller.GetRechargeOrderStatus)
+			rechargeUserRoute.POST("/order/:tradeNo/cancel", controller.CancelRechargeOrder)
+		}
+		// 充值档位 — 管理端
+		rechargeAdminRoute := rechargeRoute.Group("/admin/tiers")
+		rechargeAdminRoute.Use(middleware.AdminAuth())
+		{
+			rechargeAdminRoute.GET("", controller.AdminGetAllTiers)
+			rechargeAdminRoute.POST("", controller.AdminCreateTier)
+			rechargeAdminRoute.PUT("/:id", controller.AdminUpdateTier)
+			rechargeAdminRoute.DELETE("/:id", controller.AdminDeleteTier)
+		}
+
 		optionRoute := apiRouter.Group("/option")
 		optionRoute.Use(middleware.RootAuth())
 		{
