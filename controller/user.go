@@ -346,6 +346,7 @@ func GetTokenIdentity(c *gin.Context) {
 			"username": user.Username,
 			"email":    user.Email,
 			"status":   user.Status,
+			"role":     user.Role,
 		},
 	})
 }

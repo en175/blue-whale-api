@@ -26,6 +26,7 @@ type accountContractResponse struct {
 		Email    string `json:"email"`
 		Token    string `json:"token"`
 		Status   int    `json:"status"`
+		Role     int    `json:"role"`
 	} `json:"data"`
 }
 
@@ -154,6 +155,26 @@ func TestTokenIdentityReturnsStableUserAndRejectsDisabledUser(t *testing.T) {
 	require.NoError(t, model.DB.Model(&model.User{}).Where("id = ?", account.UserID).Update("status", common.UserStatusDisabled).Error)
 	disabled := performJSON(router, http.MethodGet, "/api/token/identity", nil, account.Token)
 	assert.Equal(t, http.StatusForbidden, disabled.Code, disabled.Body.String())
+}
+
+func TestTokenIdentityReturnsAccountRole(t *testing.T) {
+	router := setupAccountContractTest(t, true)
+	register := performJSON(router, http.MethodPost, "/api/user/register", map[string]string{
+		"username": "role-user",
+		"password": "password123",
+	}, "")
+	account := decodeAccountContract(t, register).Data
+
+	identity := performJSON(router, http.MethodGet, "/api/token/identity", nil, account.Token)
+	require.Equal(t, http.StatusOK, identity.Code, identity.Body.String())
+	resolved := decodeAccountContract(t, identity)
+	assert.Equal(t, common.RoleCommonUser, resolved.Data.Role)
+
+	require.NoError(t, model.DB.Model(&model.User{}).Where("id = ?", account.UserID).Update("role", common.RoleAdminUser).Error)
+	adminIdentity := performJSON(router, http.MethodGet, "/api/token/identity", nil, account.Token)
+	require.Equal(t, http.StatusOK, adminIdentity.Code, adminIdentity.Body.String())
+	adminResolved := decodeAccountContract(t, adminIdentity)
+	assert.Equal(t, common.RoleAdminUser, adminResolved.Data.Role)
 }
 
 func TestTokenIdentityRejectsInvalidToken(t *testing.T) {

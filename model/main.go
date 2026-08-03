@@ -27,6 +27,11 @@ var commonFalseVal string
 var logKeyCol string
 var logGroupCol string
 
+// InitCol 显式初始化按数据库方言变化的列名常量；测试基建不经 InitDB，需要手动调用。
+func InitCol() {
+	initCol()
+}
+
 func initCol() {
 	// init common column names
 	if common.UsingMainDatabase(common.DatabaseTypePostgreSQL) {
