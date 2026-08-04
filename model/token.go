@@ -232,10 +232,43 @@ func ValidateUserToken(key string) (token *Token, err error) {
 	return nil, fmt.Errorf("%w: %v", ErrDatabase, err)
 }
 
-// ResolveUserByTokenKey validates a token and resolves its owning account.
-// It is the persistence boundary used by account-facing token identity APIs.
+// ValidateAccountToken validates a token as proof of account ownership only.
+// Unlike ValidateUserToken it accepts exhausted tokens, so a quota-exhausted
+// user can still top up and query their own orders. Disabled, expired or
+// unknown tokens remain invalid account credentials.
+func ValidateAccountToken(key string) (token *Token, err error) {
+	if key == "" {
+		return nil, ErrTokenNotProvided
+	}
+	token, err = GetTokenByKey(key, false)
+	if err == nil {
+		if token.Status != common.TokenStatusEnabled && token.Status != common.TokenStatusExhausted {
+			return token, ErrTokenInvalid
+		}
+		if token.ExpiredTime != -1 && token.ExpiredTime < common.GetTimestamp() {
+			if !common.RedisEnabled {
+				token.Status = common.TokenStatusExpired
+				if updateErr := token.SelectUpdate(); updateErr != nil {
+					common.SysLog("failed to update token status" + updateErr.Error())
+				}
+			}
+			return token, ErrTokenInvalid
+		}
+		return token, nil
+	}
+	common.SysLog("ValidateAccountToken: failed to get token: " + err.Error())
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, ErrTokenInvalid
+	}
+	return nil, fmt.Errorf("%w: %v", ErrDatabase, err)
+}
+
+// ResolveUserByTokenKey validates a token with account-level rules and
+// resolves its owning account. It is the persistence boundary used by
+// account-facing token identity APIs, so exhausted tokens still resolve their
+// owner while disabled/expired tokens stay rejected.
 func ResolveUserByTokenKey(key string) (*User, error) {
-	token, err := ValidateUserToken(key)
+	token, err := ValidateAccountToken(key)
 	if err != nil {
 		return nil, err
 	}

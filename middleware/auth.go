@@ -234,6 +234,88 @@ func TokenOrUserAuth() func(c *gin.Context) {
 	}
 }
 
+// AccountTokenAuth authenticates an API token as proof of account ownership
+// only. It accepts exhausted tokens so quota-exhausted users can still top up
+// and query their own orders, but rejects disabled/expired tokens and
+// disabled users. It intentionally does NOT check quota, IP, model or group
+// limits — relay calls keep using the strict TokenAuth.
+func AccountTokenAuth() func(c *gin.Context) {
+	return func(c *gin.Context) {
+		key := c.Request.Header.Get("Authorization")
+		if strings.HasPrefix(key, "Bearer ") || strings.HasPrefix(key, "bearer ") {
+			key = strings.TrimSpace(key[7:])
+		}
+		if key == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"success": false,
+				"message": common.TranslateMessage(c, i18n.MsgTokenNotProvided),
+			})
+			c.Abort()
+			return
+		}
+		key = strings.TrimPrefix(key, "sk-")
+		key = strings.Split(key, "-")[0]
+		token, err := model.ValidateAccountToken(key)
+		if err != nil {
+			if errors.Is(err, model.ErrDatabase) {
+				common.SysLog("AccountTokenAuth ValidateAccountToken database error: " + err.Error())
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"success": false,
+					"message": common.TranslateMessage(c, i18n.MsgDatabaseError),
+				})
+			} else {
+				c.JSON(http.StatusUnauthorized, gin.H{
+					"success": false,
+					"message": common.TranslateMessage(c, i18n.MsgTokenInvalid),
+				})
+			}
+			c.Abort()
+			return
+		}
+		userCache, err := model.GetUserCache(token.UserId)
+		if err != nil {
+			common.SysLog(fmt.Sprintf("AccountTokenAuth GetUserCache error for user %d: %v", token.UserId, err))
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"success": false,
+				"message": common.TranslateMessage(c, i18n.MsgDatabaseError),
+			})
+			c.Abort()
+			return
+		}
+		if userCache.Status != common.UserStatusEnabled {
+			c.JSON(http.StatusForbidden, gin.H{
+				"success": false,
+				"message": common.TranslateMessage(c, i18n.MsgAuthUserBanned),
+			})
+			c.Abort()
+			return
+		}
+		c.Set("id", token.UserId)
+		c.Set("token_id", token.Id)
+		c.Set("token_key", token.Key)
+		c.Next()
+	}
+}
+
+// AccountTokenOrUserAuth allows either session-based user auth (new-api native
+// console) or account-level API token auth (BlueWhale BFF sk-xxx). It is used
+// only for account/topup endpoints; relay endpoints keep TokenOrUserAuth.
+func AccountTokenOrUserAuth() func(c *gin.Context) {
+	return func(c *gin.Context) {
+		session := sessions.Default(c)
+		if id := session.Get("id"); id != nil {
+			if status, ok := session.Get("status").(int); ok && status == common.UserStatusEnabled {
+				c.Set("id", id)
+				c.Set("username", session.Get("username"))
+				c.Set("role", session.Get("role"))
+				c.Next()
+				return
+			}
+		}
+		AccountTokenAuth()(c)
+	}
+}
+
 // TokenAuthReadOnly 宽松版本的令牌认证中间件，用于只读查询接口。
 // 只验证令牌 key 是否存在，不检查令牌状态、过期时间和额度。
 // 即使令牌已过期、已耗尽或已禁用，也允许访问。

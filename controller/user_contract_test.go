@@ -182,3 +182,30 @@ func TestTokenIdentityRejectsInvalidToken(t *testing.T) {
 	invalid := performJSON(router, http.MethodGet, "/api/token/identity", nil, "sk-does-not-exist")
 	assert.Equal(t, http.StatusUnauthorized, invalid.Code, invalid.Body.String())
 }
+
+// 契约：额度耗尽的 Token 仍能解析出稳定账户身份（BFF 登录态不因额度耗尽失效）。
+func TestTokenIdentityAllowsExhaustedToken(t *testing.T) {
+	router := setupAccountContractTest(t, true)
+	register := performJSON(router, http.MethodPost, "/api/user/register", map[string]string{
+		"username": "exhaust-id-user",
+		"password": "password123",
+	}, "")
+	account := decodeAccountContract(t, register).Data
+	require.NotEmpty(t, account.Token, register.Body.String())
+
+	require.NoError(t, model.DB.Model(&model.Token{}).Where("user_id = ?", account.UserID).Updates(map[string]any{
+		"status":          common.TokenStatusExhausted,
+		"remain_quota":    0,
+		"unlimited_quota": false,
+	}).Error)
+
+	identity := performJSON(router, http.MethodGet, "/api/token/identity", nil, account.Token)
+	require.Equal(t, http.StatusOK, identity.Code, identity.Body.String())
+	resolved := decodeAccountContract(t, identity)
+	assert.Equal(t, account.UserID, resolved.Data.UserID)
+
+	// 显式禁用的 Token 仍然必须拒绝
+	require.NoError(t, model.DB.Model(&model.Token{}).Where("user_id = ?", account.UserID).Update("status", common.TokenStatusDisabled).Error)
+	disabled := performJSON(router, http.MethodGet, "/api/token/identity", nil, account.Token)
+	assert.Equal(t, http.StatusUnauthorized, disabled.Code, disabled.Body.String())
+}

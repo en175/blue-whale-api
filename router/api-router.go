@@ -97,10 +97,8 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.DELETE("/passkey", controller.PasskeyDelete)
 				selfRoute.GET("/aff", controller.GetAffCode)
 				selfRoute.GET("/topup/info", controller.GetTopUpInfo)
-				selfRoute.GET("/topup/self", controller.GetUserTopUps)
 				selfRoute.POST("/topup", middleware.CriticalRateLimit(), controller.TopUp)
 				selfRoute.POST("/pay", middleware.CriticalRateLimit(), controller.RequestEpay)
-				selfRoute.POST("/amount", controller.RequestAmount)
 				selfRoute.POST("/stripe/pay", middleware.CriticalRateLimit(), controller.RequestStripePay)
 				selfRoute.POST("/stripe/amount", controller.RequestStripeAmount)
 				selfRoute.POST("/creem/pay", middleware.CriticalRateLimit(), controller.RequestCreemPay)
@@ -108,7 +106,6 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.POST("/waffo/pay", middleware.CriticalRateLimit(), controller.RequestWaffoPay)
 				selfRoute.POST("/waffo-pancake/amount", controller.RequestWaffoPancakeAmount)
 				selfRoute.POST("/waffo-pancake/pay", middleware.CriticalRateLimit(), controller.RequestWaffoPancakePay)
-				selfRoute.POST("/bluewhalepay/pay", middleware.CriticalRateLimit(), controller.RequestBlueWhalePayPay)
 				selfRoute.POST("/aff_transfer", controller.TransferAffQuota)
 				selfRoute.PUT("/setting", controller.UpdateUserSetting)
 
@@ -148,6 +145,16 @@ func SetApiRouter(router *gin.Engine) {
 				// Admin 2FA routes
 				adminRoute.GET("/2fa/stats", controller.Admin2FAStats)
 				adminRoute.DELETE("/:id/2fa", controller.AdminDisable2FA)
+			}
+
+			// BlueWhale 账户充值：new-api 原生控制台继续用 session，BlueWhale BFF
+			// 用 sk-xxx；订单 User ID 一律来自鉴权后的 Token 属主，不信任请求参数。
+			accountTopUpRoute := userRoute.Group("/")
+			accountTopUpRoute.Use(middleware.AccountTokenOrUserAuth())
+			{
+				accountTopUpRoute.GET("/topup/self", controller.GetUserTopUps)
+				accountTopUpRoute.POST("/amount", controller.RequestAmount)
+				accountTopUpRoute.POST("/bluewhalepay/pay", middleware.CriticalRateLimit(), controller.RequestBlueWhalePayPay)
 			}
 		}
 
