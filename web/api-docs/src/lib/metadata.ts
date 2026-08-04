@@ -1,18 +1,21 @@
 import type { Metadata } from 'next';
 
+const logoUrl =
+  'https://bluewhale-assets.tos-cn-beijing.volces.com/blue-whale-api/blue_whale.svg';
+
 export function createMetadata(override: Metadata): Metadata {
   return {
     ...override,
     icons: {
-      icon: '/favicon.ico',
-      shortcut: '/favicon.ico',
+      icon: { url: logoUrl, type: 'image/svg+xml' },
+      shortcut: logoUrl,
       apple: '/assets/logo.png',
     },
     openGraph: {
       title: override.title ?? undefined,
       description: override.description ?? undefined,
       url: 'https://blue-whale.example.com',
-      images: '/assets/logo.png',
+      images: logoUrl,
       siteName: 'Blue Whale API',
       type: 'website',
       ...override.openGraph,
@@ -21,7 +24,7 @@ export function createMetadata(override: Metadata): Metadata {
       card: 'summary_large_image',
       title: override.title ?? undefined,
       description: override.description ?? undefined,
-      images: '/assets/logo.png',
+      images: logoUrl,
       ...override.twitter,
     },
   };
