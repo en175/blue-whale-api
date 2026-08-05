@@ -94,6 +94,12 @@ func InitTLSWriter() {
 	tlsProducer = producer.NewProducer(cfg)
 	tlsProducer.Start()
 	gopool.Go(tlsDispatchLoop)
+	// 注册系统日志钩子：common.SysLog/SysError 也进 TLS（回调注入，避免循环依赖）。
+	// skip=3：业务调用点 -> common.SysLog -> hook 闭包 -> callerInfo
+	common.TLSLogHook = func(level string, t time.Time, msg string) {
+		caller, funcName := callerInfo(3)
+		sendLogToTLS(level, t, "SYSTEM", "", caller, funcName, msg)
+	}
 	common.SysLog("TLS log writer enabled, endpoint: " + endpoint + ", topic: " + topicID)
 }
 
