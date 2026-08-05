@@ -34,11 +34,12 @@ const (
 )
 
 var (
-	tlsProducer producer.Producer
-	tlsTopicID  string
-	tlsSource   string
-	tlsLogChan  chan *pb.Log
-	tlsEnv      string
+	tlsProducer  producer.Producer
+	tlsTopicID   string
+	tlsSource    string
+	tlsLogChan   chan *pb.Log
+	tlsEnv       string
+	tlsContainer string
 )
 
 // InitTLSWriter 初始化 TLS 日志 Producer。
@@ -76,7 +77,13 @@ func InitTLSWriter() {
 
 	tlsLogChan = make(chan *pb.Log, tlsLogChanSize)
 	tlsTopicID = topicID
-	tlsSource = common.NodeName
+	// container 标识服务/容器：优先 CONTAINER_NAME 环境变量（如 blue-whale-api），
+	// 未配置时用 NodeName（Docker 下=容器名，本地=hostname）兜底
+	tlsContainer = os.Getenv("CONTAINER_NAME")
+	if tlsContainer == "" {
+		tlsContainer = common.NodeName
+	}
+	tlsSource = tlsContainer
 	tlsEnv = os.Getenv("ENV")
 	if tlsEnv == "" {
 		tlsEnv = os.Getenv("NODE_ENV")
@@ -119,7 +126,7 @@ func sendLogToTLS(level string, t time.Time, requestID, traceID, caller, funcNam
 		Contents: []*pb.LogContent{
 			{Key: "level", Value: level},
 			{Key: "time", Value: t.Format("2006-01-02 15:04:05")},
-			{Key: "container", Value: common.NodeName},
+			{Key: "container", Value: tlsContainer},
 			{Key: "env", Value: tlsEnv},
 			{Key: "version", Value: common.Version},
 			{Key: "request_id", Value: requestID},
