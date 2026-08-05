@@ -51,6 +51,7 @@ services:
 #      - TLS_AK=your-access-key-id  # IAM 用户 AccessKey ID (IAM AccessKey ID)
 #      - TLS_SK=your-access-key-secret  # IAM 用户 AccessKey Secret (IAM AccessKey Secret)
 #      - TLS_TOPIC_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx  # TLS Topic ID (TLS Topic ID)
+#      - TLS_REGION=cn-beijing  # TLS 区域，缺省 cn-beijing；其他区域必须显式配置 (TLS region; defaults to cn-beijing)
 
     depends_on:
       - redis

@@ -61,7 +61,7 @@ func InitTLSWriter() {
 		endpoint = "https://" + endpoint
 	}
 
-	// SDK 签名必须携带 Region；未显式配置时从 endpoint 推断（如 tls-cn-beijing.volces.com -> cn-beijing），缺省 cn-beijing
+	// SDK 签名必须携带 Region；缺省 cn-beijing，其他区域（如 tls-cn-shanghai）须显式配置 TLS_REGION
 	region := os.Getenv("TLS_REGION")
 	if region == "" {
 		region = "cn-beijing"
@@ -103,10 +103,18 @@ func InitTLSWriter() {
 	common.SysLog("TLS log writer enabled, endpoint: " + endpoint + ", topic: " + topicID)
 }
 
-// CloseTLSWriter 在进程退出前冲刷 Producer 缓冲的日志。
+// CloseTLSWriter 在进程退出前冲刷日志：先等待 dispatch 通道排空（带超时），
+// 再关闭 Producer 冲刷其内部缓冲。注意不 close(tlsLogChan)，避免关停后
+// 仍有日志写入时向已关闭通道发送导致 panic。
 func CloseTLSWriter() {
 	if tlsProducer == nil {
 		return
+	}
+	if tlsLogChan != nil {
+		deadline := time.Now().Add(5 * time.Second)
+		for len(tlsLogChan) > 0 && time.Now().Before(deadline) {
+			time.Sleep(50 * time.Millisecond)
+		}
 	}
 	tlsProducer.Close()
 }

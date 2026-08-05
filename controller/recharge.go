@@ -2,6 +2,7 @@ package controller
 
 import (
 	"bytes"
+	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"fmt"
@@ -100,7 +101,7 @@ func CreateRechargeOrder(c *gin.Context) {
 	}
 
 	// 用自己的下单逻辑，notifyUrl 指向 /api/recharge/notify
-	payOrderId, payData, err := rechargeRequestUnifiedOrder(topUp, c.ClientIP(), wayCode)
+	payOrderId, payData, err := rechargeRequestUnifiedOrder(c.Request.Context(), topUp, c.ClientIP(), wayCode)
 	if err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("recharge 下单失败 user_id=%d tier=%s trade_no=%s error=%q", userId, req.TierId, tradeNo, err.Error()))
 		common.ApiErrorMsg(c, "拉起支付失败")
@@ -257,9 +258,9 @@ func RechargeBlueWhalePayNotify(c *gin.Context) {
 	defer UnlockOrder(mchOrderNo)
 
 	var (
-		topupUserId     int
-		topupMoney      float64
-		topupPayment    string
+		topupUserId      int
+		topupMoney       float64
+		topupPayment     string
 		topupTokensAdded int64
 	)
 
@@ -486,7 +487,7 @@ type bluewhalepayApiRes struct {
 
 // rechargeRequestUnifiedOrder 调 pay /api/pay/unifiedOrder 下单。
 // 参数与 service.BlueWhalePayRequestUnifiedOrder 一致，但 notifyUrl 固定指向 /api/recharge/notify。
-func rechargeRequestUnifiedOrder(topUp *model.TopUp, clientIp, wayCode string) (payOrderId, payData string, err error) {
+func rechargeRequestUnifiedOrder(ctx context.Context, topUp *model.TopUp, clientIp, wayCode string) (payOrderId, payData string, err error) {
 	if strings.TrimSpace(setting.BlueWhalePayPayUrl) == "" {
 		return "", "", fmt.Errorf("bluewhalepay pay 服务地址未配置")
 	}
@@ -525,13 +526,17 @@ func rechargeRequestUnifiedOrder(topUp *model.TopUp, clientIp, wayCode string) (
 
 	jsonBody, _ := json.Marshal(body)
 	url := strings.TrimRight(setting.BlueWhalePayPayUrl, "/") + "/api/pay/unifiedOrder"
-	common.SysLog(fmt.Sprintf("recharge bluewhalepay 下单请求 trade_no=%s wayCode=%s amountFen=%d url=%s", topUp.TradeNo, wayCode, amountFen, url))
+	logger.LogInfo(ctx, fmt.Sprintf("recharge bluewhalepay 下单请求 trade_no=%s wayCode=%s amountFen=%d url=%s", topUp.TradeNo, wayCode, amountFen, url))
 
 	req, err := http.NewRequest("POST", url, bytes.NewReader(jsonBody))
 	if err != nil {
 		return "", "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	// 跨系统链路透传：下单请求携带 X-Trace-Id，贯穿 api -> pay
+	if tid, ok := ctx.Value(common.TraceIdKey).(string); ok && tid != "" {
+		req.Header.Set(common.TraceIdKey, tid)
+	}
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -542,7 +547,7 @@ func rechargeRequestUnifiedOrder(topUp *model.TopUp, clientIp, wayCode string) (
 	if err != nil {
 		return "", "", err
 	}
-	common.SysLog(fmt.Sprintf("recharge bluewhalepay 下单响应 trade_no=%s status=%d body=%s", topUp.TradeNo, resp.StatusCode, string(respBody)))
+	logger.LogInfo(ctx, fmt.Sprintf("recharge bluewhalepay 下单响应 trade_no=%s status=%d body=%s", topUp.TradeNo, resp.StatusCode, string(respBody)))
 	if resp.StatusCode/100 != 2 {
 		return "", "", fmt.Errorf("pay http status %d", resp.StatusCode)
 	}
