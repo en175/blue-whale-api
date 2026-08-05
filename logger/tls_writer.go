@@ -74,6 +74,10 @@ func InitTLSWriter() {
 	cfg.AccessKeySecret = accessKeySecret
 	// 降低 SDK 内部日志级别，避免 info 日志刷屏
 	cfg.LogLevel = "warn"
+	// 内存预算满时不阻塞 dispatch 协程（默认 60s），立即失败走丢弃降级
+	cfg.MaxBlockSec = 0
+	// 关停时 producer.Close() 等待重试耗尽可能阻塞数十秒，压低重试次数
+	cfg.Retries = 3
 
 	tlsLogChan = make(chan *pb.Log, tlsLogChanSize)
 	tlsTopicID = topicID
@@ -136,7 +140,7 @@ func sendLogToTLS(level string, t time.Time, requestID, traceID, caller, funcNam
 		return
 	}
 	logItem := &pb.Log{
-		Time: t.Unix(),
+		Time: t.UnixMilli(),
 		Contents: []*pb.LogContent{
 			{Key: "level", Value: level},
 			{Key: "time", Value: t.Format("2006-01-02 15:04:05")},

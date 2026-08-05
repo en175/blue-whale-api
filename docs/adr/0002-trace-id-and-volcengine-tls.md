@@ -43,16 +43,23 @@ Blue-Whale 已由单服务演化为多系统：
 
 ### D4：TLS 日志结构化（键值对 + 索引）
 
-- `logHelper`（`logger/logger.go:97`）发送时组装键值对：`{level, time, request_id, trace_id, message}`。
+- 所有经 `logger` 包的日志（业务日志 + 经 `TLSLogHook` 注入的系统日志 `SysLog`/`SysError`）发送时组装统一键值对（平铺下划线命名，跨系统 pay/ai 对齐）：
+  `{level, time, container, env, version, request_id, trace_id, caller, func, message}`
+  - `container`：服务/容器标识，`CONTAINER_NAME` 环境变量优先，缺省取主机名/容器名。
+  - `env`：`ENV`/`NODE_ENV`，缺省 `dev`；`version`：服务版本。
+  - `caller`（文件:行号）/`func`（模块内函数名）：`runtime.Caller`/`FuncForPC` 惰性计算，仅 TLS 启用时产生开销。
+  - 系统日志无请求上下文：`request_id=SYSTEM`、`trace_id` 为空。
+  - gin 访问日志不进 TLS（控制量）；`pb.Log.Time` 使用毫秒时间戳（与 SDK 内部兜底语义对齐）。
 - TLS 索引：
-  - `level`、`request_id`、`trace_id` → 关键字（keyword，不开分词）。
-  - `message` → 文本（text，开分词 + 中文分词）。当前 message 是自由文本（`[%s] 时间 | id | msg`），非 JSON，故用 text 而非 json。
+  - `level`、`container`、`env`、`version`、`request_id`、`trace_id`、`caller`、`func` → 关键字（keyword，不开分词）。
+  - `message` → 文本（text，开分词 + 中文分词）。message 是自由文本，非 JSON，故用 text 而非 json。
 
 ### D5：控制台配置（一次性）
 
 - 创建 Project（如 `blue_whale_dev`）→ 创建 Topic（如 `blue-whale-dev-30`）→ 启用索引（全文 + 键值）→ 添加键值字段 `level` / `request_id` / `trace_id` / `message`。
 - 创建 AccessKey（IAM 用户），赋 TLS 写权限。
 - 记录 Endpoint + TopicID。
+- 应用侧环境变量：`TLS_ENDPOINT` / `TLS_AK` / `TLS_SK` / `TLS_TOPIC_ID`（四项齐备才启用）；可选 `TLS_REGION`（缺省 cn-beijing，其他区域必须显式配置）、`CONTAINER_NAME`（服务标识）。
 
 ## 各系统改动清单
 

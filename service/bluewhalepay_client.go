@@ -58,9 +58,10 @@ type bluewhalepayApiRes struct {
 	} `json:"data"`
 }
 
-// BlueWhalePayRequestUnifiedOrder 调 pay /api/pay/unifiedOrder 下单（带 notifyUrl → HTTP 回调分支）。
+// BlueWhalePayUnifiedOrder 调 pay /api/pay/unifiedOrder 下单（带 notifyUrl → HTTP 回调分支）。
 // amount 传分：TopUp.Money（元）× 100。返回 payOrderId + payData（前端拉起支付）。
-func BlueWhalePayRequestUnifiedOrder(ctx context.Context, topUp *model.TopUp, clientIp, wayCode string) (payOrderId, payData string, err error) {
+// notifyPath 为回调路径后缀（如 /api/bluewhalepay/notify、/api/recharge/notify）。
+func BlueWhalePayUnifiedOrder(ctx context.Context, topUp *model.TopUp, clientIp, wayCode, notifyPath string) (payOrderId, payData string, err error) {
 	if strings.TrimSpace(setting.BlueWhalePayPayUrl) == "" {
 		return "", "", fmt.Errorf("bluewhalepay pay 服务地址未配置")
 	}
@@ -72,7 +73,7 @@ func BlueWhalePayRequestUnifiedOrder(ctx context.Context, topUp *model.TopUp, cl
 	}
 
 	amountFen := int64(math.Round(topUp.Money * 100))
-	notifyUrl := strings.TrimRight(setting.BlueWhalePayServerBaseUrl, "/") + "/api/bluewhalepay/notify"
+	notifyUrl := strings.TrimRight(setting.BlueWhalePayServerBaseUrl, "/") + notifyPath
 	reqTime := time.Now().UnixMilli()
 	subject := fmt.Sprintf("充值%.2f元", topUp.Money)
 
@@ -121,7 +122,8 @@ func BlueWhalePayRequestUnifiedOrder(ctx context.Context, topUp *model.TopUp, cl
 	if err != nil {
 		return "", "", err
 	}
-	logger.LogInfo(ctx, fmt.Sprintf("bluewhalepay 下单响应 trade_no=%s status=%d body=%s", topUp.TradeNo, resp.StatusCode, string(respBody)))
+	// 日志脱敏：不回显完整响应 body（含支付链接等敏感数据），只记必要字段
+	logger.LogInfo(ctx, fmt.Sprintf("bluewhalepay 下单响应 trade_no=%s status=%d", topUp.TradeNo, resp.StatusCode))
 	if resp.StatusCode/100 != 2 {
 		return "", "", fmt.Errorf("pay http status %d", resp.StatusCode)
 	}
@@ -133,5 +135,6 @@ func BlueWhalePayRequestUnifiedOrder(ctx context.Context, topUp *model.TopUp, cl
 	if apiRes.Code != 0 {
 		return "", "", fmt.Errorf("pay 下单失败 code=%d msg=%s", apiRes.Code, apiRes.Msg)
 	}
+	logger.LogInfo(ctx, fmt.Sprintf("bluewhalepay 下单成功 trade_no=%s code=%d payOrderId=%s", topUp.TradeNo, apiRes.Code, apiRes.Data.PayOrderId))
 	return apiRes.Data.PayOrderId, apiRes.Data.PayData, nil
 }

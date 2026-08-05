@@ -234,9 +234,9 @@ func main() {
 	if common.DataExportEnabled {
 		model.SaveQuotaDataCache()
 	}
-	// 最后冲刷 TLS Producer 缓冲的日志（含关停期产生的日志），再退出
-	logger.CloseTLSWriter()
 	common.SysLog("server exited")
+	// 退出前最后一步：冲刷 TLS Producer 缓冲的日志（含关停期产生的日志）
+	logger.CloseTLSWriter()
 }
 
 func InjectUmamiAnalytics() {

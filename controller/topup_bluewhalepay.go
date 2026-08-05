@@ -74,7 +74,7 @@ func RequestBlueWhalePayPay(c *gin.Context) {
 		return
 	}
 
-	_, payData, err := service.BlueWhalePayRequestUnifiedOrder(c.Request.Context(), topUp, c.ClientIP(), wayCode)
+	_, payData, err := service.BlueWhalePayUnifiedOrder(c.Request.Context(), topUp, c.ClientIP(), wayCode, "/api/bluewhalepay/notify")
 	if err != nil {
 		common.SysError("bluewhalepay 下单失败 trade_no=" + tradeNo + " err=" + err.Error())
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "拉起支付失败"})
