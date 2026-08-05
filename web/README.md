@@ -3,7 +3,6 @@
 前端 monorepo 工作区（`new-api-web-workspace`），成员：
 
 - `default/` — 默认前端
-- `classic/` — 经典前端
 
 接口文档站不在此工作区，独立于 `api-docs/`（fumadocs + fumadocs-openapi，端口 3011）：
 

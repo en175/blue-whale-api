@@ -6,7 +6,7 @@ blue_whale_api (new-api, Go) 部署 skill：本地 bun build 前端 + go 交叉�
 
 ```
 本地 build ──artifact──▶ scp ──▶ 远程 /opt/blue-whale-api/
-  前端: bun build → web/default/dist（classic 占位撑 go:embed）
+  前端: bun build → web/default/dist（go:embed 需 dist 存在）
   后端: GOOS=linux GOARCH=amd64 CGO=0 go build → 静态二进制（~113M）
                                         │
                        远程 docker build（alpine:3.20 mirror fallback + apk aliyun + COPY 二进制）
@@ -60,7 +60,6 @@ blue_whale_api (new-api, Go) 部署 skill：本地 bun build 前端 + go 交叉�
 | `remote-build.sh` 所有 mirror 失败 | 给远程 `/etc/docker/daemon.json` 配 `registry-mirrors`（如 `https://docker.1ms.run`）后 `systemctl restart docker` |
 | 容器起不来 | `docker logs blue-whale-api`：多半连不上 mysql8/redis 或 .env 缺 |
 | 宿主 curl 通但外部不通 | 云安全组未放行 3001（宿主 iptables 默认 ACCEPT，卡在云安全组） |
-| classic 主题空白 | 默认 default 主题；classic 占位，走系统设置切回 default 或修 date-fns |
 
 ## 安全约束
 
@@ -74,8 +73,7 @@ blue_whale_api (new-api, Go) 部署 skill：本地 bun build 前端 + go 交叉�
 |---|---|
 | new-api | blue_whale_api 的核心，Go 写的 AI API 网关（fork of one-api） |
 | default 主题 | new-api 新前端（React 19, Rsbuild），默认主题 |
-| classic 主题 | new-api 老前端（React 18, Semi Design），备选，当前构建失败占位 |
-| `go:embed` | Go 编译期把 web/default/dist + web/classic/dist 嵌入二进制；dist 必须存在非空 |
+| `go:embed` | Go 编译期把 web/default/dist 嵌入二进制；dist 必须存在非空 |
 | mirror fallback | 远程拉 alpine 时逐个试国内 docker mirror，绕开 docker.io 墙 |
 | 公网 IP 回连 | 容器经宿主公网 IP 访问宿主的 mysql8/redis（同 blue_whale_server 模式） |
 | prev 回滚 | restart 前备份 new-api.prev，回滚 = 回退 prev 重建 |

@@ -45,7 +45,6 @@ bash .claude/skills/deploy-blue-whale-api/scripts/deploy.sh
 
 - **CGO=0**：new-api 当前纯 Go（MySQL/Redis 驱动无 CGO）。若未来引入 CGO 依赖（如 mattn/go-sqlite3），本地 `CGO_ENABLED=0` build 会失败，需改远程 golang 镜像 build。
 - **mirror fallback**：`remote-build.sh` 逐个试 daocloud/1ms/dockerproxy/dockerhub，全失败才报错指路 `/etc/docker/daemon.json` registry-mirrors。不动 docker daemon、不影响测试容器。
-- **classic 占位**：classic 前端构建失败（date-fns-tz/date-fns 不兼容），`build.sh` 自动写占位 `index.html` 撑 `go:embed` 编译；默认 default 主题不受影响。
 - **SESSION_SECRET**：`push.sh` 远程 `openssl rand -hex 32` 生成强随机（每次部署重新生成 → 已登录 session 失效，可接受；不本地落盘明文）。
 - **回滚**：`restart.sh` 前备份 `new-api.prev`；回滚 = `ssh ... 'cd /opt/blue-whale-api && cp new-api.prev new-api'` 再跑 `restart.sh`。
 - **外部访问**：`restart.sh` 验证用宿主 `localhost`；外部需云安全组放行 3001。
