@@ -112,6 +112,12 @@ func logHelper(ctx context.Context, level string, msg string) {
 	if traceField == "" {
 		traceField = "-"
 	}
+	// 仅 TLS 启用时计算调用位置（runtime.Caller 有微小开销）。
+	// skip=3：callerInfo -> logHelper -> LogInfo/LogWarn/LogError/LogDebug -> 业务调用点
+	var caller, funcName string
+	if tlsLogChan != nil {
+		caller, funcName = callerInfo(3)
+	}
 	common.LogWriterMu.RLock()
 	writer := gin.DefaultErrorWriter
 	if level == loggerINFO {
@@ -119,7 +125,7 @@ func logHelper(ctx context.Context, level string, msg string) {
 	}
 	_, _ = fmt.Fprintf(writer, "[%s] %v | %s | %s | %s \n", level, now.Format("2006/01/02 - 15:04:05"), id, traceField, msg)
 	common.LogWriterMu.RUnlock()
-	sendLogToTLS(level, now, fmt.Sprintf("%v", id), traceId, msg)
+	sendLogToTLS(level, now, fmt.Sprintf("%v", id), traceId, caller, funcName, msg)
 	logCount++ // we don't need accurate count, so no lock here
 	if logCount > maxLogCount && !setupLogWorking {
 		logCount = 0
