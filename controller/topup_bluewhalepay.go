@@ -19,8 +19,8 @@ import (
 
 // BlueWhalePayPayRequest 前端下单请求。
 type BlueWhalePayPayRequest struct {
-	Amount  int64   `json:"amount"`   // 充值美元额度数量（N，加 quota = N × QuotaPerUnit）
-	WayCode string  `json:"way_code"` // 支付方式 ALI_QR/WX_JSAPI，空用默认 setting.BlueWhalePayWayCode
+	Amount  int64  `json:"amount"`   // 充值美元额度数量（N，加 quota = N × QuotaPerUnit）
+	WayCode string `json:"way_code"` // 支付方式 ALI_QR/WX_JSAPI，空用默认 setting.BlueWhalePayWayCode
 }
 
 // RequestBlueWhalePayPay 建本地 TopUp（pending）→ HTTP 调 pay /api/pay/unifiedOrder（带 notifyUrl）→ 返 payData。
@@ -74,7 +74,7 @@ func RequestBlueWhalePayPay(c *gin.Context) {
 		return
 	}
 
-	_, payData, err := service.BlueWhalePayRequestUnifiedOrder(topUp, c.ClientIP(), wayCode)
+	_, payData, err := service.BlueWhalePayRequestUnifiedOrder(c.Request.Context(), topUp, c.ClientIP(), wayCode)
 	if err != nil {
 		common.SysError("bluewhalepay 下单失败 trade_no=" + tradeNo + " err=" + err.Error())
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "拉起支付失败"})
