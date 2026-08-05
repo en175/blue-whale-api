@@ -293,6 +293,11 @@ func AccountTokenAuth() func(c *gin.Context) {
 		c.Set("id", token.UserId)
 		c.Set("token_id", token.Id)
 		c.Set("token_key", token.Key)
+		// 补 username/group 上下文：log/self、log/self/stat 等账户层接口
+		// 按 username 聚合查询（与 UserAuth 的 authHelper 设置对齐）；
+		// 充值三接口不使用这两个字段，无行为影响。
+		c.Set("username", userCache.Username)
+		c.Set("group", userCache.Group)
 		c.Next()
 	}
 }
