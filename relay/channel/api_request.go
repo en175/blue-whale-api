@@ -386,6 +386,9 @@ func DoWssRequest(a Adaptor, c *gin.Context, info *common.RelayInfo, requestBody
 		targetHeader.Set(key, value)
 	}
 	targetHeader.Set("Content-Type", c.Request.Header.Get("Content-Type"))
+	if traceId := c.GetString(common2.TraceIdKey); traceId != "" {
+		targetHeader.Set(common2.TraceIdKey, traceId)
+	}
 	targetConn, _, err := websocket.DefaultDialer.Dial(fullRequestURL, targetHeader)
 	if err != nil {
 		return nil, fmt.Errorf("dial failed to %s: %w", common.SanitizeURLForLog(fullRequestURL), err)
@@ -488,6 +491,10 @@ func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 
 	var stopPinger context.CancelFunc
 	var pingerDone <-chan struct{}
+	// 跨系统链路透传：出站请求携带 X-Trace-Id（由入口中间件透传优先、缺省生成）
+	if traceId := c.GetString(common2.TraceIdKey); traceId != "" {
+		req.Header.Set(common2.TraceIdKey, traceId)
+	}
 	if info.IsStream {
 		helper.SetEventStreamHeaders(c)
 		// 处理流式请求的 ping 保活

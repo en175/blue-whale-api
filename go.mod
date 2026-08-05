@@ -71,18 +71,28 @@ require (
 	github.com/ClickHouse/clickhouse-go/v2 v2.32.0 // indirect
 	github.com/bmatcuk/doublestar/v4 v4.6.1 // indirect
 	github.com/casbin/govaluate v1.10.0 // indirect
+	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/go-faster/city v1.0.1 // indirect
 	github.com/go-faster/errors v0.7.1 // indirect
+	github.com/go-kit/kit v0.12.0 // indirect
+	github.com/go-kit/log v0.2.0 // indirect
+	github.com/go-logfmt/logfmt v0.5.1 // indirect
+	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/hashicorp/go-version v1.7.0 // indirect
 	github.com/paulmach/orb v0.11.1 // indirect
+	github.com/pierrec/lz4 v2.6.1+incompatible // indirect
 	github.com/pierrec/lz4/v4 v4.1.22 // indirect
 	github.com/rogpeppe/go-internal v1.13.1 // indirect
 	github.com/segmentio/asm v1.2.0 // indirect
 	go.opentelemetry.io/otel v1.34.0 // indirect
 	go.opentelemetry.io/otel/trace v1.34.0 // indirect
+	gopkg.in/natefinch/lumberjack.v2 v2.0.0 // indirect
 )
 
-require github.com/Azure/go-ntlmssp v0.1.1
+require (
+	github.com/Azure/go-ntlmssp v0.1.1
+	github.com/volcengine/volc-sdk-golang v1.0.253
+)
 
 require (
 	github.com/DmitriyVTitov/size v1.5.0 // indirect

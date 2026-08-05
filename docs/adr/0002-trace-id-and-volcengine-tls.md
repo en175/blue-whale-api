@@ -1,0 +1,108 @@
+# 跨系统 trace_id 链路追踪 + 火山引擎 TLS 日志中心接入
+
+本文档记录 Blue-Whale 多系统（blue-whale-api / blue-whale-pay / blue-whale-ai）的跨系统链路追踪（`X-Trace-Id`）设计，以及将日志接入火山引擎日志服务（Torch Log Service，TLS）的方案。
+
+**Status:** proposed
+
+## 背景
+
+Blue-Whale 已由单服务演化为多系统：
+
+- **blue-whale-api**（Go，new-api 二开）：LLM 网关与计费，对外提供 OpenAI 兼容 API + 管理端。
+- **blue-whale-pay**（Java）：支付体系（`blue_whale_pay_web` + `blue_whale_pay_server`，logback）。
+- **blue-whale-ai**（TypeScript / pnpm workspace）：agent-worker、generation-worker 等 Node 服务 + `blue_whale_web` 前端。
+
+排查问题时日志分散在多个系统，缺乏一个贯穿全链路的关联 ID，无法按一次业务操作串联各系统日志。同时已有需求将日志接入火山引擎 TLS 日志中心统一检索。
+
+现状：仅 blue-whale-api 有单请求标识 `request_id`（`X-Oneapi-Request-Id`，见 `middleware/request-id.go`），不跨系统；其余系统无任何请求/链路标识。
+
+## 决策
+
+### D1：新增 `X-Trace-Id` 链路标识，与 `request_id` 并存
+
+- 新增 HTTP header `X-Trace-Id`，语义为**跨系统链路标识**。
+- 与现有 `request_id` 并存、职责分离：
+  - `request_id`：单次网关请求标识，响应头继续返回客户端（API 契约不变）。
+  - `trace_id`：跨系统链路标识，贯穿 blue-whale-ai → blue-whale-api → 上游/火山、以及支付回调等所有环节。
+- 值格式沿用 `common.NewRequestId()`（时间戳 + 随机串，见 `common/utils.go:282`），保证全局唯一且可读。
+
+### D2：透传优先，缺省生成（入口不固定）
+
+最外层入口不固定（外部用户可直连网关 API / 管理端，也可经 blue-whale-ai，支付也有独立回调入口）。因此每个服务的 HTTP 入口统一执行：
+
+1. 请求 header 有 `X-Trace-Id` → 沿用（透传）。
+2. 无 → 本服务生成一个（同 `NewRequestId` 格式）。
+
+同一链路透传不重生成，保证链路上 trace_id 唯一。改动对称：各系统各加一个入口过滤器 + 出站 header 透传。
+
+### D3：接入火山引擎 TLS（SDK Producer 直写，方案 A）
+
+- 采用应用内 **Go SDK Producer 异步批量写入**（`github.com/volcengine/volc-sdk-golang`），替代采集器 / docker logging driver 方案。
+- 理由：日志量可控，改动集中于 `logger` 包；不引入额外部署组件；Producer 异步 + 失败静默降级，对请求链路零影响。
+- 备选方案 B（filebeat/LogCollector 采集 stdout）与 C（docker logging driver）因引入组件 / 支持弱而放弃。
+
+### D4：TLS 日志结构化（键值对 + 索引）
+
+- 所有经 `logger` 包的日志（业务日志 + 经 `TLSLogHook` 注入的系统日志 `SysLog`/`SysError`）发送时组装统一键值对（平铺下划线命名，跨系统 pay/ai 对齐）：
+  `{level, time, container, env, version, request_id, trace_id, caller, func, message}`
+  - `container`：服务/容器标识，`CONTAINER_NAME` 环境变量优先，缺省取主机名/容器名。
+  - `env`：`ENV`/`NODE_ENV`，缺省 `dev`；`version`：服务版本。
+  - `caller`（文件:行号）/`func`（模块内函数名）：`runtime.Caller`/`FuncForPC` 惰性计算，仅 TLS 启用时产生开销。
+  - 系统日志无请求上下文：`request_id=SYSTEM`、`trace_id` 为空。
+  - gin 访问日志不进 TLS（控制量）；`pb.Log.Time` 使用毫秒时间戳（与 SDK 内部兜底语义对齐）。
+- TLS 索引：
+  - `level`、`container`、`env`、`version`、`request_id`、`trace_id`、`caller`、`func` → 关键字（keyword，不开分词）。
+  - `message` → 文本（text，开分词 + 中文分词）。message 是自由文本，非 JSON，故用 text 而非 json。
+
+### D5：控制台配置（一次性）
+
+- 创建 Project（如 `blue_whale_dev`）→ 创建 Topic（如 `blue-whale-dev-30`）→ 启用索引（全文 + 键值）→ 添加键值字段 `level` / `request_id` / `trace_id` / `message`。
+- 创建 AccessKey（IAM 用户），赋 TLS 写权限。
+- 记录 Endpoint + TopicID。
+- 应用侧环境变量：`TLS_ENDPOINT` / `TLS_AK` / `TLS_SK` / `TLS_TOPIC_ID`（四项齐备才启用）；可选 `TLS_REGION`（缺省 cn-beijing，其他区域必须显式配置）、`CONTAINER_NAME`（服务标识）。
+
+## 各系统改动清单
+
+### blue-whale-api（Go）
+
+| # | 文件 | 改动 |
+|---|---|---|
+| 1 | `common/constants.go` | 新增 `TraceIdKey = "X-Trace-Id"` |
+| 2 | `middleware/request-id.go` | 升级为「透传优先，缺省生成」，写入 context + 响应头 |
+| 3 | `logger/logger.go` `logHelper` | 日志行追加 `trace_id` |
+| 4 | 出站 HTTP 请求（`relay/channel/api_request.go`、`service/http.go`） | 请求头加 `X-Trace-Id` |
+| 5 | `service/http.go` `ShouldCopyUpstreamHeader` | 捕获上游返回的 `X-Trace-Id` |
+| 6 | `logger/tls_writer.go`（新增） | TLS Producer 封装 + 失败降级 |
+| 7 | `main.go` | 初始化 TLS writer（读环境变量） |
+| 8 | 部署 compose | 加 `TLS_ENDPOINT` / `TLS_AK` / `TLS_SK` / `TLS_TOPIC_ID` 环境变量 |
+
+### blue-whale-pay（Java）
+
+| # | 文件 | 改动 |
+|---|---|---|
+| 1 | 新增 `TraceIdFilter` | HTTP 入口：透传优先、缺省生成，写入 MDC `trace_id` |
+| 2 | `logback-spring.xml`（各 module） | pattern 加 `[%X{trace_id}]` |
+| 3 | 出站 HTTP 调用封装 | 从 MDC 读 `trace_id` 设 header |
+
+### blue-whale-ai（TypeScript）
+
+| # | 文件 | 改动 |
+|---|---|---|
+| 1 | `packages/core` 新增 `trace.ts` | `getOrCreateTraceId()` 工具 |
+| 2 | 各 app 入口 | 解析 `X-Trace-Id` 注入请求上下文 |
+| 3 | `packages/core/src/new-api-client.ts` `fetchImpl` | 出站请求头加 `X-Trace-Id` |
+| 4 | 各 worker 日志 | 追加 trace_id 字段 |
+
+## 实施顺序
+
+1. **blue-whale-api 先行**：链路必经点，改动独立可测。
+2. blue-whale-pay、blue-whale-ai 随后。
+3. TLS 控制台索引补 `trace_id` 字段。
+4. 验证：各系统发一条日志，TLS 按 `trace_id` 检索整条链。
+
+## 影响与权衡
+
+- **API 契约**：`request_id` 响应头不变；新增 `X-Trace-Id` 请求/响应头，向后兼容（可选）。
+- **性能**：TLS 写入走异步 Producer，不影响请求链路；失败静默降级，不影响主服务日志。
+- **安全**：AccessKey 走环境变量，不落代码。
+- **检索**：索引只对后续新写入日志生效（TLS 规则：索引修改不回溯旧数据）。

@@ -235,6 +235,8 @@ func main() {
 		model.SaveQuotaDataCache()
 	}
 	common.SysLog("server exited")
+	// 退出前最后一步：冲刷 TLS Producer 缓冲的日志（含关停期产生的日志）
+	logger.CloseTLSWriter()
 }
 
 func InjectUmamiAnalytics() {
@@ -294,6 +296,10 @@ func InitResources() error {
 	common.InitEnv()
 
 	logger.SetupLogger()
+
+	// 初始化火山引擎 TLS 日志 Producer（读 TLS_ENDPOINT/TLS_AK/TLS_SK/TLS_TOPIC_ID 环境变量，
+	// 未配置则静默禁用，不影响本地日志）
+	logger.InitTLSWriter()
 
 	// Initialize model settings
 	ratio_setting.InitRatioSettings()

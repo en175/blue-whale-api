@@ -1,12 +1,8 @@
 package controller
 
 import (
-	"bytes"
 	"crypto/subtle"
-	"encoding/json"
 	"fmt"
-	"io"
-	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -99,8 +95,8 @@ func CreateRechargeOrder(c *gin.Context) {
 		return
 	}
 
-	// 用自己的下单逻辑，notifyUrl 指向 /api/recharge/notify
-	payOrderId, payData, err := rechargeRequestUnifiedOrder(topUp, c.ClientIP(), wayCode)
+	// notifyUrl 指向 /api/recharge/notify（与余额充值回调区分）
+	payOrderId, payData, err := service.BlueWhalePayUnifiedOrder(c.Request.Context(), topUp, c.ClientIP(), wayCode, "/api/recharge/notify")
 	if err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("recharge 下单失败 user_id=%d tier=%s trade_no=%s error=%q", userId, req.TierId, tradeNo, err.Error()))
 		common.ApiErrorMsg(c, "拉起支付失败")
@@ -257,9 +253,9 @@ func RechargeBlueWhalePayNotify(c *gin.Context) {
 	defer UnlockOrder(mchOrderNo)
 
 	var (
-		topupUserId     int
-		topupMoney      float64
-		topupPayment    string
+		topupUserId      int
+		topupMoney       float64
+		topupPayment     string
 		topupTokensAdded int64
 	)
 
@@ -467,92 +463,4 @@ func rechargeTierToAdminItem(t *model.RechargeTier) dto.AdminTierItem {
 		CreatedAt:     t.CreatedAt,
 		UpdatedAt:     t.UpdatedAt,
 	}
-}
-
-// ---------- BlueWhalePay 下单（档位充值专用，notifyUrl → /api/recharge/notify）----------
-
-type bluewhalepayApiRes struct {
-	Code int    `json:"code"`
-	Msg  string `json:"msg"`
-	Data struct {
-		PayOrderId  string `json:"payOrderId"`
-		OrderState  int    `json:"orderState"`
-		ErrCode     string `json:"errCode"`
-		ErrMsg      string `json:"errMsg"`
-		PayDataType string `json:"payDataType"`
-		PayData     string `json:"payData"`
-	} `json:"data"`
-}
-
-// rechargeRequestUnifiedOrder 调 pay /api/pay/unifiedOrder 下单。
-// 参数与 service.BlueWhalePayRequestUnifiedOrder 一致，但 notifyUrl 固定指向 /api/recharge/notify。
-func rechargeRequestUnifiedOrder(topUp *model.TopUp, clientIp, wayCode string) (payOrderId, payData string, err error) {
-	if strings.TrimSpace(setting.BlueWhalePayPayUrl) == "" {
-		return "", "", fmt.Errorf("bluewhalepay pay 服务地址未配置")
-	}
-	if strings.TrimSpace(setting.BlueWhalePayAppSecret) == "" {
-		return "", "", fmt.Errorf("bluewhalepay appSecret 未配置")
-	}
-	if wayCode == "" {
-		wayCode = setting.BlueWhalePayWayCode
-	}
-
-	amountFen := int64(math.Round(topUp.Money * 100))
-	notifyUrl := strings.TrimRight(setting.BlueWhalePayServerBaseUrl, "/") + "/api/recharge/notify"
-	reqTime := time.Now().UnixMilli()
-	subject := fmt.Sprintf("充值%.2f元", topUp.Money)
-
-	body := map[string]interface{}{
-		"mchNo":      setting.BlueWhalePayMchNo,
-		"appId":      setting.BlueWhalePayAppId,
-		"mchOrderNo": topUp.TradeNo,
-		"wayCode":    wayCode,
-		"amount":     amountFen,
-		"currency":   "CNY",
-		"subject":    subject,
-		"body":       subject,
-		"clientIp":   clientIp,
-		"notifyUrl":  notifyUrl,
-		"reqTime":    reqTime,
-		"version":    "1.0",
-		"signType":   "MD5",
-	}
-	signParams := make(map[string]string, len(body))
-	for k, v := range body {
-		signParams[k] = fmt.Sprintf("%v", v)
-	}
-	body["sign"] = service.BlueWhalePaySign(signParams, setting.BlueWhalePayAppSecret)
-
-	jsonBody, _ := json.Marshal(body)
-	url := strings.TrimRight(setting.BlueWhalePayPayUrl, "/") + "/api/pay/unifiedOrder"
-	common.SysLog(fmt.Sprintf("recharge bluewhalepay 下单请求 trade_no=%s wayCode=%s amountFen=%d url=%s", topUp.TradeNo, wayCode, amountFen, url))
-
-	req, err := http.NewRequest("POST", url, bytes.NewReader(jsonBody))
-	if err != nil {
-		return "", "", err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", "", fmt.Errorf("调用 pay 失败: %v", err)
-	}
-	defer resp.Body.Close()
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", "", err
-	}
-	common.SysLog(fmt.Sprintf("recharge bluewhalepay 下单响应 trade_no=%s status=%d body=%s", topUp.TradeNo, resp.StatusCode, string(respBody)))
-	if resp.StatusCode/100 != 2 {
-		return "", "", fmt.Errorf("pay http status %d", resp.StatusCode)
-	}
-
-	var apiRes bluewhalepayApiRes
-	if err := json.Unmarshal(respBody, &apiRes); err != nil {
-		return "", "", fmt.Errorf("解析 pay 响应失败: %v", err)
-	}
-	if apiRes.Code != 0 {
-		return "", "", fmt.Errorf("pay 下单失败 code=%d msg=%s", apiRes.Code, apiRes.Msg)
-	}
-	return apiRes.Data.PayOrderId, apiRes.Data.PayData, nil
 }
