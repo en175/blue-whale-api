@@ -954,6 +954,21 @@ func ValidateAccessToken(token string) (*User, error) {
 		return nil, nil
 	}
 	token = strings.Replace(token, "Bearer ", "", 1)
+	// sk- 前缀：API 密钥（tokens 表）。登录/签发返回的 sk-xxx 与
+	// users.access_token 属两套凭证，这里复用账户层 ResolveUserByTokenKey
+	// 解析属主，使 UserAuth/AdminAuth/RootAuth 全链路都认 sk- 令牌
+	//（与 /api/token/identity 行为一致）。无效密钥按 nil,nil 处理，
+	// 与下方 users.access_token 未命中语义对齐。
+	if strings.HasPrefix(token, "sk-") {
+		user, err := ResolveUserByTokenKey(strings.TrimPrefix(token, "sk-"))
+		if err != nil {
+			if errors.Is(err, ErrDatabase) {
+				return nil, fmt.Errorf("%w: %v", ErrDatabase, err)
+			}
+			return nil, nil
+		}
+		return user, nil
+	}
 	user := &User{}
 	err := DB.Where("access_token = ?", token).First(user).Error
 	if err != nil {
