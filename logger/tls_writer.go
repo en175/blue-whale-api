@@ -2,6 +2,7 @@ package logger
 
 import (
 	"os"
+	"strings"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -47,9 +48,20 @@ func InitTLSWriter() {
 	if endpoint == "" || accessKeyID == "" || accessKeySecret == "" || topicID == "" {
 		return
 	}
+	// SDK 要求 endpoint 带协议头；裸域名（如 tls-cn-beijing.volces.com）自动补 https
+	if !strings.Contains(endpoint, "://") {
+		endpoint = "https://" + endpoint
+	}
+
+	// SDK 签名必须携带 Region；未显式配置时从 endpoint 推断（如 tls-cn-beijing.volces.com -> cn-beijing），缺省 cn-beijing
+	region := os.Getenv("TLS_REGION")
+	if region == "" {
+		region = "cn-beijing"
+	}
 
 	cfg := producer.GetDefaultProducerConfig()
 	cfg.Endpoint = endpoint
+	cfg.Region = region
 	cfg.AccessKeyID = accessKeyID
 	cfg.AccessKeySecret = accessKeySecret
 	// 降低 SDK 内部日志级别，避免 info 日志刷屏
