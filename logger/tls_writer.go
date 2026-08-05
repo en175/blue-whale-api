@@ -1,6 +1,7 @@
 package logger
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -104,6 +105,26 @@ func tlsDispatchLoop() {
 	for logItem := range tlsLogChan {
 		_ = tlsProducer.SendLog("", tlsTopicID, tlsSource, "", logItem, nil)
 	}
+}
+
+// LogAccessLine 将 gin 访问日志单行文本发送到 TLS（结构化键值对，含 trace_id/request_id）。
+// TLS 未启用时零开销（sendLogToTLS 内部直接返回）；本地仍由 gin 按原格式输出，不重复。
+func LogAccessLine(ctx context.Context, line string) {
+	var id any = "SYSTEM"
+	var traceId string
+	if ctx != nil {
+		if rid := ctx.Value(common.RequestIdKey); rid != nil {
+			id = rid
+		}
+		if tid := ctx.Value(common.TraceIdKey); tid != nil {
+			if s, ok := tid.(string); ok {
+				traceId = s
+			}
+		}
+	}
+	// 计算访问日志真实调用位置（middleware/logger.go:行号），与业务日志字段格式一致
+	caller, _ := callerInfo(2)
+	sendLogToTLS(loggerINFO, time.Now(), fmt.Sprintf("%v", id), traceId, caller, "gin access log", line)
 }
 
 // sendLogToTLS 组装结构化键值对投递到 TLS（平铺下划线命名，跨系统统一）。

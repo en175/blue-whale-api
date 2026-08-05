@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/logger"
 	"github.com/gin-gonic/gin"
 )
 
@@ -26,7 +27,7 @@ func SetUpLogger(server *gin.Engine) {
 		if tag == "" {
 			tag = "web"
 		}
-		return fmt.Sprintf("[GIN] %s | %s | %s | %3d | %13v | %15s | %7s %s\n",
+		line := fmt.Sprintf("[GIN] %s | %s | %s | %3d | %13v | %15s | %7s %s\n",
 			param.TimeStamp.Format("2006/01/02 - 15:04:05"),
 			tag,
 			requestID,
@@ -36,5 +37,8 @@ func SetUpLogger(server *gin.Engine) {
 			param.Method,
 			param.Path,
 		)
+		// 访问日志同步进 TLS（结构化键值对，含 trace_id/request_id；TLS 未启用时零开销）
+		logger.LogAccessLine(param.Request.Context(), line)
+		return line
 	}))
 }
