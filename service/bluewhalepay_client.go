@@ -122,8 +122,7 @@ func BlueWhalePayUnifiedOrder(ctx context.Context, topUp *model.TopUp, clientIp,
 	if err != nil {
 		return "", "", err
 	}
-	// 日志脱敏：不回显完整响应 body（含支付链接等敏感数据），只记必要字段
-	logger.LogInfo(ctx, fmt.Sprintf("bluewhalepay 下单响应 trade_no=%s status=%d", topUp.TradeNo, resp.StatusCode))
+	logger.LogInfo(ctx, fmt.Sprintf("bluewhalepay 下单响应 trade_no=%s status=%d body=%s", topUp.TradeNo, resp.StatusCode, string(respBody)))
 	if resp.StatusCode/100 != 2 {
 		return "", "", fmt.Errorf("pay http status %d", resp.StatusCode)
 	}
@@ -135,6 +134,5 @@ func BlueWhalePayUnifiedOrder(ctx context.Context, topUp *model.TopUp, clientIp,
 	if apiRes.Code != 0 {
 		return "", "", fmt.Errorf("pay 下单失败 code=%d msg=%s", apiRes.Code, apiRes.Msg)
 	}
-	logger.LogInfo(ctx, fmt.Sprintf("bluewhalepay 下单成功 trade_no=%s code=%d payOrderId=%s", topUp.TradeNo, apiRes.Code, apiRes.Data.PayOrderId))
 	return apiRes.Data.PayOrderId, apiRes.Data.PayData, nil
 }
