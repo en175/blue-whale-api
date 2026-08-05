@@ -174,6 +174,9 @@ var CohereSafetySetting string
 const (
 	RequestIdKey         = "X-Oneapi-Request-Id"
 	UpstreamRequestIdKey = "X-Upstream-Request-Id"
+	// TraceIdKey 跨系统链路标识，与 RequestIdKey 并存、职责分离：
+	// request_id 标识单次网关请求，trace_id 贯穿多系统全链路（透传优先，缺省生成）
+	TraceIdKey = "X-Trace-Id"
 )
 
 const (

@@ -45,6 +45,12 @@ services:
 #      - GOOGLE_ANALYTICS_ID=G-XXXXXXXXXX  # Google Analytics 的测量 ID (Google Analytics Measurement ID)
 #      - UMAMI_WEBSITE_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx  # Umami 网站 ID (Umami Website ID)
 #      - UMAMI_SCRIPT_URL=https://analytics.umami.is/script.js  # Umami 脚本 URL，默认为官方地址 (Umami Script URL, defaults to official URL)
+      # 火山引擎 TLS 日志服务（四项全部配置才启用，异步直写、失败静默降级）
+      # (Volcengine TLS log service; enabled only when all four are set; async write with silent fallback)
+#      - TLS_ENDPOINT=tls-cn-beijing.volces.com  # TLS 服务端点 (TLS endpoint)
+#      - TLS_AK=your-access-key-id  # IAM 用户 AccessKey ID (IAM AccessKey ID)
+#      - TLS_SK=your-access-key-secret  # IAM 用户 AccessKey Secret (IAM AccessKey Secret)
+#      - TLS_TOPIC_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx  # TLS Topic ID (TLS Topic ID)
 
     depends_on:
       - redis

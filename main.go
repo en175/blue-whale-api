@@ -230,6 +230,8 @@ func main() {
 	if err := srv.Shutdown(ctx); err != nil {
 		common.SysError(fmt.Sprintf("server forced to shutdown: %v", err))
 	}
+	// 冲刷 TLS Producer 缓冲的日志后再退出
+	logger.CloseTLSWriter()
 	// 内存中的看板数据保存入库，避免重启丢失未落库数据 (issue #5679)
 	if common.DataExportEnabled {
 		model.SaveQuotaDataCache()
@@ -294,6 +296,10 @@ func InitResources() error {
 	common.InitEnv()
 
 	logger.SetupLogger()
+
+	// 初始化火山引擎 TLS 日志 Producer（读 TLS_ENDPOINT/TLS_AK/TLS_SK/TLS_TOPIC_ID 环境变量，
+	// 未配置则静默禁用，不影响本地日志）
+	logger.InitTLSWriter()
 
 	// Initialize model settings
 	ratio_setting.InitRatioSettings()
