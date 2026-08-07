@@ -123,6 +123,13 @@ Do NOT directly import or call `encoding/json` in business code. `json.RawMessag
 - Avoid hand-written assertion helpers unless they encode a reusable project-specific invariant.
 - When cleaning tests, preserve meaningful regression coverage. If a deleted test covered a real contract indirectly, replace it with a smaller test that asserts that contract directly.
 
+**Logging:** New backend code MUST log through the context-aware `logger` package so that `trace_id` / `request_id` survive into TLS structured logs.
+
+- Use `logger.LogInfo(ctx, ...)`, `logger.LogWarn(ctx, ...)`, `logger.LogError(ctx, ...)` in any code path that has a request context (`*gin.Context` or `context.Context`).
+- Do NOT call `common.SysLog` / `common.SysError` inside functions that carry a request context — their signatures have no ctx, so the log loses `trace_id`/`request_id` (recorded as `SYSTEM`/empty in TLS).
+- `common.SysLog` / `common.SysError` are reserved for context-free system scenarios (startup, config loading, background housekeeping).
+- Do not add new log lines to the known legacy debt: ~128 existing in-request `SysLog`/`SysError` calls were deliberately left untouched (see issue IK7309 and `docs/adr/0002-trace-id-and-volcengine-tls.md`); fix them only on demand, one spot at a time, via a dedicated task.
+
 ### Frontend Rules
 
 - Use `bun` as the preferred package manager and script runner for the frontend (`web/default/`):
