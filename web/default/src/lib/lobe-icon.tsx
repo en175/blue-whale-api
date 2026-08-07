@@ -25,7 +25,50 @@ For commercial licensing, please contact support@quantumnous.com
  * - Chained properties: "OpenAI.Avatar.type={'platform'}"
  * - Size parameter: getLobeIcon("OpenAI", 20)
  */
+import { useState } from 'react'
+
 import * as LobeIcons from '@lobehub/icons'
+
+/**
+ * TOS-hosted colored brand logos.
+ * When the icon name matches a known brand, use the colored logo from TOS
+ * instead of the monochrome React component.
+ */
+const TOS_LOGO_BASE =
+  'https://bluewhale-assets.tos-cn-beijing.volces.com/blue-whale-api/homepage/brand-logos'
+
+const BRAND_LOGO_MAP: Record<string, string> = {
+  openai: `${TOS_LOGO_BASE}/openai.png`,
+  claude: `${TOS_LOGO_BASE}/claude.png`,
+  anthropic: `${TOS_LOGO_BASE}/claude.png`,
+  gemini: `${TOS_LOGO_BASE}/gemini.png`,
+  google: `${TOS_LOGO_BASE}/gemini.png`,
+  deepseek: `${TOS_LOGO_BASE}/deepseek.png`,
+  qwen: `${TOS_LOGO_BASE}/qwen.png`,
+  tongyi: `${TOS_LOGO_BASE}/qwen.png`,
+  doubao: `${TOS_LOGO_BASE}/doubao.png`,
+  bytedance: `${TOS_LOGO_BASE}/doubao.png`,
+  moonshot: `${TOS_LOGO_BASE}/moonshot.png`,
+  kimi: `${TOS_LOGO_BASE}/moonshot.png`,
+  kling: `${TOS_LOGO_BASE}/kling.png`,
+  kuaishou: `${TOS_LOGO_BASE}/kling.png`,
+  zhipu: `${TOS_LOGO_BASE}/zhipu.png`,
+  glm: `${TOS_LOGO_BASE}/zhipu.png`,
+  chatglm: `${TOS_LOGO_BASE}/zhipu.png`,
+  minimax: `${TOS_LOGO_BASE}/minimax.png`,
+  yi: `${TOS_LOGO_BASE}/yi.webp`,
+  hunyuan: `${TOS_LOGO_BASE}/hunyuan.webp`,
+  tencent: `${TOS_LOGO_BASE}/hunyuan.webp`,
+}
+
+/**
+ * Try to resolve a TOS colored logo URL from an icon name.
+ * Returns the URL if found, undefined otherwise.
+ */
+function resolveTosLogo(iconName: string): string | undefined {
+  const key = iconName.toLowerCase().trim()
+  return BRAND_LOGO_MAP[key]
+}
 
 /**
  * Parse a property value from string to appropriate type
@@ -62,43 +105,42 @@ function parseValue(raw: string | undefined | null): string | number | boolean {
 }
 
 /**
- * Get LobeHub icon component by name
- * @param iconName - Icon name/description (e.g., "OpenAI", "OpenAI.Color", "Claude.Avatar")
- * @param size - Icon size (default: 20)
- * @returns Icon component or fallback
- *
- * @example
- * getLobeIcon("OpenAI", 24)
- * getLobeIcon("OpenAI.Color", 20)
- * getLobeIcon("Claude.Avatar.type={'platform'}", 32)
+ * Renders a TOS brand logo image, falling back to the lobehub component
+ * when the remote asset fails to load.
  */
-export function getLobeIcon(
-  iconName: string | undefined | null,
-  size: number = 20
+function BrandLogoImage(props: {
+  src: string
+  alt: string
+  size: number
+  fallback: React.ReactNode
+}) {
+  const [failed, setFailed] = useState(false)
+  if (failed) return <>{props.fallback}</>
+  return (
+    <img
+      src={props.src}
+      alt={props.alt}
+      width={props.size}
+      height={props.size}
+      style={{
+        width: props.size,
+        height: props.size,
+        objectFit: 'contain',
+        flexShrink: 0,
+      }}
+      loading='lazy'
+      onError={() => setFailed(true)}
+    />
+  )
+}
+
+/**
+ * Resolve and render a lobehub icon component from a dotted icon name.
+ */
+function renderLobeComponent(
+  trimmedName: string,
+  size: number
 ): React.ReactNode {
-  if (!iconName || typeof iconName !== 'string') {
-    return (
-      <div
-        className='bg-muted text-muted-foreground flex items-center justify-center rounded-full text-xs font-medium'
-        style={{ width: size, height: size }}
-      >
-        ?
-      </div>
-    )
-  }
-
-  const trimmedName = iconName.trim()
-  if (!trimmedName) {
-    return (
-      <div
-        className='bg-muted text-muted-foreground flex items-center justify-center rounded-full text-xs font-medium'
-        style={{ width: size, height: size }}
-      >
-        ?
-      </div>
-    )
-  }
-
   // Parse component path and chained properties
   const segments = trimmedName.split('.')
   const baseKey = segments[0]
@@ -161,4 +203,60 @@ export function getLobeIcon(
   }
 
   return <IconComponent {...props} />
+}
+
+/**
+ * Get LobeHub icon component by name
+ * @param iconName - Icon name/description (e.g., "OpenAI", "OpenAI.Color", "Claude.Avatar")
+ * @param size - Icon size (default: 20)
+ * @returns Icon component or fallback
+ *
+ * @example
+ * getLobeIcon("OpenAI", 24)
+ * getLobeIcon("OpenAI.Color", 20)
+ * getLobeIcon("Claude.Avatar.type={'platform'}", 32)
+ */
+export function getLobeIcon(
+  iconName: string | undefined | null,
+  size: number = 20
+): React.ReactNode {
+  if (!iconName || typeof iconName !== 'string') {
+    return (
+      <div
+        className='bg-muted text-muted-foreground flex items-center justify-center rounded-full text-xs font-medium'
+        style={{ width: size, height: size }}
+      >
+        ?
+      </div>
+    )
+  }
+
+  const trimmedName = iconName.trim()
+  if (!trimmedName) {
+    return (
+      <div
+        className='bg-muted text-muted-foreground flex items-center justify-center rounded-full text-xs font-medium'
+        style={{ width: size, height: size }}
+      >
+        ?
+      </div>
+    )
+  }
+
+  // Prefer TOS colored brand logos for known vendors; fall back to the
+  // lobehub component if the remote asset fails to load.
+  const baseName = trimmedName.split('.')[0]
+  const tosLogo = resolveTosLogo(baseName)
+  if (tosLogo) {
+    return (
+      <BrandLogoImage
+        src={tosLogo}
+        alt={baseName}
+        size={size}
+        fallback={renderLobeComponent(trimmedName, size)}
+      />
+    )
+  }
+
+  return renderLobeComponent(trimmedName, size)
 }
