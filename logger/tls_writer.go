@@ -87,9 +87,7 @@ func InitTLSWriter() {
 	if tlsContainer == "" {
 		tlsContainer = common.NodeName
 	}
-	// __source__（TLS 保留字段）用实例标识（Docker 下为容器名/ID，本地为主机名），
-	// 与 container 字段（服务名）语义区分，便于分辨同一服务的多实例
-	tlsSource = common.NodeName
+	tlsSource = tlsContainer
 	tlsEnv = os.Getenv("ENV")
 	if tlsEnv == "" {
 		tlsEnv = os.Getenv("NODE_ENV")
