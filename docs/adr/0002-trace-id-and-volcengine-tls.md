@@ -106,3 +106,19 @@ Blue-Whale 已由单服务演化为多系统：
 - **性能**：TLS 写入走异步 Producer，不影响请求链路；失败静默降级，不影响主服务日志。
 - **安全**：AccessKey 走环境变量，不落代码。
 - **检索**：索引只对后续新写入日志生效（TLS 规则：索引修改不回溯旧数据）。
+
+## 决策补记：存量 SysLog/SysError 不做批量改造（2026-08-07，IK7309）
+
+**背景**：接入 TLS 后发现全项目 349 处 `common.SysLog/SysError` 调用中，128 处（37%，其中 SysError 39 处）位于带请求上下文的函数内。这些调用签名无 ctx，日志进 TLS 后 `request_id=SYSTEM`、`trace_id` 为空，无法按链路检索。根因是上游 new-api 在请求路径混用不带 ctx 的 SysLog（历史债务），叠加 Go 无 goroutine-local（MDC）、上下文只能显式传递的语言约束。
+
+**评估**：修复需新增 `SysLogCtx/SysErrorCtx` + hook 升级 + go/ast 精确替换 128 处（参数名/类型不统一，普通 sed 不可行）。行为风险极小（日志本已进 TLS，仅补字段），成本为大量机械改动。
+
+**决策：不修**。理由：
+1. 核心链路（relay 转发、支付下单）已有完整 trace，排障主场景已覆盖；
+2. 这 128 处集中在管理端/渠道适配层的零散日志，非排障关键路径；
+3. 改动量与收益不成比例。
+
+**配套约定**（已写入 AGENTS.md Backend Rules / Logging）：
+- 新增代码一律使用 `logger.Log*(ctx, ...)`；禁止在带请求上下文的函数里调用 `SysLog/SysError`；
+- `SysLog/SysError` 仅限无请求上下文的系统级场景；
+- 存量债务按需单点改（排障确实需要某处 trace_id 时，提独立小任务）。
