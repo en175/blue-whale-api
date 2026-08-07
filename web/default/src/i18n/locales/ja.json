@@ -2269,6 +2269,7 @@
     "If you provide generative AI services to the public in mainland China, you will fulfill legal obligations including filing, security assessment, content safety, complaint handling, generated content labeling, log retention, and personal information protection.": "中国本土で一般向けに生成 AI サービスを提供する場合、届出、セキュリティ評価、コンテンツ安全、苦情対応、生成コンテンツのラベル表示、ログ保存、個人情報保護などの法的義務を履行します。",
     "Ignore": "無視",
     "Ignored upstream models": "無視する上流モデル",
+    "Illustration": "参考表示",
     "Image": "画像",
     "Image Generation": "画像生成",
     "Image In": "画像入力",
