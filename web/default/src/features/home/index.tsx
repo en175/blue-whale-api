@@ -16,7 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 
 import { PublicLayout } from '@/components/layout'
@@ -26,8 +27,52 @@ import { useTheme } from '@/context/theme-provider'
 import { isLikelyHtml } from '@/lib/content-format'
 import { useAuthStore } from '@/stores/auth-store'
 
-import { CTA, Features, Hero, HowItWorks, Stats } from './components'
+import { CTA, Features, Hero, HowItWorks, ModelLineup, ModelLineupWall, Stats } from './components'
 import { useHomePageContent } from './hooks'
+
+/**
+ * Renders an admin-authored custom homepage (HTML) and injects the data-driven
+ * model lineup into any `<div data-home-model-lineup></div>` placeholder via a
+ * portal. The custom HTML is sandboxed into a shadow root by HtmlContent
+ * (isolated variant), so the placeholder is located through that shadow root.
+ * A portal (rather than a detached createRoot) keeps router / query contexts
+ * available to the injected lineup.
+ */
+function CustomHomeHtml({ content }: { content: string }) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [lineupSlots, setLineupSlots] = useState<Element[]>([])
+
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+    const host = container.querySelector<HTMLElement>('.custom-home-content')
+    const shadow = host?.shadowRoot
+    if (!shadow) {
+      setLineupSlots([])
+      return
+    }
+    const slots = shadow.querySelectorAll('[data-home-model-lineup]')
+    // Clear any static fallback the admin template nested inside the placeholder
+    // before the portal renders the real wall; React only manages its own portal
+    // children, so clearing the slot here is safe.
+    slots.forEach((slot) => slot.replaceChildren())
+    setLineupSlots([...slots])
+  }, [content])
+
+  return (
+    <div ref={containerRef}>
+      <RichContent
+        mode='html'
+        htmlVariant='isolated'
+        content={content}
+        className='custom-home-content'
+      />
+      {lineupSlots.map((slot) =>
+        createPortal(<ModelLineupWall key={slot} />, slot)
+      )}
+    </div>
+  )
+}
 
 export function Home() {
   const { i18n, t } = useTranslation()
@@ -97,12 +142,7 @@ export function Home() {
     if (contentIsHtml) {
       return (
         <PublicLayout showMainContainer={false}>
-          <RichContent
-            mode='html'
-            htmlVariant='isolated'
-            content={content}
-            className='custom-home-content'
-          />
+          <CustomHomeHtml content={content} />
         </PublicLayout>
       )
     }
@@ -125,6 +165,7 @@ export function Home() {
       <Hero isAuthenticated={isAuthenticated} />
       <Stats />
       <Features />
+      <ModelLineup />
       <HowItWorks />
       <CTA isAuthenticated={isAuthenticated} />
       <Footer />
