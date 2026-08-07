@@ -27,6 +27,7 @@ import { ProfileDropdown } from '@/components/profile-dropdown'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { SignInDialog } from '@/features/auth/sign-in/components/sign-in-dialog'
 import { useNotifications } from '@/hooks/use-notifications'
 import { useSystemConfig } from '@/hooks/use-system-config'
 import { useTopNavLinks } from '@/hooks/use-top-nav-links'
@@ -77,6 +78,7 @@ export function PublicHeader(props: PublicHeaderProps) {
   const navigate = useNavigate()
   const [scrolled, setScrolled] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [signInOpen, setSignInOpen] = useState(false)
   const [authPromptTarget, setAuthPromptTarget] =
     useState<AuthPromptTarget | null>(null)
   const [authPromptSecondsLeft, setAuthPromptSecondsLeft] =
@@ -209,7 +211,10 @@ export function PublicHeader(props: PublicHeaderProps) {
                   />
                 )}
               </div>
-              <span className='text-sm font-semibold tracking-tight'>
+              <span className={cn(
+                'text-sm font-semibold tracking-tight transition-colors duration-500',
+                scrolled ? 'text-foreground' : 'text-white'
+              )}>
                 {loading ? <Skeleton className='h-4 w-16' /> : displaySiteName}
               </span>
             </Link>
@@ -229,7 +234,10 @@ export function PublicHeader(props: PublicHeaderProps) {
                       tabIndex={link.disabled ? -1 : undefined}
                       onClick={(event) => handleNavLinkClick(event, link)}
                       className={cn(
-                        'text-muted-foreground hover:text-foreground rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors duration-200',
+                        'rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors duration-500',
+                        scrolled
+                          ? 'text-muted-foreground hover:text-foreground'
+                          : 'text-white/70 hover:text-white',
                         link.disabled && 'pointer-events-none opacity-50'
                       )}
                     >
@@ -244,10 +252,12 @@ export function PublicHeader(props: PublicHeaderProps) {
                     disabled={link.disabled}
                     onClick={(event) => handleNavLinkClick(event, link)}
                     className={cn(
-                      'rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors duration-200',
+                      'rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors duration-500',
                       isActive
-                        ? 'text-foreground'
-                        : 'text-muted-foreground hover:text-foreground',
+                        ? scrolled ? 'text-foreground' : 'text-white'
+                        : scrolled
+                          ? 'text-muted-foreground hover:text-foreground'
+                          : 'text-white/70 hover:text-white',
                       link.disabled && 'pointer-events-none opacity-50'
                     )}
                   >
@@ -259,9 +269,10 @@ export function PublicHeader(props: PublicHeaderProps) {
               {(showLanguageSwitcher ||
                 showThemeSwitch ||
                 showNotifications) && (
-                <div className='bg-border/40 mx-2 h-4 w-px' />
+                <div className={cn('mx-2 h-4 w-px', scrolled ? 'bg-border/40' : 'bg-white/20')} />
               )}
 
+              <div className={cn('flex items-center gap-0.5 transition-colors duration-500', scrolled ? '' : '[&_button]:!text-white [&_a]:!text-white')}>
               {showLanguageSwitcher && <LanguageSwitcher />}
               {showThemeSwitch && <ThemeSwitch />}
               {showNotifications && (
@@ -276,10 +287,11 @@ export function PublicHeader(props: PublicHeaderProps) {
                   loading={notifications.loading}
                 />
               )}
+              </div>
 
               {showAuthButtons && (
                 <>
-                  <div className='bg-border/40 mx-1 h-4 w-px' />
+                  <div className={cn('mx-1 h-4 w-px', scrolled ? 'bg-border/40' : 'bg-white/20')} />
                   {loading ? (
                     <Skeleton className='h-8 w-20 rounded-lg' />
                   ) : isAuthenticated ? (
@@ -288,7 +300,7 @@ export function PublicHeader(props: PublicHeaderProps) {
                     <Button
                       size='sm'
                       className='h-8 rounded-lg px-3.5 text-xs font-medium'
-                      render={<Link to='/sign-in' />}
+                      onClick={() => setSignInOpen(true)}
                     >
                       {t('Sign in')}
                     </Button>
@@ -307,7 +319,7 @@ export function PublicHeader(props: PublicHeaderProps) {
                 type='button'
                 variant='ghost'
                 size='icon'
-                className='size-9'
+                className={cn('size-9 transition-colors duration-500', scrolled ? '' : '!text-white')}
                 onClick={() => setMobileOpen((v) => !v)}
                 aria-label={t('Toggle navigation menu')}
               >
@@ -402,15 +414,26 @@ export function PublicHeader(props: PublicHeaderProps) {
             )}
             style={{ transitionDelay: mobileOpen ? '250ms' : '0ms' }}
           >
-            {showAuthButtons && (
-              <Link
-                to={isAuthenticated ? '/dashboard' : '/sign-in'}
-                onClick={() => setMobileOpen(false)}
-                className='bg-foreground text-background inline-flex h-10 items-center justify-center rounded-lg text-sm font-medium transition-opacity hover:opacity-90 active:opacity-80'
-              >
-                {isAuthenticated ? t('Go to Dashboard') : t('Sign in')}
-              </Link>
-            )}
+            {showAuthButtons &&
+              (isAuthenticated ? (
+                <Link
+                  to='/dashboard'
+                  onClick={() => setMobileOpen(false)}
+                  className='bg-foreground text-background inline-flex h-10 w-full items-center justify-center rounded-lg text-sm font-medium transition-opacity hover:opacity-90 active:opacity-80'
+                >
+                  {t('Go to Dashboard')}
+                </Link>
+              ) : (
+                <button
+                  onClick={() => {
+                    setMobileOpen(false)
+                    setSignInOpen(true)
+                  }}
+                  className='bg-foreground text-background inline-flex h-10 w-full items-center justify-center rounded-lg text-sm font-medium transition-opacity hover:opacity-90 active:opacity-80'
+                >
+                  {t('Sign in')}
+                </button>
+              ))}
           </div>
         </div>
       </div>
@@ -443,6 +466,8 @@ export function PublicHeader(props: PublicHeaderProps) {
           })}
         </div>
       </Dialog>
+
+      <SignInDialog open={signInOpen} onOpenChange={setSignInOpen} />
     </>
   )
 }

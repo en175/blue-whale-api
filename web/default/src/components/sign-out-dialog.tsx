@@ -16,6 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useNavigate } from '@tanstack/react-router'
+import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -31,6 +33,8 @@ interface SignOutDialogProps {
 export function SignOutDialog({ open, onOpenChange }: SignOutDialogProps) {
   const { t } = useTranslation()
   const { auth } = useAuthStore()
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
 
   const handleSignOut = async () => {
     try {
@@ -47,10 +51,10 @@ export function SignOutDialog({ open, onOpenChange }: SignOutDialogProps) {
       /* empty */
     }
     toast.success(t('Signed out'))
-    // Refresh the page to clear all state and update UI
-    if (typeof window !== 'undefined') {
-      window.location.reload()
-    }
+    // Clear cached private data (logs, usage stats, notifications) before leaving
+    queryClient.clear()
+    // Navigate to home page instead of reloading (avoids redirect to /sign-in)
+    navigate({ to: '/', replace: true })
   }
 
   return (
