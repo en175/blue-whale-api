@@ -72,11 +72,11 @@ export function useTopNavLinks(): TopNavLink[] {
     links.push({ title: t('Console'), href: '/dashboard' })
   }
 
-  // Pricing
+  // Pricing -> 视频生成（IK7JPE：按视频生成定位更名，指向首页；
+  // 首页自定义内容在 shadow DOM 内渲染，URL 锚点无法定位，故不用页内锚点）
   const pricing = modules?.pricing
   if (pricing && typeof pricing === 'object' && pricing.enabled) {
-    const requiresAuth = pricing.requireAuth && !isAuthed
-    links.push({ title: t('Model Square'), href: '/pricing', requiresAuth })
+    links.push({ title: t('Video Generation'), href: '/' })
   }
 
   // Rankings
