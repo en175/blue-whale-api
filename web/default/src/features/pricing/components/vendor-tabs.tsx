@@ -41,7 +41,12 @@ const VENDOR_CATALOG: VendorCatalogItem[] = [
     key: 'doubao',
     name: '豆包',
     fallbackIcon: 'Doubao.Color',
-    match: (m) => /^doubao/i.test(m.model_name),
+    // IK7SVF：seedance-2.0-ep 等豆包系模型名不以 "doubao" 开头，
+    // 须同时按 vendor 名（"字节跳动"/"豆包"/"火山引擎"/"bytedance"/"doubao"）兜底匹配，
+    // 否则 DIRECTORY 视图会把它静默丢弃、页面上看不到任何厂商 tab。
+    match: (m, v) =>
+      /^doubao/i.test(m.model_name) ||
+      /字节跳动|豆包|火山|bytedance|doubao/i.test(v?.name || ''),
   },
   {
     key: 'claude',
