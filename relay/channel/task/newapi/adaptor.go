@@ -33,12 +33,12 @@ type taskResultEnvelope struct {
 	Code string `json:"code"`
 	Msg  string `json:"message"`
 	Data struct {
-		TaskID                string `json:"task_id"`
-		Status                string `json:"status"`
+		TaskID                string  `json:"task_id"`
+		Status                string  `json:"status"`
 		UsageCompletionTokens flexInt `json:"usage_completion_tokens"`
 		UsageTotalTokens      flexInt `json:"usage_total_tokens"`
-		ResultURL             string `json:"result_url"`
-		FailReason            string `json:"fail_reason"`
+		ResultURL             string  `json:"result_url"`
+		FailReason            string  `json:"fail_reason"`
 	} `json:"data"`
 }
 
@@ -107,6 +107,18 @@ func (a *TaskAdaptor) Init(info *relaycommon.RelayInfo) {
 // ValidateRequestAndSetAction 接受 POST /v1/video/generations 的 JSON 请求。
 func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycommon.RelayInfo) (taskErr *dto.TaskError) {
 	return relaycommon.ValidateBasicTaskRequest(c, info, constant.TaskActionGenerate)
+}
+
+// EstimateBilling 检测透传请求是否含视频输入与输出分辨率，返回档位价相对基准价
+// 的计费 OtherRatio。本项目与上游同为 new-api 二开，入参契约一致（metadata.content
+// 的 video_url 条目 + metadata.resolution），与豆包直连渠道同源同规则；
+// 管理员通过 video_tier_pricing.price_table 为任意模型配置各档位价格。
+func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInfo) map[string]float64 {
+	req, err := relaycommon.GetTaskRequest(c)
+	if err != nil {
+		return nil
+	}
+	return taskcommon.EstimateVideoTierBilling(info, &req)
 }
 
 // BuildRequestURL submit 走原生端点（核心修复：不再打 /v1/videos）。
