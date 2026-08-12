@@ -186,7 +186,7 @@ export function Hero() {
           )}
         >
           <Image
-            src="https://bluewhale-assets.tos-cn-beijing.volces.com/blue-whale-api/blue_whale.svg"
+            src="https://bluewhale-assets.tos-cn-beijing.volces.com/blue-whale-api/blue_whale_v2.svg"
             alt="Blue Whale API"
             width={288}
             height={288}
