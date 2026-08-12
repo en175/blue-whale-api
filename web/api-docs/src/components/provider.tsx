@@ -11,5 +11,9 @@ export function Provider({
   i18n: Parameters<typeof RootProvider>[0]['i18n'];
   lang?: string;
 }) {
-  return <RootProvider i18n={i18n}>{children}</RootProvider>;
+  return (
+    <RootProvider i18n={i18n} theme={{ defaultTheme: 'dark' }}>
+      {children}
+    </RootProvider>
+  );
 }
