@@ -391,6 +391,9 @@ func PreConsumeTokenQuota(relayInfo *relaycommon.RelayInfo, quota int) error {
 	if relayInfo.IsPlayground {
 		return nil
 	}
+	if relayInfo.RunCapabilityBilling {
+		return nil
+	}
 	//if relayInfo.TokenUnlimited {
 	//	return nil
 	//}
@@ -434,7 +437,7 @@ func PostConsumeQuota(relayInfo *relaycommon.RelayInfo, quota int, preConsumedQu
 		}
 	}
 
-	if !relayInfo.IsPlayground {
+	if !relayInfo.IsPlayground && !relayInfo.RunCapabilityBilling {
 		if quota > 0 {
 			err = model.DecreaseTokenQuota(relayInfo.TokenId, relayInfo.TokenKey, quota)
 		} else {
