@@ -159,6 +159,10 @@ func appendBillingInfo(relayInfo *relaycommon.RelayInfo, other map[string]interf
 	if relayInfo.BillingSource != "" {
 		other["billing_source"] = relayInfo.BillingSource
 	}
+	if relayInfo.RunCapabilityBilling {
+		other["billing_authority"] = "run_capability"
+		other["run_capability_id"] = relayInfo.RunCapabilityId
+	}
 	if relayInfo.UserSetting.BillingPreference != "" {
 		other["billing_preference"] = relayInfo.UserSetting.BillingPreference
 	}
