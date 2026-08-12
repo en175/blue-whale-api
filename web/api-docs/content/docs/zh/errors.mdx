@@ -1,0 +1,34 @@
+---
+title: 错误码
+description: 统一错误响应格式与常见错误码
+---
+
+# 错误码
+
+## 错误响应格式
+
+所有错误使用统一信封：
+
+```json
+{ "code": "invalid_request", "message": "prompt is required", "data": null }
+```
+
+| 字段 | 说明 |
+| --- | --- |
+| `code` | 错误码（机器可读） |
+| `message` | 错误描述（人类可读） |
+| `data` | 附加数据，通常为 null |
+
+## 常见错误码
+
+| HTTP | code | 说明 | 处理建议 |
+| --- | --- | --- | --- |
+| 400 | `invalid_request` | 参数缺失或非法（如 prompt 为空） | 检查请求参数 |
+| 400 | `task_not_exist` | 任务不存在 | 检查 task_id |
+| 401 | `invalid_api_key` | Key 缺失/无效/被禁用 | 检查 Authorization 头与 Key 状态 |
+| 429 | 限流 | 超出调用频率限制 | 降低频率，见[限流说明](./rate-limits) |
+| 500 | `get_task_failed` | 任务查询失败 | 重试，持续出现联系支持 |
+| 500 | `fail_to_fetch_task` | 上游请求失败 | 重试 |
+| 501 | `not_implemented` | 不支持的操作 | 检查端点与模型 |
+
+任务级失败（生成失败）通过查询接口的 `status=FAILURE` 与 `fail_reason` 字段体现，见[查询任务](./video/query)。

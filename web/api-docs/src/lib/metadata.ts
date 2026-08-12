@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 
 const logoUrl =
-  'https://bluewhale-assets.tos-cn-beijing.volces.com/blue-whale-api/blue_whale.svg';
+  'https://bluewhale-assets.tos-cn-beijing.volces.com/blue-whale-api/blue_whale_v2.svg';
 
 export function createMetadata(override: Metadata): Metadata {
   return {

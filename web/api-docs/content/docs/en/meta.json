@@ -1,4 +1,13 @@
 {
-  "title": "Documentation",
-  "pages": ["api", "apps"]
+  "title": "Docs",
+  "pages": [
+    "index",
+    "quickstart",
+    "authentication",
+    "models",
+    "video",
+    "errors",
+    "rate-limits",
+    "faq"
+  ]
 }

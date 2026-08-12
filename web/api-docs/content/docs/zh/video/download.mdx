@@ -1,0 +1,46 @@
+---
+title: 下载视频
+description: 下载生成完成的视频文件
+---
+
+# 下载视频
+
+任务生成完成后，有两种方式获取视频：调用**下载端点**由网关代理返回，或从查询响应的 `result_url` 直接获取视频地址。
+
+## 方式一：下载端点（推荐）
+
+**GET** `/v1/videos/{task_id}/content`
+
+下载已完成任务的视频文件（MP4 二进制流）。仅当任务状态为 `SUCCESS` 时可下载。
+
+### 路径参数
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `task_id` | string | 状态为 SUCCESS 的任务 ID |
+
+### 示例
+
+```bash
+BASE_URL="https://api.bluewhale.ai"   # 占位示意，正式域名以官方公告为准
+
+curl "$BASE_URL/v1/videos/task_9f3a2b7c/content" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -o result.mp4
+```
+
+## 方式二：使用查询响应中的 result_url
+
+[查询任务](./query)在任务成功后会在响应的 `data.result_url` 字段返回视频地址，可直接对该地址发起 GET 下载：
+
+```bash
+curl "<result_url>" -o result.mp4
+```
+
+⚠️ `result_url` 的地址形态（网关转存地址或上游直链）与有效期**以官方确认为准**，请及时下载保存。
+
+## 说明
+
+- 两种方式得到的视频一致；下载端点由网关代理，无需关心地址来源
+- 任务未完成时调用下载端点返回 `400`，并提示当前状态
+- 结果保留时长以官方确认为准，请及时下载保存

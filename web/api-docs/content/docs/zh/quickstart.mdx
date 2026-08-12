@@ -1,0 +1,61 @@
+---
+title: 快速开始
+description: 从注册到第一条生成视频，5 分钟跑通全流程
+---
+
+# 快速开始
+
+从注册到拿到第一条生成视频，全程约 5 分钟。
+
+## 1. 获取 API Key
+
+1. 注册并登录控制台
+2. 进入「令牌」页面，创建一个新的 API Key（形如 `sk-xxxxxx`）
+3. 妥善保存——Key 只在创建时完整展示一次
+
+## 2. 提交生成任务
+
+```bash
+BASE_URL="https://api.bluewhale.ai"   # 占位示意，正式域名以官方公告为准
+
+curl "$BASE_URL/v1/video/generations" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "seedance-2.0-whitelist",
+    "prompt": "蓝鲸跃出海面，慢镜头，电影质感",
+    "size": "720p",
+    "duration": 5
+  }'
+```
+
+响应中的 `data.task_id` 就是这次任务的唯一标识：
+
+```json
+{ "code": "success", "message": "", "data": { "task_id": "task_9f3a2b7c" } }
+```
+
+## 3. 轮询任务状态
+
+视频生成为异步任务，建议每 5–10 秒轮询一次：
+
+```bash
+curl "$BASE_URL/v1/video/generations/task_9f3a2b7c" \
+  -H "Authorization: Bearer sk-YOUR-KEY"
+```
+
+当 `data.status` 变为 `SUCCESS` 时，生成完成。详见[查询任务](./video/query)。
+
+## 4. 下载视频
+
+```bash
+curl "$BASE_URL/v1/videos/task_9f3a2b7c/content" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -o result.mp4
+```
+
+## 下一步
+
+- [鉴权](./authentication)：API Key 的使用与生命周期
+- [模型列表](./models)：seedance-2.0-whitelist 支持的完整参数
+- [错误码](./errors)：遇到问题时查这里

@@ -7,8 +7,9 @@ import type { LinkItemType } from 'fumadocs-ui/layouts/docs';
 export const linkItems: LinkItemType[] = [];
 
 export const logoUrl =
-  'https://bluewhale-assets.tos-cn-beijing.volces.com/blue-whale-api/blue_whale.svg';
+  'https://bluewhale-assets.tos-cn-beijing.volces.com/blue-whale-api/blue_whale_v2.svg';
 
+// 磨边定稿版为正方形画幅（384×384），按正方形档位适配，不裁剪
 export const logo = (
   <Image
     alt="Blue Whale API"

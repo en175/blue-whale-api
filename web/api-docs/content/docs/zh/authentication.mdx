@@ -1,0 +1,32 @@
+---
+title: 鉴权
+description: 使用 API Key 完成请求鉴权
+---
+
+# 鉴权
+
+所有 API 请求使用 **Bearer Token** 鉴权。
+
+## 请求头格式
+
+```
+Authorization: Bearer sk-YOUR-KEY
+```
+
+`sk-YOUR-KEY` 替换为你在控制台创建的 API Key。
+
+## Key 的创建与生命周期
+
+- 在控制台「令牌」页面创建，可创建多个 Key 分别用于不同环境
+- Key 支持随时禁用与删除；删除后立即失效
+- 请勿在浏览器、客户端包或公开代码仓库中硬编码真实 Key
+
+## 鉴权失败
+
+Key 缺失、无效或被禁用时返回 `401`：
+
+```json
+{ "code": "invalid_api_key", "message": "Invalid API key", "data": null }
+```
+
+完整错误码见[错误码](./errors)。
