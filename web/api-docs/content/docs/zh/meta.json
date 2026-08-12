@@ -1,4 +1,13 @@
 {
   "title": "文档",
-  "pages": ["api", "apps"]
+  "pages": [
+    "index",
+    "quickstart",
+    "authentication",
+    "models",
+    "video",
+    "errors",
+    "rate-limits",
+    "faq"
+  ]
 }
