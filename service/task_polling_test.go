@@ -13,6 +13,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/relay/channel/task/taskcommon"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/stretchr/testify/assert"
@@ -330,4 +331,86 @@ func TestUpdateVideoTasksMixedChannelSleepSettings(t *testing.T) {
 
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	assert.ElementsMatch(t, []string{"upstream_sleepy_1", "upstream_fast_1", "upstream_fast_2"}, adaptor.fetchedTaskIDs())
+}
+
+// taskPollingResultURLAdaptor 模拟 newapi 上游信封，并实现 TaskResultURLExtractor。
+// service 包不能反向导入 relay/channel/task/newapi（循环依赖），故在测试内
+// 实现等价提取逻辑，验证轮询循环对钩子的接线。
+type taskPollingResultURLAdaptor struct {
+	body string
+}
+
+func (a *taskPollingResultURLAdaptor) Init(_ *relaycommon.RelayInfo) {}
+
+func (a *taskPollingResultURLAdaptor) FetchTask(_ string, _ string, _ map[string]any, _ string) (*http.Response, error) {
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(bytes.NewReader([]byte(a.body))),
+	}, nil
+}
+
+func (a *taskPollingResultURLAdaptor) ParseTaskResult([]byte) (*relaycommon.TaskInfo, error) {
+	return &relaycommon.TaskInfo{Status: model.TaskStatusInProgress}, nil
+}
+
+func (a *taskPollingResultURLAdaptor) AdjustBillingOnComplete(_ *model.Task, _ *relaycommon.TaskInfo) int {
+	return 0
+}
+
+func (a *taskPollingResultURLAdaptor) ExtractTaskResultURL(body []byte) string {
+	var env struct {
+		Data struct {
+			ResultURL string `json:"result_url"`
+		} `json:"data"`
+	}
+	if err := common.Unmarshal(body, &env); err != nil {
+		return ""
+	}
+	return env.Data.ResultURL
+}
+
+func runResultURLPolling(t *testing.T, channelID int, publicID string, upstreamID string, body string) *model.Task {
+	t.Helper()
+	seedTaskPollingChannel(t, channelID, true)
+	task := seedPollingTask(t, channelID, publicID, upstreamID)
+
+	adaptor := &taskPollingResultURLAdaptor{body: body}
+	previousFactory := GetTaskAdaptorFunc
+	GetTaskAdaptorFunc = func(constant.TaskPlatform) TaskPollingAdaptor { return adaptor }
+	t.Cleanup(func() { GetTaskAdaptorFunc = previousFactory })
+
+	require.NoError(t, UpdateVideoTasks(context.Background(), constant.TaskPlatform("newapi"), map[int][]string{
+		channelID: {task.GetUpstreamTaskID()},
+	}, map[string]*model.Task{
+		task.GetUpstreamTaskID(): task,
+	}))
+
+	var got model.Task
+	require.NoError(t, model.DB.Where("task_id = ?", task.TaskID).First(&got).Error)
+	return &got
+}
+
+// TestUpdateVideoTasksResultURLPassthrough newapi 直链透传回归：SUCCESS 信封携带
+// result_url 时，轮询后必须落库为上游直链（try-1 曾把该字段丢弃、错误回退本网关
+// 代理地址）。
+func TestUpdateVideoTasksResultURLPassthrough(t *testing.T) {
+	truncate(t)
+
+	got := runResultURLPolling(t, 401, "task_public_url", "upstream_url",
+		`{"code":"success","message":"","data":{"task_id":"upstream_url","status":"SUCCESS","result_url":"https://upstream.example.com/video.mp4"}}`)
+
+	assert.Equal(t, model.TaskStatus(model.TaskStatusSuccess), got.Status)
+	assert.Equal(t, "https://upstream.example.com/video.mp4", got.PrivateData.ResultURL)
+}
+
+// TestUpdateVideoTasksResultURLFallbackProxy SUCCESS 信封无 result_url 时保持既有
+// 行为：回退本网关代理地址。
+func TestUpdateVideoTasksResultURLFallbackProxy(t *testing.T) {
+	truncate(t)
+
+	got := runResultURLPolling(t, 402, "task_public_nourl", "upstream_nourl",
+		`{"code":"success","message":"","data":{"task_id":"upstream_nourl","status":"SUCCESS"}}`)
+
+	assert.Equal(t, model.TaskStatus(model.TaskStatusSuccess), got.Status)
+	assert.Equal(t, taskcommon.BuildProxyURL("task_public_nourl"), got.PrivateData.ResultURL)
 }

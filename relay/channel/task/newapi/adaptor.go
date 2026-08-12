@@ -221,7 +221,9 @@ func (a *TaskAdaptor) GetChannelName() string {
 
 // ParseTaskResult 解析原生端点轮询信封。
 // 注意：service/task_polling.go 的 try-1 会把 {code:"success",data} 信封抢先解析进
-// model.Task 并成功，从而跳过本方法（model.Task 无 usage_*_token 字段，token 在 try-1 被丢弃）。
+// model.Task 并成功，从而跳过本方法（model.Task 无 usage_*_token / result_url 字段，
+// 二者在 try-1 被丢弃：token 由 AdjustBillingOnComplete 从 task.Data 补救，
+// result_url 由 ExtractTaskResultURL 钩子取回）。
 // 本方法作为 try-1 失败时的兜底（如上游返回非信封错误体），并保持状态映射自洽。
 func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, error) {
 	var env taskResultEnvelope
@@ -262,6 +264,18 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 	}
 
 	return taskResult, nil
+}
+
+// ExtractTaskResultURL 实现 service.TaskResultURLExtractor：try-1 把信封解析进
+// model.Task 时 result_url 被丢弃（model.Task 无此字段），此处从原始信封取回
+// 上游真实结果 URL，使轮询 SUCCESS 分支存储上游直链（直链透传），而非回退
+// 本网关代理地址。解析失败或无 result_url 时返回空串，交由现有分支处理。
+func (a *TaskAdaptor) ExtractTaskResultURL(respBody []byte) string {
+	var env taskResultEnvelope
+	if err := common.Unmarshal(respBody, &env); err != nil {
+		return ""
+	}
+	return env.Data.ResultURL
 }
 
 // AdjustBillingOnComplete 从轮询阶段已存入 task.Data 的完整 new-api 信封提取真实 token，

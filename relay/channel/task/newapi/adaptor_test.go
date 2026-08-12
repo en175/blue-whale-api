@@ -20,9 +20,11 @@ import (
 const successEnvelope = `{"code":"success","message":"","data":{"task_id":"task_rzOLuUKw2SHCTfg9egpisd9UKcEYWPmo","status":"SUCCESS","usage_completion_tokens":108900,"usage_total_tokens":108900,"usage_reported":true,"result_url":"https://example.volces.com/seedance.mp4","quota":4083750}}`
 
 // 注意：生产 happy path 下 task_polling.go 的 try-1 会把 {code:"success",data} 信封
-// 抢先解析进 model.Task 并跳过 ParseTaskResult，故真实 token 提取走 AdjustBillingOnComplete
-// （见下方 TestAdjustBillingOnComplete_*）。以下 ParseTaskResult 用例覆盖的是 try-1 失败
-// （如上游返回非信封错误体）时的兜底路径，保持状态映射与 token 提取自洽。
+// 抢先解析进 model.Task 并跳过 ParseTaskResult。try-1 丢弃 model.Task 没有的字段：
+// token 走 AdjustBillingOnComplete 从 task.Data 补救（见下方 TestAdjustBillingOnComplete_*），
+// result_url 走 ExtractTaskResultURL 钩子取回（见下方 TestExtractTaskResultURL_*），
+// 实现直链透传。以下 ParseTaskResult 用例覆盖的是 try-1 失败（如上游返回非信封错误体）
+// 时的兜底路径，保持状态映射与 token 提取自洽。
 
 func TestParseTaskResult_Success(t *testing.T) {
 	a := &TaskAdaptor{}
@@ -97,6 +99,25 @@ func TestAdjustBillingOnComplete_NoTokenKeepsPrecharge(t *testing.T) {
 	taskResult := &relaycommon.TaskInfo{}
 	assert.Equal(t, 0, a.AdjustBillingOnComplete(task, taskResult))
 	assert.Equal(t, 0, taskResult.TotalTokens, "无 token 不应触发重算")
+}
+
+// TestExtractTaskResultURL_Success 生产 happy path 承重：try-1 丢弃 result_url 后，
+// 轮询经此钩子取回上游直链，实现直链透传（不再回退本网关代理地址）。
+func TestExtractTaskResultURL_Success(t *testing.T) {
+	a := &TaskAdaptor{}
+	assert.Equal(t, "https://example.volces.com/seedance.mp4", a.ExtractTaskResultURL([]byte(successEnvelope)))
+}
+
+// TestExtractTaskResultURL_NoURL 信封无 result_url 时返回空串，交由现有分支回退代理地址。
+func TestExtractTaskResultURL_NoURL(t *testing.T) {
+	a := &TaskAdaptor{}
+	assert.Equal(t, "", a.ExtractTaskResultURL([]byte(`{"code":"success","data":{"status":"SUCCESS"}}`)))
+}
+
+// TestExtractTaskResultURL_Malformed 畸形响应不得 panic，返回空串走兜底。
+func TestExtractTaskResultURL_Malformed(t *testing.T) {
+	a := &TaskAdaptor{}
+	assert.Equal(t, "", a.ExtractTaskResultURL([]byte(`not json`)))
 }
 
 // newSubmitCtx 构造一个可写响应的 gin 测试上下文（DoResponse 会 c.JSON）。
