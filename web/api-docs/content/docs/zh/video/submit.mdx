@@ -1,0 +1,60 @@
+---
+title: 提交任务
+description: 提交视频生成任务，获取 task_id
+---
+
+# 提交任务
+
+**POST** `/v1/video/generations`
+
+提交一次视频生成任务。接口立即返回 `task_id`，生成异步进行，通过[查询任务](./query)跟进进度。
+
+## 请求参数
+
+| 字段 | 类型 | 必填 | 默认 | 说明 |
+| --- | --- | --- | --- | --- |
+| `prompt` | string | 是 | — | 视频内容描述 |
+| `model` | string | 是 | — | 固定传 `seedance-2.0-whitelist` |
+| `size` | string | 否 | 720p | 分辨率：480p / 720p / 1080p |
+| `duration` | integer | 否 | 5 | 时长（秒），4–15，步长 1 |
+| `image` | string | 否 | — | 图生视频首帧图 URL（与 `images` 二选一） |
+| `images` | string[] | 否 | — | 图片 URL 列表 |
+| `input_reference` | string | 否 | — | 参考图 URL |
+| `metadata` | object | 否 | — | 透传扩展字段 |
+
+## 示例
+
+```bash
+BASE_URL="https://api.bluewhale.ai"   # 占位示意，正式域名以官方公告为准
+
+curl "$BASE_URL/v1/video/generations" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "seedance-2.0-whitelist",
+    "prompt": "蓝鲸跃出海面，慢镜头，电影质感",
+    "size": "720p",
+    "duration": 5
+  }'
+```
+
+## 响应
+
+```json
+{
+  "code": "success",
+  "message": "",
+  "data": {
+    "task_id": "task_9f3a2b7c",
+    "status": "QUEUED"
+  }
+}
+```
+
+记下 `data.task_id`，用它查询进度与下载结果。
+
+## 相关文档
+
+- [查询任务](./query)
+- [下载视频](./download)
+- [错误码](../errors)

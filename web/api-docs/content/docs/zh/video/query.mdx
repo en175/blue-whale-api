@@ -1,0 +1,58 @@
+---
+title: 查询任务
+description: 轮询任务状态，了解生成进度
+---
+
+# 查询任务
+
+**GET** `/v1/video/generations/{task_id}`
+
+查询指定任务的当前状态。视频生成为异步任务，**建议每 5–10 秒轮询一次**。
+
+## 路径参数
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `task_id` | string | 提交任务时返回的任务 ID |
+
+## 示例
+
+```bash
+BASE_URL="https://api.bluewhale.ai"   # 占位示意，正式域名以官方公告为准
+
+curl "$BASE_URL/v1/video/generations/task_9f3a2b7c" \
+  -H "Authorization: Bearer sk-YOUR-KEY"
+```
+
+## 任务状态机
+
+| status | 含义 | 说明 |
+| --- | --- | --- |
+| `SUBMITTED` / `QUEUED` | 排队中 | 任务已接收，等待调度 |
+| `IN_PROGRESS` | 处理中 | 正在生成，继续轮询 |
+| `SUCCESS` | 已完成 | 可[下载视频](./download) |
+| `FAILURE` | 失败 | 查看 `fail_reason` 了解原因 |
+| `UNKNOWN` | 未知 | 重试查询，持续出现请联系支持 |
+
+状态流转：提交 → `QUEUED` → `IN_PROGRESS` → `SUCCESS` / `FAILURE`。
+
+## 响应
+
+```json
+{
+  "code": "success",
+  "message": "",
+  "data": {
+    "task_id": "task_9f3a2b7c",
+    "status": "SUCCESS",
+    "fail_reason": "",
+    "result_url": "https://...",
+    "submit_time": 1786344639,
+    "start_time": 1786344645,
+    "finish_time": 1786344768,
+    "progress": "100%"
+  }
+}
+```
+
+状态为 `SUCCESS` 后，调用[下载视频](./download)获取成片，或直接使用响应中的 `result_url`（地址形态与有效期以官方确认为准）。
