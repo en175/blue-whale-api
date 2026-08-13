@@ -33,6 +33,14 @@ type TaskPollingAdaptor interface {
 	AdjustBillingOnComplete(task *model.Task, taskResult *relaycommon.TaskInfo) int
 }
 
+// TaskResultURLExtractor 是可选接口：try-1 把 new-api 信封解析进 model.Task 时，
+// 信封 data 里的 result_url 会因 model.Task 无此 JSON 字段而被丢弃。实现该接口
+// 的适配器可从原始响应体取回真实结果 URL。目前仅 newapi 渠道实现，其他渠道
+// 类型断言失败、行为完全不变。
+type TaskResultURLExtractor interface {
+	ExtractTaskResultURL(body []byte) string
+}
+
 // GetTaskAdaptorFunc 由 main 包注入，用于获取指定平台的任务适配器。
 // 打破 service -> relay -> relay/channel -> service 的循环依赖。
 var GetTaskAdaptorFunc func(platform constant.TaskPlatform) TaskPollingAdaptor
@@ -478,6 +486,14 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 		taskResult.Progress = t.Progress
 		taskResult.Reason = t.FailReason
 		task.Data = t.Data
+		// try-1 丢弃了信封 data 里的 result_url（model.Task 无此字段）。让实现
+		// TaskResultURLExtractor 的适配器（目前仅 newapi）从原始 body 取回，
+		// 使 SUCCESS 分支能存上游直链而非回退本网关代理地址。其他渠道不受影响。
+		if extractor, ok := adaptor.(TaskResultURLExtractor); ok {
+			if resultURL := strings.TrimSpace(extractor.ExtractTaskResultURL(responseBody)); resultURL != "" {
+				taskResult.Url = resultURL
+			}
+		}
 	} else if taskResult, err = adaptor.ParseTaskResult(responseBody); err != nil {
 		return fmt.Errorf("parseTaskResult failed for task %s: %w", taskId, err)
 	}
