@@ -192,6 +192,7 @@ export function PricingSection({ defaultValues }: PricingSectionProps) {
                   <FormLabel>{t('Display Mode')}</FormLabel>
                   <Select
                     items={[
+                      { value: 'USD', label: t('USD') },
                       { value: 'CNY', label: t('CNY') },
                       { value: 'TOKENS', label: t('Tokens Only') },
                     ]}
@@ -205,6 +206,7 @@ export function PricingSection({ defaultValues }: PricingSectionProps) {
                     </FormControl>
                     <SelectContent alignItemWithTrigger={false}>
                       <SelectGroup>
+                        <SelectItem value='USD'>{t('USD')}</SelectItem>
                         <SelectItem value='CNY'>{t('CNY')}</SelectItem>
                         <SelectItem value='TOKENS'>
                           {t('Tokens Only')}
@@ -251,7 +253,7 @@ export function PricingSection({ defaultValues }: PricingSectionProps) {
               />
             )}
 
-            {/* CUSTOM 展示模式已下线（T1 统一 RMB），仅 CNY / TOKENS 可选；schema enum 保留全值向下兼容 */}
+            {/* 可选 USD / CNY / TOKENS（IK8F4E 恢复 USD）；CUSTOM 展示模式仍下线，schema enum 保留全值向下兼容 */}
 
             {showDisplayInCurrencyOption && (
               <FormField

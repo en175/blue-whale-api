@@ -14,8 +14,10 @@ type GeneralSetting struct {
 	DocsLink            string `json:"docs_link"`
 	PingIntervalEnabled bool   `json:"ping_interval_enabled"`
 	PingIntervalSeconds int    `json:"ping_interval_seconds"`
-	// 当前站点额度展示类型：CNY（默认，统一人民币）/ TOKENS（调试，看原始 token 计数）
-	// USD / CUSTOM 常量保留向下兼容（历史值 / API），但前端不再暴露切换入口
+	// 当前站点额度展示类型：CNY（默认）/ USD / TOKENS（调试，看原始 token 计数）。
+	// 纯展示层开关，不影响计费（计费核心始终美元锚点）；USD 选项由 IK8F4E 恢复。
+	// CUSTOM 常量保留向下兼容（历史值 / API），前端不暴露切换入口。
+	// 口径见 docs/adr/0003-currency-display-layers.md
 	QuotaDisplayType string `json:"quota_display_type"`
 	// 自定义货币符号，用于 CUSTOM 展示类型
 	CustomCurrencySymbol string `json:"custom_currency_symbol"`
