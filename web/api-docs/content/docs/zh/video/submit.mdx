@@ -17,9 +17,7 @@ description: 提交视频生成任务，获取 task_id
 | `model` | string | 是 | — | 固定传 `seedance-2.0-whitelist` |
 | `duration` | integer | 否 | 5 | 视频时长（秒），1–30 |
 | `images` | string[] | 否 | — | 图生视频：首帧图片 URL 列表（公网可访问） |
-| `metadata` | object | 否 | — | 扩展参数，透传给上游（分辨率、画面比例、音频等，见[模型列表](./models)） |
-
-> ⚠️ 顶层 `size`、`image`、`input_reference`、`aspect_ratio` 字段不生效（会被上游忽略）。分辨率与画面比例通过 `metadata` 传入，图生视频通过 `images` 数组传入。
+| `metadata` | object | 否 | — | 扩展参数，透传给上游（分辨率、画面比例、音频等，见[模型列表](../models)） |
 
 ## 示例
 

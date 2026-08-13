@@ -1,0 +1,32 @@
+---
+title: Authentication
+description: Authenticate requests with an API key
+---
+
+# Authentication
+
+All API requests use **Bearer Token** authentication.
+
+## Request Header Format
+
+```
+Authorization: Bearer sk-YOUR-KEY
+```
+
+Replace `sk-YOUR-KEY` with an API key created in the console.
+
+## Key Creation and Lifecycle
+
+- Create keys on the "Tokens" page of the console; you can create multiple keys for different environments
+- A key can be disabled or deleted at any time; deletion takes effect immediately
+- Do not hard-code real keys in browsers, client bundles, or public repositories
+
+## Authentication Failures
+
+A missing, invalid, or disabled key returns `401`:
+
+```json
+{ "code": "invalid_api_key", "message": "Invalid API key", "data": null }
+```
+
+For the full list, see [Error Codes](./errors).

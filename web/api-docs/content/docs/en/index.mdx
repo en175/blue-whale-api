@@ -1,25 +1,37 @@
 ---
-title: Quick Start
-description: Blue Whale API Documentation Center
+title: Documentation Center
+description: Developer documentation for the Seedance 2.0 Video Generation API
 ---
 
-import { Code2, Bot } from 'lucide-react';
+import { Rocket, KeyRound, Clapperboard } from 'lucide-react';
 
-## Welcome to Blue Whale API
+## BLUE WHALE API DOCS
 
-Blue Whale API is an OpenAI-compatible multi-model AI gateway that provides unified access to and management of various large language model services.
+A video generation API for developers: one API key, one billing system, one base_url, delivered in asynchronous task mode. The currently open model is **seedance-2.0-whitelist**, supporting text-to-video, image-to-video, first/last-frame and reference-image control, and audio generation.
 
 <Cards>
   <Card
-    icon={<Code2 />}
-    title="API Documentation"
-    description="Comprehensive API interface descriptions and call examples."
-    href="/en/docs/api"
+    icon={<Rocket />}
+    title="Quick Start"
+    description="From sign-up to your first generated video, run through the whole flow in 5 minutes."
+    href="/en/docs/quickstart"
   />
   <Card
-    icon={<Bot />}
-    title="AI Applications"
-    description="Explore various AI application integration examples built on Blue Whale API."
-    href="/en/docs/apps"
+    icon={<KeyRound />}
+    title="Authentication"
+    description="Authenticate requests with an API key."
+    href="/en/docs/authentication"
+  />
+  <Card
+    icon={<Clapperboard />}
+    title="Video Generation API"
+    description="Three endpoints: submit a task, query a task, download the video."
+    href="/en/docs/video/submit"
   />
 </Cards>
+
+## Currently Open Endpoints
+
+- `POST /v1/video/generations` — Submit a video generation task
+- `GET /v1/video/generations/{task_id}` — Query task status
+- `GET /v1/videos/{task_id}/content` — Download the generated video

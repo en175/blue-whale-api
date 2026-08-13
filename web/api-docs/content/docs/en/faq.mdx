@@ -1,0 +1,30 @@
+---
+title: FAQ
+description: Frequently asked questions about video generation integration
+---
+
+# FAQ
+
+## How long does it take to generate a video?
+
+Usually tens of seconds to a few minutes, depending on the duration and resolution parameters. Track progress by polling after submission; a 5–10 second polling interval is recommended.
+
+## Which aspect ratios are supported?
+
+16:9 (landscape), 9:16 (portrait), 1:1 (square); the default is 16:9.
+
+## How do I pass images for image-to-video?
+
+Pass the `image` (first-frame URL) or `images` field in the request body; for first/last-frame and reference-image control, see [Models](./models).
+
+## What if a task fails?
+
+When the query endpoint returns `status=FAILURE`, inspect the `fail_reason` field to identify the cause; for parameter issues, fix them and resubmit.
+
+## How long are results retained?
+
+Download and save results promptly; the exact retention period is subject to official confirmation.
+
+## Is there a Webhook callback?
+
+The current version delivers results via polling. If callback support is scheduled, it will be announced separately.

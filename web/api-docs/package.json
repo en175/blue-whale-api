@@ -15,7 +15,8 @@
     "translate:force": "bun run translate",
     "generate:openapi:schemas": "bun scripts/generate-openapi-from-http.ts",
     "generate:openapi": "bun scripts/generate-openapi-from-http.ts && bun scripts/generate-openapi-docs.ts",
-    "check:public-surface": "tsx scripts/check-public-surface.ts"
+    "check:public-surface": "tsx scripts/check-public-surface.ts",
+    "check:i18n": "tsx scripts/check-i18n-alignment.ts"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^1.0.27",
