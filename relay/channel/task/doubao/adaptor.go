@@ -134,48 +134,15 @@ func (a *TaskAdaptor) BuildRequestHeader(_ *gin.Context, req *http.Request, _ *r
 	return nil
 }
 
-// EstimateBilling 根据请求 metadata 中的输出分辨率与是否包含视频输入，返回相对基准价的计费 OtherRatio。
+// EstimateBilling 根据请求 metadata 中的输出分辨率与是否包含视频输入，返回相对
+// 基准价的计费 OtherRatio。价格表按上游模型名（实际发给火山的模型名）查找，
+// 回退对客名；管理员可用 video_tier_pricing.price_table 覆盖内置价格。
 func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInfo) map[string]float64 {
 	req, err := relaycommon.GetTaskRequest(c)
 	if err != nil {
 		return nil
 	}
-	hasVideo := hasVideoInMetadata(req.Metadata)
-	resolution, _ := req.Metadata["resolution"].(string)
-	ratio, ok := GetVideoInputRatio(info.OriginModelName, resolution, hasVideo)
-	if !ok || ratio == 1.0 {
-		return nil
-	}
-	return map[string]float64{"video_input": ratio}
-}
-
-// hasVideoInMetadata 直接检查 metadata 的 content 数组是否包含 video_url 条目，
-// 避免构建完整的上游 requestPayload。
-func hasVideoInMetadata(metadata map[string]interface{}) bool {
-	if metadata == nil {
-		return false
-	}
-	contentRaw, ok := metadata["content"]
-	if !ok {
-		return false
-	}
-	contentSlice, ok := contentRaw.([]interface{})
-	if !ok {
-		return false
-	}
-	for _, item := range contentSlice {
-		itemMap, ok := item.(map[string]interface{})
-		if !ok {
-			continue
-		}
-		if itemMap["type"] == "video_url" {
-			return true
-		}
-		if _, has := itemMap["video_url"]; has {
-			return true
-		}
-	}
-	return false
+	return taskcommon.EstimateVideoTierBilling(info, &req)
 }
 
 // BuildRequestBody converts request into Doubao specific format.

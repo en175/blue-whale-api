@@ -10,6 +10,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/setting/config"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -118,6 +119,104 @@ func TestExtractTaskResultURL_NoURL(t *testing.T) {
 func TestExtractTaskResultURL_Malformed(t *testing.T) {
 	a := &TaskAdaptor{}
 	assert.Equal(t, "", a.ExtractTaskResultURL([]byte(`not json`)))
+}
+
+// resetVideoTierConfigForEstimate 恢复 video_tier_pricing 为空表，防配置在用例间泄漏。
+func resetVideoTierConfigForEstimate(t *testing.T) {
+	t.Helper()
+	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
+		"video_tier_pricing.price_table": "{}",
+	}))
+	t.Cleanup(func() {
+		_ = config.GlobalConfig.LoadFromDB(map[string]string{
+			"video_tier_pricing.price_table": "{}",
+		})
+	})
+}
+
+// newEstimateCtx 构造带 task_request 的 gin 测试上下文（EstimateBilling 经
+// GetTaskRequest 读取，与 ValidateBasicTaskRequest 的存储方式一致）。
+func newEstimateCtx(metadata map[string]interface{}) *gin.Context {
+	gin.SetMode(gin.TestMode)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Set("task_request", relaycommon.TaskSubmitReq{
+		Prompt:   "a cat",
+		Metadata: metadata,
+	})
+	return c
+}
+
+// newEstimateInfo 构造带对客名/上游名的 RelayInfo（UpstreamModelName 在嵌入的
+// *ChannelMeta 上，必须显式初始化，否则空指针解引用）。
+func newEstimateInfo(originName, upstreamName string) *relaycommon.RelayInfo {
+	info := &relaycommon.RelayInfo{OriginModelName: originName}
+	info.ChannelMeta = &relaycommon.ChannelMeta{UpstreamModelName: upstreamName}
+	return info
+}
+
+func videoInputMetadata(resolution string) map[string]interface{} {
+	return map[string]interface{}{
+		"resolution": resolution,
+		"content": []interface{}{
+			map[string]interface{}{
+				"type":      "video_url",
+				"video_url": map[string]interface{}{"url": "https://example.com/input.mp4"},
+			},
+		},
+	}
+}
+
+// TestEstimateBilling_BuiltinModelWithVideo 内置豆包模型 + 含视频输入：
+// 命中内置价格表，返回 video_input 倍率（28/46）。
+func TestEstimateBilling_BuiltinModelWithVideo(t *testing.T) {
+	resetVideoTierConfigForEstimate(t)
+	a := &TaskAdaptor{}
+	ratios := a.EstimateBilling(newEstimateCtx(videoInputMetadata("720p")), newEstimateInfo("doubao-seedance-2-0-260128", "doubao-seedance-2-0-260128"))
+	require.NotNil(t, ratios)
+	assert.InDelta(t, 28.0/46.0, ratios["video_input"], 1e-9)
+}
+
+// TestEstimateBilling_MappedModelUsesUpstreamName 渠道做了模型映射（对客名不在
+// 价格表里）时，按上游模型名命中价格表。
+func TestEstimateBilling_MappedModelUsesUpstreamName(t *testing.T) {
+	resetVideoTierConfigForEstimate(t)
+	a := &TaskAdaptor{}
+	ratios := a.EstimateBilling(newEstimateCtx(videoInputMetadata("1080p")), newEstimateInfo("seedance-2.0", "doubao-seedance-2-0-260128"))
+	require.NotNil(t, ratios)
+	assert.InDelta(t, 31.0/46.0, ratios["video_input"], 1e-9)
+}
+
+// TestEstimateBilling_ConfiguredCustomModel 管理员为任意模型配置的档位价格生效
+// （newapi 渠道对接非内置豆包模型的核心场景）。
+func TestEstimateBilling_ConfiguredCustomModel(t *testing.T) {
+	resetVideoTierConfigForEstimate(t)
+	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
+		"video_tier_pricing.price_table": `{"my-seedance": {"base": 50, "video": 25, "1080p": 75}}`,
+	}))
+	a := &TaskAdaptor{}
+
+	ratios := a.EstimateBilling(newEstimateCtx(videoInputMetadata("720p")), newEstimateInfo("my-seedance", "my-seedance"))
+	require.NotNil(t, ratios)
+	assert.InDelta(t, 0.5, ratios["video_input"], 1e-9)
+
+	ratios = a.EstimateBilling(newEstimateCtx(map[string]interface{}{"resolution": "1080p"}), newEstimateInfo("my-seedance", "my-seedance"))
+	require.NotNil(t, ratios)
+	assert.InDelta(t, 1.5, ratios["video_input"], 1e-9)
+}
+
+// TestEstimateBilling_NoTableReturnsNil 无任何价格表时不加倍率。
+func TestEstimateBilling_NoTableReturnsNil(t *testing.T) {
+	resetVideoTierConfigForEstimate(t)
+	a := &TaskAdaptor{}
+	assert.Nil(t, a.EstimateBilling(newEstimateCtx(videoInputMetadata("720p")), newEstimateInfo("unknown-model", "unknown-model")))
+}
+
+// TestEstimateBilling_BaseTierReturnsNil 基准档（不含视频输入的基础分辨率）倍率为 1，
+// 不产生多余的 OtherRatio。
+func TestEstimateBilling_BaseTierReturnsNil(t *testing.T) {
+	resetVideoTierConfigForEstimate(t)
+	a := &TaskAdaptor{}
+	assert.Nil(t, a.EstimateBilling(newEstimateCtx(map[string]interface{}{"resolution": "720p"}), newEstimateInfo("doubao-seedance-2-0-260128", "doubao-seedance-2-0-260128")))
 }
 
 // newSubmitCtx 构造一个可写响应的 gin 测试上下文（DoResponse 会 c.JSON）。

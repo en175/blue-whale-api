@@ -43,3 +43,5 @@ service/openaicompat/chat_responses_live_local_test.go
 
 # MCP
 .mcp.json
+# MCP
+.codebase-memory/
