@@ -41,7 +41,9 @@ const VENDOR_CATALOG: VendorCatalogItem[] = [
     key: 'doubao',
     name: '豆包',
     fallbackIcon: 'Doubao.Color',
-    match: (m) => /^doubao/i.test(m.model_name),
+    // seedance/seedream 是字节（豆包）的视频/图像模型族，但上游模型名常不带 doubao 前缀，
+    // 这里一并归入豆包，避免它们在 DIRECTORY 视图被静默丢弃。
+    match: (m) => /^(doubao|seedance|seedream)/i.test(m.model_name),
   },
   {
     key: 'claude',
