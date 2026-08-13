@@ -1,0 +1,22 @@
+---
+title: Rate Limits
+description: API request rate limits
+---
+
+# Rate Limits
+
+To keep the service stable, the API enforces request rate limits.
+
+## Global Rate Limit
+
+Default configuration: 360 requests per 180 seconds ⚠️ Subject to the actual environment. Exceeding the limit returns `429`.
+
+## Per-Model Rate Limits
+
+Independent rate limit policies can be configured per model; the specific quota for seedance-2.0-whitelist is subject to the actual environment.
+
+## What to Do on 429
+
+1. Back off according to the response hints
+2. Use exponential backoff for retries
+3. For batch workloads, prefer submitting tasks sequentially in a queue

@@ -1,0 +1,46 @@
+---
+title: Download the Video
+description: Download the generated video file
+---
+
+# Download the Video
+
+After a task completes, there are two ways to get the video: call the **download endpoint** (proxied by the gateway), or fetch it directly from `result_url` in the query response.
+
+## Option 1: Download Endpoint (Recommended)
+
+**GET** `/v1/videos/{task_id}/content`
+
+Download the video file (MP4 binary stream) of a completed task. Only available when the task status is `SUCCESS`.
+
+### Path Parameters
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `task_id` | string | The ID of a task whose status is SUCCESS |
+
+### Example
+
+```bash
+BASE_URL="https://api.bluewhale.ai"   # Placeholder; the official domain will be announced separately
+
+curl "$BASE_URL/v1/videos/task_9f3a2b7c/content" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -o result.mp4
+```
+
+## Option 2: Use result_url from the Query Response
+
+[Query a Task](./query) returns the video address in the `data.result_url` field once the task succeeds; you can issue a GET request to that URL directly:
+
+```bash
+curl "<result_url>" -o result.mp4
+```
+
+⚠️ The form of `result_url` (gateway-proxied address or upstream direct link) and its validity period are **subject to official confirmation** — download and save results promptly.
+
+## Notes
+
+- Both options return the same video; the download endpoint is proxied by the gateway, so you do not need to care where the address comes from
+- Calling the download endpoint before the task completes returns `400` with the current status
+- Result retention period is subject to official confirmation — download and save promptly

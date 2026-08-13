@@ -1,0 +1,34 @@
+---
+title: Error Codes
+description: Unified error response format and common error codes
+---
+
+# Error Codes
+
+## Error Response Format
+
+All errors use a unified envelope:
+
+```json
+{ "code": "invalid_request", "message": "prompt is required", "data": null }
+```
+
+| Field | Description |
+| --- | --- |
+| `code` | Error code (machine-readable) |
+| `message` | Error description (human-readable) |
+| `data` | Additional data, usually null |
+
+## Common Error Codes
+
+| HTTP | code | Description | What to Do |
+| --- | --- | --- | --- |
+| 400 | `invalid_request` | Missing or invalid parameter (e.g. empty prompt) | Check the request parameters |
+| 400 | `task_not_exist` | Task does not exist | Check the task_id |
+| 401 | `invalid_api_key` | Key missing / invalid / disabled | Check the Authorization header and key status |
+| 429 | Rate limited | Request rate limit exceeded | Slow down; see [Rate Limits](./rate-limits) |
+| 500 | `get_task_failed` | Failed to query the task | Retry; contact support if it persists |
+| 500 | `fail_to_fetch_task` | Upstream request failed | Retry |
+| 501 | `not_implemented` | Unsupported operation | Check the endpoint and model |
+
+Task-level failures (generation failures) are surfaced by the query endpoint via `status=FAILURE` and the `fail_reason` field; see [Query a Task](./video/query).

@@ -1,0 +1,58 @@
+---
+title: Query a Task
+description: Poll the task status to track generation progress
+---
+
+# Query a Task
+
+**GET** `/v1/video/generations/{task_id}`
+
+Query the current status of a given task. Video generation is asynchronous — **polling every 5–10 seconds is recommended**.
+
+## Path Parameters
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `task_id` | string | The task ID returned when the task was submitted |
+
+## Example
+
+```bash
+BASE_URL="https://api.bluewhale.ai"   # Placeholder; the official domain will be announced separately
+
+curl "$BASE_URL/v1/video/generations/task_9f3a2b7c" \
+  -H "Authorization: Bearer sk-YOUR-KEY"
+```
+
+## Task State Machine
+
+| status | Meaning | Description |
+| --- | --- | --- |
+| `SUBMITTED` / `QUEUED` | Queued | Task accepted, waiting to be scheduled |
+| `IN_PROGRESS` | Processing | Generation is running; keep polling |
+| `SUCCESS` | Completed | Ready to [download the video](./download) |
+| `FAILURE` | Failed | Inspect `fail_reason` for the cause |
+| `UNKNOWN` | Unknown | Retry the query; contact support if it persists |
+
+State flow: submitted → `QUEUED` → `IN_PROGRESS` → `SUCCESS` / `FAILURE`.
+
+## Response
+
+```json
+{
+  "code": "success",
+  "message": "",
+  "data": {
+    "task_id": "task_9f3a2b7c",
+    "status": "SUCCESS",
+    "fail_reason": "",
+    "result_url": "https://...",
+    "submit_time": 1786344639,
+    "start_time": 1786344645,
+    "finish_time": 1786344768,
+    "progress": "100%"
+  }
+}
+```
+
+Once the status is `SUCCESS`, call [Download the Video](./download) to fetch the final video, or use `result_url` from the response directly (the URL form and validity period are subject to official confirmation).

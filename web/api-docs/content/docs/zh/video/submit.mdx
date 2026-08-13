@@ -15,14 +15,13 @@ description: 提交视频生成任务，获取 task_id
 | --- | --- | --- | --- | --- |
 | `prompt` | string | 是 | — | 视频内容描述 |
 | `model` | string | 是 | — | 固定传 `seedance-2.0-whitelist` |
-| `size` | string | 否 | 720p | 分辨率：480p / 720p / 1080p |
-| `duration` | integer | 否 | 5 | 时长（秒），4–15，步长 1 |
-| `image` | string | 否 | — | 图生视频首帧图 URL（与 `images` 二选一） |
-| `images` | string[] | 否 | — | 图片 URL 列表 |
-| `input_reference` | string | 否 | — | 参考图 URL |
-| `metadata` | object | 否 | — | 透传扩展字段 |
+| `duration` | integer | 否 | 5 | 视频时长（秒），1–30 |
+| `images` | string[] | 否 | — | 图生视频：首帧图片 URL 列表（公网可访问） |
+| `metadata` | object | 否 | — | 扩展参数，透传给上游（分辨率、画面比例、音频等，见[模型列表](../models)） |
 
 ## 示例
+
+### 文生视频
 
 ```bash
 BASE_URL="https://api.bluewhale.ai"   # 占位示意，正式域名以官方公告为准
@@ -33,8 +32,29 @@ curl "$BASE_URL/v1/video/generations" \
   -d '{
     "model": "seedance-2.0-whitelist",
     "prompt": "蓝鲸跃出海面，慢镜头，电影质感",
-    "size": "720p",
-    "duration": 5
+    "duration": 5,
+    "metadata": {
+      "resolution": "720p",
+      "ratio": "16:9",
+      "generate_audio": false
+    }
+  }'
+```
+
+### 图生视频（首帧）
+
+```bash
+curl "$BASE_URL/v1/video/generations" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "seedance-2.0-whitelist",
+    "prompt": "镜头缓慢推进，画面中的杯子轻轻晃动",
+    "images": ["https://example.com/first-frame.jpg"],
+    "duration": 5,
+    "metadata": {
+      "resolution": "720p"
+    }
   }'
 ```
 

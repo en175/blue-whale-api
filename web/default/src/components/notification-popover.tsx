@@ -309,12 +309,12 @@ export function NotificationPopover({
           <Button
             variant='ghost'
             size='icon'
-            className={cn('relative size-9', className)}
+            className={cn('relative size-10', className)}
             aria-label={t('Notifications')}
           />
         }
       >
-        <Bell className='size-[1.2rem]' />
+        <Bell className='size-6' />
         {unreadCount > 0 ? (
           <Badge
             variant='destructive'

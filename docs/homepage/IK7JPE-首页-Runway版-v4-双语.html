@@ -1,0 +1,634 @@
+<style>
+  /* ─────────────────────────────────────────────────────────────
+   * Runway design system — tokens (bound verbatim)
+   * ───────────────────────────────────────────────────────────── */
+  .bw-home {
+    --bg:           #000000;
+    --surface:      #1a1a1a;
+    --surface-warm: #030303;
+
+    --fg:    #ffffff;
+    --fg-2:  #e9ecf2;
+    --muted: #767d88;
+    --meta:  #7d848e;
+
+    --border:      #27272a;
+    --border-soft: #1a1a1a;
+
+    --accent:        #ffffff;
+    --accent-on:     #000000;
+    --accent-hover:  #e9ecf2;
+    --accent-active: #c9ccd1;
+
+    --success: #16a34a;
+    --warn:    #eab308;
+    --danger:  #dc2626;
+
+    /* brand signal color — BLUE WHALE 次级信号色，克制使用（每屏 ≤2 处） */
+    --brand:   #3b82f6;
+
+    --font-display: "abcNormal", "abcNormal Fallback", "Inter", "DM Sans", system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --font-body:    "abcNormal", "abcNormal Fallback", "Inter", "DM Sans", system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --font-mono:    ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, "Courier New", monospace;
+
+    --text-xs:   11px;
+    --text-sm:   13px;
+    --text-base: 16px;
+    --text-lg:   20px;
+    --text-xl:   24px;
+    --text-2xl:  36px;
+    --text-3xl:  40px;
+    --text-4xl:  48px;
+
+    --leading-body:     1.4;
+    --leading-tight:    1.0;
+    --tracking-display: -0.025em;
+
+    --space-1:  4px;
+    --space-2:  8px;
+    --space-3:  12px;
+    --space-4:  16px;
+    --space-5:  20px;
+    --space-6:  24px;
+    --space-8:  32px;
+    --space-12: 48px;
+
+    --section-y-desktop: 78px;
+    --section-y-tablet:  48px;
+    --section-y-phone:   32px;
+
+    --radius-sm: 4px;
+    --radius-md: 8px;
+
+    --elev-flat:   none;
+    --elev-ring:   0 0 0 1px var(--border);
+    --elev-raised: none;
+
+    --motion-fast:   150ms;
+    --motion-base:   220ms;
+    --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+    --container-max:            1600px;
+    --container-gutter-desktop: 48px;
+    --container-gutter-tablet:  24px;
+    --container-gutter-phone:   16px;
+  }
+
+  /* ───────── 双语文案（前端向 .bw-home 注入 data-lang；非简体中文回退 en） ───────── */
+  .bw-home[data-lang='en'] .t-zh { display: none !important; }
+  .bw-home:not([data-lang='en']) .t-en { display: none !important; }
+
+  /* ───────── 浅色主题（前端注入 data-theme；浅色位采 Runway 官方值，状态色加深保 4.5:1） ───────── */
+  .bw-home { color-scheme: dark; }
+  .bw-home[data-theme='light'] {
+    color-scheme: light;
+    --bg: #ffffff;
+    --surface: #fefefe;
+    --surface-warm: #e9ecf2;
+    --fg: #111111;
+    --fg-2: #404040;
+    --muted: #5f6672;
+    --meta: #6b7280;
+    --border: #d0d4d4;
+    --border-soft: #e9ecf2;
+    --accent: #000000;
+    --accent-on: #ffffff;
+    --accent-hover: #e9ecf2;
+    --accent-active: #c9ccd1;
+    --brand: #2563eb;
+    --success: #15803d;
+    --warn: #a16207;
+    --danger: #b91c1c;
+  }
+  .bw-home[data-theme='light'] .cap-desc { color: #5f6672; }
+  .bw-home[data-theme='light'] .cap-desc .mono { color: #404040; }
+  .bw-home[data-theme='light'] .footer-inner,
+  .bw-home[data-theme='light'] .footer .mono { color: #6b7280; }
+  .bw-home[data-theme='light'] .st-err { color: #b91c1c; }
+  .bw-home[data-theme='light'] .tcode { color: #b91c1c; }
+  .bw-home[data-theme='light'] .nav-mobile { background: rgba(255,255,255,0.96); }
+  .bw-home[data-theme='light'] :focus-visible { outline-color: rgba(10,10,10,0.6); }
+  .bw-home[data-theme='light'] .hero-wave {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='40' viewBox='0 0 240 40'%3E%3Cpath d='M0 20 C 30 8 60 8 90 20 C 120 32 150 32 180 20 C 210 8 225 12 240 20' fill='none' stroke='%230a0a0a' stroke-width='1.5' opacity='0.25'/%3E%3C/svg%3E");
+  }
+
+  /* ───────── 主题切换呼吸感（shadow 内颜色渐变；各组件自带动画不受影响） ───────── */
+  .bw-home { --motion-theme: 600ms; }
+  .bw-home, .bw-home *, .bw-home *::before, .bw-home *::after {
+    transition: background-color var(--motion-theme) var(--ease-standard), color var(--motion-theme) var(--ease-standard), border-color var(--motion-theme) var(--ease-standard), fill var(--motion-theme) var(--ease-standard), stroke var(--motion-theme) var(--ease-standard);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .bw-home, .bw-home *, .bw-home *::before, .bw-home *::after { transition: none !important; }
+  }
+
+  /* ───────── Base ───────── */
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+  .bw-home {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-body);
+    font-size: var(--text-base);
+    font-weight: 400;
+    line-height: var(--leading-body);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overflow-x: hidden;
+  }
+  a { color: inherit; text-decoration: none; }
+  img, svg { display: block; }
+  ::selection { background: var(--surface); color: var(--fg); }
+  :focus-visible { outline: 2px solid rgba(255,255,255,0.6); outline-offset: 2px; border-radius: var(--radius-sm); }
+  .mono { font-family: var(--font-mono); font-feature-settings: "tnum" 1; }
+  section[id] { scroll-margin-top: 72px; }
+
+  .container {
+    max-width: 1200px;
+    margin-inline: auto;
+    padding-inline: clamp(var(--container-gutter-phone), 5vw, var(--container-gutter-desktop));
+  }
+
+  /* ───────── Nav (CSS-only, checkbox toggle) ───────── */
+  .nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 60;
+  }
+  .nav-toggle-input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
+  .nav-inner {
+    max-width: 1200px; margin-inline: auto;
+    padding-inline: clamp(var(--container-gutter-phone), 5vw, var(--container-gutter-desktop));
+    height: 64px;
+    display: flex; align-items: center; gap: var(--space-6);
+  }
+  .brand { display: flex; align-items: center; gap: 10px; color: var(--fg); font-weight: 600; font-size: 15px; letter-spacing: 0.01em; }
+  .brand svg { width: 22px; height: auto; color: var(--fg); }
+  .brand .b-api { color: var(--muted); font-weight: 400; margin-left: 2px; }
+  .nav-links { display: flex; gap: var(--space-1); margin-left: auto; }
+  .nav-links a {
+    color: var(--muted); font-size: 14px; font-weight: 500;
+    padding: 10px 12px; border-radius: var(--radius-sm);
+    transition: color var(--motion-fast) var(--ease-standard), background var(--motion-fast) var(--ease-standard);
+  }
+  .nav-links a:hover { color: var(--fg); }
+  .nav-burger { display: none; width: 44px; height: 44px; margin-left: auto; align-items: center; justify-content: center; color: var(--fg); border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: pointer; }
+  .nav-toggle-input:focus-visible ~ .nav-inner .nav-burger { outline: 2px solid rgba(255,255,255,0.6); outline-offset: 2px; }
+  .nav-mobile { max-height: 0; overflow: hidden; transition: max-height var(--motion-base) var(--ease-standard); }
+  .nav-mobile a { display: block; padding: 14px 12px; color: var(--fg); font-size: 16px; font-weight: 500; }
+  .nav-toggle-input:checked ~ .nav-mobile { max-height: 260px; }
+  @media (max-width: 860px) {
+    .nav-links { display: none; }
+    .nav-burger { display: flex; }
+    .nav-mobile { background: rgba(0,0,0,0.96); border-bottom: 1px solid var(--border); }
+    .nav-mobile a { padding: 14px clamp(var(--container-gutter-phone), 5vw, var(--container-gutter-desktop)); }
+    .nav-mobile a:hover { background: var(--surface); }
+  }
+
+  /* ───────── Hero ───────── */
+  .hero { position: relative; overflow: hidden; padding: 148px 0 78px; border-bottom: 1px solid var(--border); background: var(--bg); }
+  .hero-wave {
+    position: absolute; left: 0; right: 0; bottom: 28px; height: 40px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='40' viewBox='0 0 240 40'%3E%3Cpath d='M0 20 C 30 8 60 8 90 20 C 120 32 150 32 180 20 C 210 8 225 12 240 20' fill='none' stroke='%23ffffff' stroke-width='1.5' opacity='0.4'/%3E%3C/svg%3E");
+    background-repeat: repeat-x;
+    background-size: 240px 40px;
+    animation: waveDrift 9s linear infinite;
+    pointer-events: none;
+  }
+  .hero-grid { position: relative; z-index: 1; display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 64px; align-items: center; }
+  .hero-label {
+    font-family: var(--font-mono); font-size: var(--text-xs); font-weight: 500;
+    letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted);
+    display: flex; align-items: center; gap: 10px; margin-bottom: 24px;
+  }
+  .hero-label::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--brand); }
+  .hero-title {
+    font-family: var(--font-display); font-size: clamp(34px, 5vw, 48px);
+    font-weight: 500; line-height: 1.32; letter-spacing: -0.025em; color: var(--fg);
+    text-wrap: balance;
+  }
+  .hero-sub { margin-top: 24px; max-width: 30em; color: var(--muted); font-size: 16px; line-height: 1.5; }
+  .hero-actions { margin-top: 32px; display: flex; flex-wrap: wrap; gap: 12px; }
+  .hero-hint { margin-top: 28px; font-family: var(--font-mono); font-size: 12px; color: var(--meta); letter-spacing: 0.01em; }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    font-family: var(--font-body); font-size: 14px; font-weight: 600;
+    min-height: 46px; padding: 0 22px; border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+    transition: background var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard);
+  }
+  .btn-primary { background: var(--accent); color: var(--accent-on); }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-primary:active { background: var(--accent-active); }
+  .btn-secondary { background: transparent; color: var(--fg); border-color: var(--border); }
+  .btn-secondary:hover { border-color: var(--muted); color: var(--fg); }
+  .btn-secondary:active { border-color: var(--fg); }
+
+  /* ───────── Task mockup panel (pure-CSS animated) ───────── */
+  .panel {
+    background: var(--surface-warm);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+  }
+  .panel-head {
+    display: flex; align-items: center; gap: 10px;
+    padding: 13px 16px; border-bottom: 1px solid var(--border);
+  }
+  .panel-head .dots { display: flex; gap: 6px; }
+  .panel-head .dots i { width: 9px; height: 9px; border-radius: 50%; background: var(--border); }
+  .panel-title { font-family: var(--font-mono); font-size: 12px; color: var(--meta); margin-left: 2px; }
+  .panel-tag { margin-left: auto; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 3px 8px; }
+  .trow { display: flex; align-items: center; gap: 16px; padding: 15px 16px; border-bottom: 1px solid var(--border); }
+  .trow:last-of-type { border-bottom: 0; }
+  .tid { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: 12px; color: var(--fg); font-weight: 500; letter-spacing: 0.01em; }
+  .tmeta { display: flex; align-items: center; gap: 14px; }
+  .tstatus { display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 12px; white-space: nowrap; }
+  .sdot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+  .s-queue { background: var(--muted); }
+  .s-proc  { background: var(--brand); animation: pulse 1.6s var(--ease-standard) infinite; }
+  .s-ok    { background: var(--success); }
+  .s-err   { background: var(--danger); }
+  .st-queue { color: var(--muted); }
+  .st-proc  { color: var(--brand); }
+  .st-ok    { color: var(--success); }
+  .st-err   { color: #f87171; } /* lightened text variant of --danger for 4.5:1 on black */
+  .tbar { width: 112px; height: 4px; background: var(--surface); overflow: hidden; flex: none; }
+  .tbar-fill { display: block; height: 100%; width: 8%; background: var(--brand); animation: barFill 2.4s linear infinite; }
+  .tpct { position: relative; width: 38px; height: 13px; overflow: hidden; flex: none; }
+  .pct-strip { display: flex; flex-direction: column; animation: pctCycle 2.4s steps(21, jump-none) infinite; will-change: transform; }
+  .pct-strip span { height: 13px; line-height: 13px; font-family: var(--font-mono); font-size: 11px; color: var(--meta); text-align: right; }
+  .tlink { font-family: var(--font-mono); font-size: 11px; color: var(--fg); letter-spacing: 0.02em; transition: opacity var(--motion-fast) var(--ease-standard); }
+  .tlink:hover { text-decoration: underline; text-underline-offset: 3px; }
+  .tcode { font-family: var(--font-mono); font-size: 11px; color: #f87171; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+  @keyframes barFill { 0% { width: 0%; } 100% { width: 100%; } }
+  @keyframes pctCycle { 0% { transform: translateY(0); } 100% { transform: translateY(-260px); } }
+  @keyframes waveDrift { 0% { background-position: 0 0; } 100% { background-position: -240px 0; } }
+  .panel-foot { padding: 11px 16px; font-family: var(--font-mono); font-size: 11px; color: var(--meta); border-top: 1px solid var(--border); }
+
+  /* ───────── Sections ───────── */
+  .section { padding: clamp(var(--section-y-phone), 7vw, var(--section-y-desktop)) 0; border-bottom: 1px solid var(--border); }
+  .section-alt { background: var(--surface-warm); }
+  .sec-head { margin-bottom: 48px; }
+  .sec-label { font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); display: block; }
+  .sec-title { margin-top: 16px; font-family: var(--font-display); font-size: clamp(28px, 3.6vw, 40px); font-weight: 500; line-height: 1.3; letter-spacing: -0.02em; color: var(--fg); text-wrap: balance; }
+  .sec-sub { margin-top: 16px; max-width: 40em; color: var(--muted); font-size: 15px; line-height: 1.5; }
+
+  /* ───────── Capabilities list ───────── */
+  .cap-row {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 32px;
+    padding: 30px 4px; border-bottom: 1px solid var(--border);
+    transition: background var(--motion-fast) var(--ease-standard);
+  }
+  .cap-row:first-child { border-top: 1px solid var(--border); }
+  .cap-row:hover { background: var(--surface-warm); }
+  .cap-name { font-size: var(--text-lg); font-weight: 500; color: var(--fg); letter-spacing: -0.01em; white-space: nowrap; }
+  .cap-desc { text-align: right; color: #a7a7a7; font-size: 14px; line-height: 1.5; } /* brightened from #767d88 for legibility */
+  .cap-desc .mono { color: var(--fg-2); }
+
+  /* ───────── Model ───────── */
+  .model-grid { display: grid; grid-template-columns: 1fr; gap: 40px; align-items: start; }
+  .model-desc { color: var(--muted); font-size: 15px; line-height: 1.5; max-width: 46em; }
+  .model-id { margin-top: 20px; font-family: var(--font-mono); font-size: 12px; color: var(--meta); }
+  .model-status { margin-top: 28px; border-top: 1px solid var(--border); padding-top: 20px; }
+  .model-status .row { display: flex; align-items: baseline; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .model-status .k { font-size: 13px; color: var(--muted); width: 88px; flex: none; }
+  .model-status .v { font-family: var(--font-mono); font-size: 13px; color: var(--fg-2); }
+
+  .table-scroll { overflow-x: auto; }
+  table.pt { width: 100%; border-collapse: collapse; }
+  .pt th {
+    text-align: left; font-family: var(--font-mono); font-size: 10px; font-weight: 500;
+    letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted);
+    padding: 12px 14px; border-bottom: 1px solid var(--border);
+  }
+  .pt td { padding: 15px 14px; border-bottom: 1px solid var(--border); vertical-align: top; font-size: 14px; line-height: 1.45; }
+  .pt tr:last-child td { border-bottom: 0; }
+  .pt td.p-name { font-family: var(--font-mono); font-size: 13px; color: var(--fg); white-space: nowrap; }
+  .pt td.p-val { color: var(--fg-2); font-family: var(--font-mono); font-size: 13px; }
+  .pt td.p-def { color: var(--muted); text-align: right; font-family: var(--font-mono); font-size: 13px; white-space: nowrap; }
+  .pt-note { margin-top: 18px; font-size: 12.5px; color: var(--meta); }
+
+  /* ───────── Quick start ───────── */
+  .step { display: grid; grid-template-columns: 64px 1fr; gap: 8px 28px; padding: 36px 0; border-bottom: 1px solid var(--border); }
+  .step:last-child { border-bottom: 0; }
+  .step-num { font-family: var(--font-mono); font-size: 20px; color: var(--brand); padding-top: 0; letter-spacing: 0.04em; }
+  .step h3 { font-family: var(--font-display); font-size: var(--text-lg); font-weight: 500; color: var(--fg); letter-spacing: -0.01em; }
+  .step p { margin: 8px 0 18px; color: var(--muted); font-size: 14px; line-height: 1.5; max-width: 46em; }
+  .code { position: relative; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); }
+  .code-scroll { overflow-x: auto; padding: 18px 20px; }
+  .code-tag {
+    position: absolute; top: 10px; right: 12px; z-index: 1;
+    font-family: var(--font-mono); font-size: 10px; font-weight: 500;
+    letter-spacing: 0.14em; text-transform: uppercase; color: var(--meta);
+    background: var(--surface); padding: 2px 6px; border-radius: var(--radius-sm);
+  }
+  .code pre { font-family: var(--font-mono); font-size: 12.5px; line-height: 1.65; color: var(--fg-2); white-space: pre; }
+  .code .c-note { color: var(--meta); }
+
+  .endpoints { margin-top: 40px; padding-top: 24px; }
+  .endpoints-head { font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+  .ep { display: flex; align-items: baseline; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .ep:last-child { border-bottom: 0; }
+  .ep-m { font-family: var(--font-mono); color: var(--fg); font-weight: 600; width: 44px; flex: none; }
+  .ep code { font-family: var(--font-mono); color: var(--fg-2); overflow-wrap: anywhere; }
+  .ep .ep-d { margin-left: auto; color: var(--muted); flex: none; }
+
+  /* ───────── Developers ───────── */
+  .dev-grid { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--border); }
+  .dev-col { padding: 32px 28px 28px 28px; }
+  .dev-col:last-child { border-right: 0; }
+  .dev-col h3 { font-size: var(--text-lg); font-weight: 500; color: var(--fg); letter-spacing: -0.01em; }
+  .dev-col p { margin: 12px 0 18px; color: var(--muted); font-size: 14px; line-height: 1.5; }
+  .dev-code {
+    display: inline-block; font-family: var(--font-mono); font-size: 12px; color: var(--fg-2);
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 9px 12px; overflow-wrap: anywhere;
+  }
+
+  /* ───────── Closing ───────── */
+  .closing { text-align: center; padding: clamp(64px, 10vw, 110px) 0 72px; border-bottom: 1px solid var(--border); }
+  .closing h2 { font-family: var(--font-display); font-size: clamp(28px, 4.4vw, 40px); font-weight: 500; line-height: 1.3; letter-spacing: -0.0225em; color: var(--fg); text-wrap: balance; }
+  .closing .sub { margin-top: 18px; color: var(--muted); font-size: 15px; line-height: 1.5; }
+  .closing .actions { margin-top: 36px; display: flex; justify-content: center; flex-wrap: wrap; gap: 12px; }
+  .closing .company { margin-top: 64px; font-size: 13px; color: var(--meta); }
+
+  .footer { padding: 22px 0; }
+  .footer-inner { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+  .footer .mono { color: var(--meta); }
+
+  /* ───────── Reduced motion ───────── */
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    
+  }
+
+  /* ───────── Responsive ───────── */
+  @media (max-width: 1024px) {
+    .hero { padding-top: 128px; }
+    .hero-grid { grid-template-columns: 1fr; gap: 48px; }
+    .hero-panel { max-width: 560px; }
+    .model-grid { grid-template-columns: 1fr; gap: 40px; }
+    .dev-grid { grid-template-columns: 1fr; border-top: 1px solid var(--border); }
+    .dev-col { border-right: 0; border-bottom: 1px solid var(--border); padding: 28px 0; }
+    .dev-col:last-child { border-bottom: 0; }
+  }
+  @media (max-width: 640px) {
+    .hero { padding-top: 108px; }
+    .cap-row { flex-direction: column; align-items: flex-start; gap: 10px; padding: 24px 4px; }
+    .cap-desc { text-align: left; }
+    .step { grid-template-columns: 1fr; gap: 6px; }
+    .step-num { padding-top: 0; }
+    .pt th, .pt td { padding: 13px 10px; }
+    .code-scroll { padding: 14px 14px; }
+    .code pre { font-size: 12px; }
+    .trow { gap: 10px; }
+    .tbar { width: 64px; }
+    .tid { font-size: 11px; }
+    .tpct { width: 32px; }
+  }
+  .footer-inner, .footer .mono { color: #a7a7a7; }
+  .cap-row:first-of-type { padding-top: 6px; }
+</style>
+<div class="bw-home">
+<main id="top">
+
+<!-- ================= 1 · HERO ================= -->
+<section class="hero" data-od-id="hero">
+  <div class="hero-wave" aria-hidden="true"></div>
+  <div class="container hero-grid">
+    <div class="hero-copy">
+      <span class="hero-label">Video Generation API</span>
+      <h1 class="hero-title" data-od-id="hero-title"><span class="t-zh">为开发者构建的<br>视频生成接口</span><span class="t-en">Video generation APIs<br>built for developers</span></h1>
+      <p class="hero-sub" data-od-id="hero-sub"><span class="t-zh">基于 Seedance 2.0 的视频生成服务。文生视频、图生视频、首尾帧与参考图，异步任务模型，一套 Bearer 鉴权即可接入。</span><span class="t-en">Seedance 2.0-powered video generation. Text-to-video, image-to-video, first/last frames and reference images — async tasks behind a single Bearer token.</span></p>
+      <div class="hero-actions">
+        <a class="btn btn-primary" href="/dashboard" data-od-id="cta-hero-primary"><span class="t-zh">控制台</span><span class="t-en">Console</span></a>
+        <a class="btn btn-secondary" href="http://115.190.244.91:3011" data-od-id="cta-hero-secondary"><span class="t-zh">查看文档</span><span class="t-en">View docs</span></a>
+      </div>
+      <p class="hero-hint">POST /v1/video/generations &nbsp;·&nbsp; Authorization: Bearer sk-xxx</p>
+    </div>
+
+    <div class="hero-panel" data-od-id="task-panel">
+      <div class="panel">
+        <div class="panel-head">
+          <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span class="panel-title">bluewhale · <span class="t-zh">任务队列</span><span class="t-en">Task Queue</span></span>
+          <span class="panel-tag">Async</span>
+        </div>
+        <div class="trow" data-od-id="task-row-processing">
+          <span class="tid">task_9f3a2b7c</span>
+          <span class="tmeta">
+            <span class="tstatus st-proc"><span class="sdot s-proc"></span>processing</span>
+            <span class="tbar" aria-hidden="true"><span class="tbar-fill"></span></span>
+            <span class="tpct" data-od-id="task-progress-pct"><span class="pct-strip" aria-hidden="true"><span>0%</span><span>5%</span><span>10%</span><span>15%</span><span>20%</span><span>25%</span><span>30%</span><span>35%</span><span>40%</span><span>45%</span><span>50%</span><span>55%</span><span>60%</span><span>65%</span><span>70%</span><span>75%</span><span>80%</span><span>85%</span><span>90%</span><span>95%</span><span>100%</span></span></span>
+          </span>
+        </div>
+        <div class="trow" data-od-id="task-row-queued">
+          <span class="tid">task_8e1c4d0a</span>
+          <span class="tmeta"><span class="tstatus st-queue"><span class="sdot s-queue"></span>queued</span></span>
+        </div>
+        <div class="trow" data-od-id="task-row-succeeded">
+          <span class="tid">task_7d2b5e9f</span>
+          <span class="tmeta">
+            <span class="tstatus st-ok"><span class="sdot s-ok"></span>succeeded</span>
+            <a class="tlink" href="#quickstart"><span class="t-zh">下载</span><span class="t-en">Download</span></a>
+          </span>
+        </div>
+        <div class="trow" data-od-id="task-row-failed">
+          <span class="tid">task_6a0c3d8e</span>
+          <span class="tmeta">
+            <span class="tstatus st-err"><span class="sdot s-err"></span>failed</span>
+            <span class="tcode">40001</span>
+          </span>
+        </div>
+        <div class="panel-foot"><span class="t-zh">轮询间隔 5–10s &nbsp;·&nbsp; 无回调机制</span><span class="t-en">Poll interval 5–10s &nbsp;·&nbsp; No callbacks</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 2 · CAPABILITIES ================= -->
+<section class="section" id="capabilities" data-od-id="capabilities">
+  <div class="container">
+    <div class="sec-head">
+      <span class="sec-label">Capabilities</span>
+      <h2 class="sec-title"><span class="t-zh">能力一览</span><span class="t-en">Capabilities at a glance</span></h2>
+    </div>
+    <div class="cap-row" data-od-id="cap-row-resolution">
+      <span class="cap-name"><span class="t-zh">三种分辨率</span><span class="t-en">Three resolutions</span></span>
+      <span class="cap-desc"><span class="t-zh"><span class="mono">480p / 720p / 1080p</span>，默认 <span class="mono">720p</span></span><span class="t-en"><span class="mono">480p / 720p / 1080p</span>, default <span class="mono">720p</span></span></span>
+    </div>
+    <div class="cap-row" data-od-id="cap-row-aspect">
+      <span class="cap-name"><span class="t-zh">三种画面比例</span><span class="t-en">Three aspect ratios</span></span>
+      <span class="cap-desc"><span class="t-zh"><span class="mono">16:9 / 9:16 / 1:1</span>，默认 <span class="mono">16:9</span></span><span class="t-en"><span class="mono">16:9 / 9:16 / 1:1</span>, default <span class="mono">16:9</span></span></span>
+    </div>
+    <div class="cap-row" data-od-id="cap-row-methods">
+      <span class="cap-name"><span class="t-zh">四种生成方式</span><span class="t-en">Four generation modes</span></span>
+      <span class="cap-desc"><span class="t-zh">文生视频 · 图生视频 · 首尾帧 · 参考图</span><span class="t-en">Text-to-video · Image-to-video · First/last frames · Reference images</span></span>
+    </div>
+    <div class="cap-row" data-od-id="cap-row-audio">
+      <span class="cap-name"><span class="t-zh">音频 · 无水印</span><span class="t-en">Audio · No watermark</span></span>
+      <span class="cap-desc"><span class="t-zh">支持随视频生成音频，输出无水印</span><span class="t-en">Audio generated with the video; watermark-free output</span></span>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 3 · MODEL ================= -->
+<section class="section section-alt" id="model" data-od-id="model">
+  <div class="container">
+    <div class="sec-head">
+      <span class="sec-label">Model</span>
+      <h2 class="sec-title"><span class="t-zh">Seedance 2.0 视频生成模型</span><span class="t-en">Seedance 2.0 video generation model</span></h2>
+    </div>
+    <div class="model-grid">
+      <div data-od-id="model-desc">
+        <p class="model-desc"><span class="t-zh">Seedance 2.0 是当前开放的唯一视频生成模型。任务异步执行，通过轮询获取结果，无回调机制。</span><span class="t-en">Seedance 2.0 is the only video generation model currently open. Tasks run asynchronously; results are retrieved by polling — no callbacks.</span></p>
+
+      </div>
+      <div>
+      <div class="table-scroll">
+        <table class="pt" data-od-id="model-param-table">
+          <thead>
+            <tr><th><span class="t-zh">参数</span><span class="t-en">Parameter</span></th><th><span class="t-zh">取值范围</span><span class="t-en">Range</span></th><th><span class="t-zh">默认值</span><span class="t-en">Default</span></th></tr>
+          </thead>
+          <tbody>
+            <tr><td class="p-name">model</td><td class="p-val">seedance-2.0-whitelist</td><td class="p-def">—</td></tr>
+            <tr><td class="p-name">resolution</td><td class="p-val">480p / 720p / 1080p</td><td class="p-def">720p</td></tr>
+            <tr><td class="p-name">aspect_ratio</td><td class="p-val">16:9 / 9:16 / 1:1</td><td class="p-def">16:9</td></tr>
+            <tr><td class="p-name">duration</td><td class="p-val"><span class="t-zh">4–15 秒（步长 1 秒）</span><span class="t-en">4–15 s (1 s steps)</span></td><td class="p-def"><span class="t-zh">5 秒</span><span class="t-en">5 s</span></td></tr>
+            <tr><td class="p-name"><span class="t-zh">生成方式</span><span class="t-en">Generation mode</span></td><td class="p-val"><span class="t-zh">文生视频 / 图生视频 / 首尾帧 / 参考图</span><span class="t-en">Text-to-video / Image-to-video / First/last frames / Reference images</span></td><td class="p-def"><span class="t-zh">文生视频</span><span class="t-en">Text-to-video</span></td></tr>
+<tr><td class="p-name"><span class="t-zh">任务状态</span><span class="t-en">Task status</span></td><td class="p-val">queued / processing / succeeded / failed</td><td class="p-def"><span class="t-zh">轮询获取</span><span class="t-en">Via polling</span></td></tr>
+<tr><td class="p-name"><span class="t-zh">音频</span><span class="t-en">Audio</span></td><td class="p-val"><span class="t-zh">随视频生成</span><span class="t-en">Generated with video</span></td><td class="p-def">—</td></tr>
+          </tbody>
+        </table>
+      </div>
+        <p class="pt-note"><span class="t-zh">参数说明以实际接口文档为准。</span><span class="t-en">Parameter details are subject to the API documentation.</span></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 4 · QUICK START ================= -->
+<section class="section" id="quickstart" data-od-id="quickstart">
+  <div class="container">
+    <div class="sec-head">
+      <span class="sec-label">Quick Start</span>
+      <h2 class="sec-title"><span class="t-zh">三步接入</span><span class="t-en">Three steps to integrate</span></h2>
+    </div>
+
+    <div class="step" data-od-id="qs-step-1">
+      <span class="step-num">01</span>
+      <div>
+        <h3><span class="t-zh">提交任务</span><span class="t-en">Submit a task</span></h3>
+        <p><span class="t-zh">向生成接口提交一个视频生成任务，返回任务 ID 后进入异步队列。示例中的接口地址为占位地址，模型编号固定为 seedance-2.0-whitelist。</span><span class="t-en">Submit a video generation task to the generations endpoint; it returns a task ID and enters the async queue. The endpoint address in the example is a placeholder; the model ID is always seedance-2.0-whitelist.</span></p>
+        <div class="code" data-od-id="code-submit">
+          <span class="code-tag mono">bash</span>
+          <div class="code-scroll">
+<pre><code><span class="c-note"><span class="t-zh"># 提交视频生成任务</span><span class="t-en"># Submit a video generation task</span></span>
+curl -X POST https://api.bluewhale.ai/v1/video/generations \
+  -H "Authorization: Bearer sk-xxx" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "seedance-2.0-whitelist",
+    "prompt": "<span class="t-zh">一只蓝鲸在深海中缓慢游过</span><span class="t-en">A blue whale gliding slowly through the deep sea</span>",
+    "resolution": "720p",
+    "aspect_ratio": "16:9",
+    "duration": 5
+  }'</code></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step" data-od-id="qs-step-2">
+      <span class="step-num">02</span>
+      <div>
+        <h3><span class="t-zh">轮询状态</span><span class="t-en">Poll the status</span></h3>
+        <p><span class="t-zh">视频生成为异步任务，不提供回调；提交后每 5–10 秒轮询一次任务状态，直至 succeeded 或 failed。任务状态仅四种：queued、processing、succeeded、failed。</span><span class="t-en">Generation is asynchronous with no callbacks; poll the task status every 5–10 seconds until succeeded or failed. There are only four states: queued, processing, succeeded, failed.</span></p>
+        <div class="code" data-od-id="code-poll">
+          <span class="code-tag mono">bash</span>
+          <div class="code-scroll">
+<pre><code><span class="c-note"><span class="t-zh"># 每 5–10 秒轮询一次任务状态</span><span class="t-en"># Poll the task status every 5–10 seconds</span></span>
+curl https://api.bluewhale.ai/v1/video/generations/task_9f3a2b7c \
+  -H "Authorization: Bearer sk-xxx"
+
+<span class="c-note"># → { "status": "processing" }</span></code></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step" data-od-id="qs-step-3">
+      <span class="step-num">03</span>
+      <div>
+        <h3><span class="t-zh">下载视频</span><span class="t-en">Download the video</span></h3>
+        <p><span class="t-zh">任务状态为 succeeded 后，通过下载接口获取视频文件。</span><span class="t-en">Once the task is succeeded, fetch the video file via the download endpoint.</span></p>
+        <div class="code" data-od-id="code-download">
+          <span class="code-tag mono">bash</span>
+          <div class="code-scroll">
+<pre><code><span class="c-note"><span class="t-zh"># 下载视频文件到本地</span><span class="t-en"># Download the video file locally</span></span>
+curl -L https://api.bluewhale.ai/v1/videos/task_9f3a2b7c/content \
+  -H "Authorization: Bearer sk-xxx" \
+  -o video</code></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="endpoints" data-od-id="endpoints">
+      <div class="endpoints-head mono"><span class="t-zh">接口一览</span><span class="t-en">Endpoints</span></div>
+      <div class="ep"><span class="ep-m mono">POST</span><code>/v1/video/generations</code><span class="ep-d"><span class="t-zh">提交任务</span><span class="t-en">Submit a task</span></span></div>
+      <div class="ep"><span class="ep-m mono">GET</span><code>/v1/video/generations/{task_id}</code><span class="ep-d"><span class="t-zh">查询任务状态</span><span class="t-en">Query task status</span></span></div>
+      <div class="ep"><span class="ep-m mono">GET</span><code>/v1/videos/{task_id}/content</code><span class="ep-d"><span class="t-zh">下载视频</span><span class="t-en">Download the video</span></span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 5 · DEVELOPERS ================= -->
+<section class="section section-alt" id="developers" data-od-id="developers">
+  <div class="container">
+    <div class="sec-head">
+      <span class="sec-label">Developers</span>
+      <h2 class="sec-title"><span class="t-zh">为开发者设计</span><span class="t-en">Designed for developers</span></h2>
+    </div>
+    <div class="dev-grid">
+      <div class="dev-col" data-od-id="dev-auth">
+        <h3><span class="t-zh">鉴权方式</span><span class="t-en">Authentication</span></h3>
+        <p><span class="t-zh">所有接口统一通过请求头鉴权，将 sk-xxx 替换为你的 API Key。</span><span class="t-en">All endpoints authenticate via the request header — replace sk-xxx with your API key.</span></p>
+        <span class="dev-code mono">Authorization: Bearer sk-xxx</span>
+      </div>
+      <div class="dev-col" data-od-id="dev-error">
+        <h3><span class="t-zh">统一错误格式</span><span class="t-en">Unified error format</span></h3>
+        <p><span class="t-zh">错误统一返回 {code, message, data} 结构；401 表示鉴权失败，429 表示触发限流。</span><span class="t-en">Errors share one {code, message, data} envelope; 401 means auth failure, 429 means rate-limited.</span></p>
+        <span class="dev-code mono">{"code": 401, "message": "unauthorized", "data": null}</span>
+      </div>
+      <div class="dev-col" data-od-id="dev-rate">
+        <h3><span class="t-zh">限流说明</span><span class="t-en">Rate limits</span></h3>
+        <p><span class="t-zh">接口存在限流保护，具体的配额与速率以实际环境为准。</span><span class="t-en">Endpoints are rate-limit protected; specific quotas and rates depend on the actual environment.</span></p>
+        <span class="dev-code mono">HTTP/1.1 429 Too Many Requests</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 6 · CLOSING ================= -->
+<section class="closing" data-od-id="closing">
+  <div class="container">
+    <h2 data-od-id="closing-title"><span class="t-zh">让视频生成<br>成为产品的一部分</span><span class="t-en">Make video generation<br>part of your product</span></h2>
+    <p class="sub"><span class="t-zh">提交、轮询、下载——三步接入视频生成能力。</span><span class="t-en">Submit, poll, download — video generation in three steps.</span></p>
+    <div class="actions">
+      <a class="btn btn-primary" href="/dashboard" data-od-id="cta-closing-primary"><span class="t-zh">控制台</span><span class="t-en">Console</span></a>
+      <a class="btn btn-secondary" href="http://115.190.244.91:3011" data-od-id="cta-closing-secondary"><span class="t-zh">查看文档</span><span class="t-en">View docs</span></a>
+    </div>
+    <p class="company"><span class="t-zh">杭州玄浮科技有限公司</span><span class="t-en">Hangzhou Xuanfu Technology Co., Ltd.</span></p>
+  </div>
+</section>
+
+</main>
+
+<footer class="footer" data-od-id="footer">
+  <div class="container footer-inner">
+    <span>© 2026 <span class="t-zh">杭州玄浮科技有限公司</span><span class="t-en">Hangzhou Xuanfu Technology Co., Ltd.</span></span>
+    <span class="mono">api.bluewhale.ai</span>
+  </div>
+</footer>
+</div>

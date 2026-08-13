@@ -1,0 +1,61 @@
+---
+title: Quick Start
+description: From sign-up to your first generated video in about 5 minutes
+---
+
+# Quick Start
+
+From sign-up to your first generated video, the whole flow takes about 5 minutes.
+
+## 1. Get an API Key
+
+1. Sign up and log in to the console
+2. Open the "Tokens" page and create a new API key (in the form `sk-xxxxxx`)
+3. Store it safely — the key is shown in full only once, at creation time
+
+## 2. Submit a Generation Task
+
+```bash
+BASE_URL="https://api.bluewhale.ai"   # Placeholder; the official domain will be announced separately
+
+curl "$BASE_URL/v1/video/generations" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "seedance-2.0-whitelist",
+    "prompt": "A blue whale leaping out of the ocean, slow motion, cinematic look",
+    "size": "720p",
+    "duration": 5
+  }'
+```
+
+`data.task_id` in the response is the unique identifier of this task:
+
+```json
+{ "code": "success", "message": "", "data": { "task_id": "task_9f3a2b7c" } }
+```
+
+## 3. Poll the Task Status
+
+Video generation is asynchronous. We recommend polling every 5–10 seconds:
+
+```bash
+curl "$BASE_URL/v1/video/generations/task_9f3a2b7c" \
+  -H "Authorization: Bearer sk-YOUR-KEY"
+```
+
+When `data.status` becomes `SUCCESS`, generation is complete. See [Query a Task](./video/query).
+
+## 4. Download the Video
+
+```bash
+curl "$BASE_URL/v1/videos/task_9f3a2b7c/content" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -o result.mp4
+```
+
+## Next Steps
+
+- [Authentication](./authentication): using API keys and their lifecycle
+- [Models](./models): full parameter reference for seedance-2.0-whitelist
+- [Error Codes](./errors): look here when something goes wrong

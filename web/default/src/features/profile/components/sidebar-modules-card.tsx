@@ -48,6 +48,12 @@ type SectionDef = {
   modules: { key: string; title: string; description: string }[]
 }
 
+// 首期产品范围外：聊天区域整组、绘图日志单项，前端直接隐藏（不改动后端配置与保存逻辑）
+const HIDDEN_SECTIONS = new Set(['chat'])
+const HIDDEN_MODULES: Record<string, Set<string>> = {
+  console: new Set(['midjourney']),
+}
+
 export function SidebarModulesCard() {
   const { t } = useTranslation()
   const [loading, setLoading] = useState(false)
@@ -219,7 +225,9 @@ export function SidebarModulesCard() {
         </div>
       </CardHeader>
       <CardContent className='space-y-4 p-3 sm:space-y-5 sm:p-5'>
-        {sectionDefs.map((section) => {
+        {sectionDefs
+          .filter((section) => !HIDDEN_SECTIONS.has(section.key))
+          .map((section) => {
           const sectionEnabled = config[section.key]?.enabled !== false
           return (
             <div
@@ -239,7 +247,9 @@ export function SidebarModulesCard() {
                 />
               </div>
               <div className='mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-1'>
-                {section.modules.map((mod) => (
+                {section.modules
+                  .filter((mod) => !HIDDEN_MODULES[section.key]?.has(mod.key))
+                  .map((mod) => (
                   <div
                     key={mod.key}
                     className={`flex min-h-16 items-center justify-between rounded-lg border p-3 ${

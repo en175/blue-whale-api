@@ -1,0 +1,80 @@
+---
+title: Submit a Task
+description: Submit a video generation task and get a task_id
+---
+
+# Submit a Task
+
+**POST** `/v1/video/generations`
+
+Submit a video generation task. The endpoint returns a `task_id` immediately; generation runs asynchronously and progress is tracked via [Query a Task](./query).
+
+## Request Parameters
+
+| Field | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `prompt` | string | Yes | — | Description of the video content |
+| `model` | string | Yes | — | Always `seedance-2.0-whitelist` |
+| `duration` | integer | No | 5 | Video duration in seconds, 1–30 |
+| `images` | string[] | No | — | Image-to-video: list of first-frame image URLs (publicly accessible) |
+| `metadata` | object | No | — | Extended parameters, passed through to the upstream (resolution, aspect ratio, audio, etc.; see [Models](../models)) |
+
+## Examples
+
+### Text-to-Video
+
+```bash
+BASE_URL="https://api.bluewhale.ai"   # Placeholder; the official domain will be announced separately
+
+curl "$BASE_URL/v1/video/generations" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "seedance-2.0-whitelist",
+    "prompt": "A blue whale leaping out of the ocean, slow motion, cinematic look",
+    "duration": 5,
+    "metadata": {
+      "resolution": "720p",
+      "ratio": "16:9",
+      "generate_audio": false
+    }
+  }'
+```
+
+### Image-to-Video (First Frame)
+
+```bash
+curl "$BASE_URL/v1/video/generations" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "seedance-2.0-whitelist",
+    "prompt": "The camera slowly pushes in; the cup in the frame wobbles gently",
+    "images": ["https://example.com/first-frame.jpg"],
+    "duration": 5,
+    "metadata": {
+      "resolution": "720p"
+    }
+  }'
+```
+
+## Response
+
+```json
+{
+  "code": "success",
+  "message": "",
+  "data": {
+    "task_id": "task_9f3a2b7c",
+    "status": "QUEUED"
+  }
+}
+```
+
+Note down `data.task_id` — it is used to query progress and download the result.
+
+## Related Docs
+
+- [Query a Task](./query)
+- [Download the Video](./download)
+- [Error Codes](../errors)
