@@ -22,6 +22,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react'
 
@@ -30,10 +31,14 @@ import { getCookie, setCookie, removeCookie } from '@/lib/cookies'
 type Theme = 'dark' | 'light' | 'system'
 type ResolvedTheme = Exclude<Theme, 'system'>
 
-const DEFAULT_THEME = 'system'
+// 首期默认深色（品牌定稿视觉）；用户选择后尊重存储值
+const DEFAULT_THEME = 'dark'
 const THEME_COOKIE_NAME = 'vite-ui-theme'
+// 与文档站 next-themes 共用同源的 localStorage 键，任一站切换两站同步
+const THEME_LOCAL_KEY = 'theme'
 const THEME_COOKIE_MAX_AGE = 60 * 60 * 24 * 365 // 1 year
-const THEMES = new Set<Theme>(['dark', 'light', 'system'])
+// 首期仅浅/深两档（默认深色）；存量 'system' 存储值视为无效回退默认
+const THEMES = new Set<Theme>(['dark', 'light'])
 
 type ThemeProviderProps = {
   children: React.ReactNode
@@ -72,7 +77,17 @@ function resolveTheme(theme: Theme): ResolvedTheme {
 
 function getStoredTheme(storageKey: string, fallback: Theme): Theme {
   const storedTheme = getCookie(storageKey) as Theme | undefined
-  return storedTheme && THEMES.has(storedTheme) ? storedTheme : fallback
+  if (storedTheme && THEMES.has(storedTheme)) return storedTheme
+  // cookie 缺失时回退文档站写入的 localStorage（跨站同步）
+  try {
+    const localTheme = window.localStorage.getItem(THEME_LOCAL_KEY) as
+      | Theme
+      | null
+    if (localTheme && THEMES.has(localTheme)) return localTheme
+  } catch {
+    // localStorage 不可用时忽略
+  }
+  return fallback
 }
 
 export function ThemeProvider({
@@ -87,6 +102,7 @@ export function ThemeProvider({
   const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>(() =>
     resolveTheme(getStoredTheme(storageKey, defaultTheme))
   )
+  const lastAppliedTheme = useRef<ResolvedTheme | null>(null)
 
   useEffect(() => {
     const root = window.document.documentElement
@@ -94,8 +110,40 @@ export function ThemeProvider({
 
     const applyTheme = () => {
       const nextResolvedTheme = theme === 'system' ? getSystemTheme() : theme
-      root.classList.remove('light', 'dark')
-      root.classList.add(nextResolvedTheme)
+      const changed =
+        lastAppliedTheme.current !== null &&
+        lastAppliedTheme.current !== nextResolvedTheme
+      // 根节点 class 与首页 shadow DOM 主题同一帧内改，保证 View Transition 快照覆盖整页
+      const mutate = () => {
+        root.classList.remove('light', 'dark')
+        root.classList.add(nextResolvedTheme)
+        const shadowHome = document
+          .querySelector('.custom-home-content')
+          ?.shadowRoot?.querySelector<HTMLElement>('.bw-home')
+        if (shadowHome) shadowHome.dataset.theme = nextResolvedTheme
+      }
+      if (changed) {
+        const reduce = window.matchMedia(
+          '(prefers-reduced-motion: reduce)'
+        ).matches
+        const doc = document as Document & {
+          startViewTransition?: (cb: () => void) => unknown
+        }
+        if (!reduce && typeof doc.startViewTransition === 'function') {
+          // 路线 A：compositor 级整页交叉淡化，零重绘卡帧
+          doc.startViewTransition(mutate)
+        } else if (!reduce) {
+          // 回退：颜色过渡窗（呼吸档）
+          root.classList.add('theme-anim')
+          window.setTimeout(() => root.classList.remove('theme-anim'), 700)
+          mutate()
+        } else {
+          mutate()
+        }
+      } else {
+        mutate()
+      }
+      lastAppliedTheme.current = nextResolvedTheme
       setResolvedTheme(nextResolvedTheme)
     }
 
@@ -109,6 +157,11 @@ export function ThemeProvider({
   const setTheme = useCallback(
     (theme: Theme) => {
       setCookie(storageKey, theme, THEME_COOKIE_MAX_AGE)
+      try {
+        window.localStorage.setItem(THEME_LOCAL_KEY, theme)
+      } catch {
+        // localStorage 不可用时忽略
+      }
       _setTheme(theme)
     },
     [storageKey]
@@ -116,6 +169,11 @@ export function ThemeProvider({
 
   const resetTheme = useCallback(() => {
     removeCookie(storageKey)
+    try {
+      window.localStorage.removeItem(THEME_LOCAL_KEY)
+    } catch {
+      // localStorage 不可用时忽略
+    }
     _setTheme(defaultTheme)
   }, [defaultTheme, storageKey])
 

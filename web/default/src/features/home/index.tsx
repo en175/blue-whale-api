@@ -38,9 +38,42 @@ import { useHomePageContent } from './hooks'
  * A portal (rather than a detached createRoot) keeps router / query contexts
  * available to the injected lineup.
  */
+/*
+ * 首页自定义 HTML 首期只产出简体中文 + 英文；
+ * 其余语种（含繁體中文）回退英文，与 i18n fallbackLng 行为一致
+ */
+function normalizeHomeLang(language: string): 'zh' | 'en' {
+  return language === 'zhCN' ? 'zh' : 'en'
+}
+
 function CustomHomeHtml({ content }: { content: string }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [lineupSlots, setLineupSlots] = useState<Element[]>([])
+  const { i18n } = useTranslation()
+  const { resolvedTheme } = useTheme()
+  const [homeLang, setHomeLang] = useState<'zh' | 'en'>(() =>
+    normalizeHomeLang(i18n.language)
+  )
+
+  // 语言切换实时同步进 shadow DOM（模板内 .t-zh/.t-en 按 data-lang 显隐）
+  useEffect(() => {
+    const onChange = (lng: string) => setHomeLang(normalizeHomeLang(lng))
+    i18n.on('languageChanged', onChange)
+    return () => {
+      i18n.off('languageChanged', onChange)
+    }
+  }, [i18n])
+
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+    const host = container.querySelector<HTMLElement>('.custom-home-content')
+    const root = host?.shadowRoot?.querySelector<HTMLElement>('.bw-home')
+    if (root) {
+      root.dataset.lang = homeLang
+      root.dataset.theme = resolvedTheme
+    }
+  }, [content, homeLang, resolvedTheme])
 
   useEffect(() => {
     const container = containerRef.current

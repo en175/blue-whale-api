@@ -28,6 +28,7 @@ import { ThemeSwitch } from '@/components/theme-switch'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { SignInDialog } from '@/features/auth/sign-in/components/sign-in-dialog'
+import { useTheme } from '@/context/theme-provider'
 import { useNotifications } from '@/hooks/use-notifications'
 import { useSystemConfig } from '@/hooks/use-system-config'
 import { useTopNavLinks } from '@/hooks/use-top-nav-links'
@@ -75,6 +76,7 @@ export function PublicHeader(props: PublicHeaderProps) {
   } = props
 
   const { t } = useTranslation()
+  const { resolvedTheme } = useTheme()
   const navigate = useNavigate()
   const [scrolled, setScrolled] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -97,6 +99,8 @@ export function PublicHeader(props: PublicHeaderProps) {
 
   const user = auth.user
   const isAuthenticated = !!user
+  // 滚动后或浅色主题下用“实底”取色（深字），否则深色首屏上用白字
+  const solid = scrolled || resolvedTheme === 'light'
   const displaySiteName = customSiteName || systemName
   const links = dynamicLinks.length > 0 ? dynamicLinks : navLinks
 
@@ -177,27 +181,21 @@ export function PublicHeader(props: PublicHeaderProps) {
 
   return (
     <>
-      <header className='dark pointer-events-none fixed inset-x-0 top-0 z-50'>
-        <div
-          className={cn(
-            'pointer-events-auto mx-auto transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)]',
-            scrolled ? 'max-w-[52rem] px-3 pt-3' : 'max-w-7xl px-4 pt-0 md:px-6'
-          )}
-        >
-          <nav
-            className={cn(
-              'flex items-center justify-between transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)]',
-              scrolled
-                ? 'bg-background/60 ring-border/50 h-16 rounded-2xl pr-1.5 pl-4 shadow-[0_2px_16px_-6px_rgba(0,0,0,0.08),0_0_0_0.5px_rgba(0,0,0,0.02)] ring-[0.5px] backdrop-blur-2xl dark:shadow-[0_2px_16px_-6px_rgba(0,0,0,0.4)]'
-                : 'h-16 px-2'
-            )}
-          >
+      <header
+        className={cn(
+          'pointer-events-none fixed inset-x-0 top-0 z-50 transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]',
+          scrolled &&
+            'bg-background/80 ring-border/50 shadow-[0_2px_16px_-6px_rgba(0,0,0,0.08),0_0_0_0.5px_rgba(0,0,0,0.02)] ring-[0.5px] backdrop-blur-2xl dark:shadow-[0_2px_16px_-6px_rgba(0,0,0,0.4)]'
+        )}
+      >
+        <div className='pointer-events-auto w-full px-4 md:px-6'>
+          <nav className='flex h-20 items-center justify-between px-2'>
             {/* Logo */}
             <Link
               to={homeUrl}
               className='group flex shrink-0 items-center gap-2.5'
             >
-              <div className='flex size-16 shrink-0 items-center justify-center transition-all duration-300 group-hover:scale-105'>
+              <div className='flex size-20 shrink-0 items-center justify-center transition-all duration-300 group-hover:scale-105'>
                 {loading ? (
                   <Skeleton className='size-full rounded-lg' />
                 ) : customLogo ? (
@@ -212,8 +210,8 @@ export function PublicHeader(props: PublicHeaderProps) {
                 )}
               </div>
               <span className={cn(
-                'text-sm font-semibold tracking-tight transition-colors duration-500',
-                scrolled ? 'text-foreground' : 'text-white'
+                'text-base font-semibold tracking-tight transition-colors duration-500',
+                solid ? 'text-foreground' : 'text-white'
               )}>
                 {loading ? <Skeleton className='h-4 w-16' /> : displaySiteName}
               </span>
@@ -234,8 +232,8 @@ export function PublicHeader(props: PublicHeaderProps) {
                       tabIndex={link.disabled ? -1 : undefined}
                       onClick={(event) => handleNavLinkClick(event, link)}
                       className={cn(
-                        'rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors duration-500',
-                        scrolled
+                        'rounded-lg px-3.5 py-2 text-sm font-medium transition-colors duration-500',
+                        solid
                           ? 'text-muted-foreground hover:text-foreground'
                           : 'text-white/70 hover:text-white',
                         link.disabled && 'pointer-events-none opacity-50'
@@ -252,10 +250,10 @@ export function PublicHeader(props: PublicHeaderProps) {
                     disabled={link.disabled}
                     onClick={(event) => handleNavLinkClick(event, link)}
                     className={cn(
-                      'rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors duration-500',
+                      'rounded-lg px-3.5 py-2 text-sm font-medium transition-colors duration-500',
                       isActive
-                        ? scrolled ? 'text-foreground' : 'text-white'
-                        : scrolled
+                        ? solid ? 'text-foreground' : 'text-white'
+                        : solid
                           ? 'text-muted-foreground hover:text-foreground'
                           : 'text-white/70 hover:text-white',
                       link.disabled && 'pointer-events-none opacity-50'
@@ -269,10 +267,10 @@ export function PublicHeader(props: PublicHeaderProps) {
               {(showLanguageSwitcher ||
                 showThemeSwitch ||
                 showNotifications) && (
-                <div className={cn('mx-2 h-4 w-px', scrolled ? 'bg-border/40' : 'bg-white/20')} />
+                <div className={cn('mx-2 h-5 w-px', solid ? 'bg-border/40' : 'bg-white/20')} />
               )}
 
-              <div className={cn('flex items-center gap-0.5 transition-colors duration-500', scrolled ? '' : '[&_button]:!text-white [&_a]:!text-white')}>
+              <div className={cn('flex items-center gap-0.5 transition-colors duration-500', solid ? '[&_button]:!text-muted-foreground [&_a]:!text-muted-foreground' : '[&_button]:!text-white [&_a]:!text-white')}>
               {showLanguageSwitcher && <LanguageSwitcher />}
               {showThemeSwitch && <ThemeSwitch />}
               {showNotifications && (
@@ -291,7 +289,7 @@ export function PublicHeader(props: PublicHeaderProps) {
 
               {showAuthButtons && (
                 <>
-                  <div className={cn('mx-1 h-4 w-px', scrolled ? 'bg-border/40' : 'bg-white/20')} />
+                  <div className={cn('mx-1 h-5 w-px', solid ? 'bg-border/40' : 'bg-white/20')} />
                   {loading ? (
                     <Skeleton className='h-8 w-20 rounded-lg' />
                   ) : isAuthenticated ? (
@@ -299,7 +297,7 @@ export function PublicHeader(props: PublicHeaderProps) {
                   ) : (
                     <Button
                       size='sm'
-                      className='h-8 rounded-lg px-3.5 text-xs font-medium'
+                      className='h-9 rounded-lg px-4 text-sm font-medium'
                       onClick={() => setSignInOpen(true)}
                     >
                       {t('Sign in')}
@@ -319,7 +317,7 @@ export function PublicHeader(props: PublicHeaderProps) {
                 type='button'
                 variant='ghost'
                 size='icon'
-                className={cn('size-9 transition-colors duration-500', scrolled ? '' : '!text-white')}
+                className={cn('size-10 transition-colors duration-500', solid ? '' : '!text-white')}
                 onClick={() => setMobileOpen((v) => !v)}
                 aria-label={t('Toggle navigation menu')}
               >
