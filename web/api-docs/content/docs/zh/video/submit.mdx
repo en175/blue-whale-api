@@ -15,19 +15,11 @@ description: 提交视频生成任务，获取 task_id
 | --- | --- | --- | --- | --- |
 | `prompt` | string | 是 | — | 视频内容描述 |
 | `model` | string | 是 | — | 固定传 `seedance-2.0-whitelist` |
-| `duration` | integer | 否 | 5 | 视频时长（秒），1–30（实测上游校验上限；Seedance 2.0 官方能力为 4–15） |
+| `duration` | integer | 否 | 5 | 视频时长（秒），1–30 |
 | `images` | string[] | 否 | — | 图生视频：首帧图片 URL 列表（公网可访问） |
-| `metadata` | object | 否 | — | 扩展参数，见下表 |
+| `metadata` | object | 否 | — | 扩展参数，透传给上游（分辨率、画面比例、音频等，见[模型列表](./models)） |
 
-> ⚠️ 字段生效说明：网关对 `seedance-2.0-whitelist` 走透传，**顶层 `size`、`image`、`input_reference`、`aspect_ratio` 字段不生效**（会被上游忽略）。分辨率与画面比例必须通过 `metadata` 传入，图生视频必须通过 `images` 数组传入。
-
-### `metadata` 扩展参数（实测验证）
-
-| 字段 | 类型 | 默认 | 可选值 | 说明 |
-| --- | --- | --- | --- | --- |
-| `metadata.resolution` | string | 720p | 480p / 720p / 1080p / 4k | 输出分辨率 |
-| `metadata.ratio` | string | 16:9 | 16:9 / 4:3 / 1:1 / 3:4 / 9:16 / 21:9 / adaptive | 画面比例 |
-| `metadata.generate_audio` | boolean | true | true / false | 是否随视频生成音频 |
+> ⚠️ 顶层 `size`、`image`、`input_reference`、`aspect_ratio` 字段不生效（会被上游忽略）。分辨率与画面比例通过 `metadata` 传入，图生视频通过 `images` 数组传入。
 
 ## 示例
 
