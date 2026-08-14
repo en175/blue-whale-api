@@ -1,6 +1,7 @@
 // merge auto-push test comment
 // merge auto-push test comment 2
 // merge auto-push test comment 3
+// merge auto-push test comment 4
 package main
 
 import (
