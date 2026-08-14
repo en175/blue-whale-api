@@ -64,6 +64,10 @@ export default defineConfig(({ envMode }) => {
     },
     html: {
       template: './index.html',
+      // 显式指定 favicon，阻止 rsbuild 自动扫描 public/favicon.ico 并在 head 末尾注入同名 link：
+      // 回访用户浏览器在 /favicon.ico URL 下缓存着旧版图标（服务端 max-age 7 天），
+      // Chrome 取最后声明的 icon link，会导致标签页显示旧版。
+      favicon: './public/favicon.png',
     },
     server: {
       host: '0.0.0.0',
