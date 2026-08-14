@@ -7,8 +7,8 @@ export function createMetadata(override: Metadata): Metadata {
   return {
     ...override,
     icons: {
-      icon: { url: logoUrl, type: 'image/svg+xml' },
-      shortcut: logoUrl,
+      icon: { url: '/favicon.png', type: 'image/png' },
+      shortcut: '/favicon.png',
       apple: '/assets/logo.png',
     },
     openGraph: {
