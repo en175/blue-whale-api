@@ -33,6 +33,14 @@ var builtinVideoPriceTable = map[string]map[VideoPriceKey]float64{
 		{HasVideo: false}: 37.0,
 		{HasVideo: true}:  22.0,
 	},
+	"doubao-seedance-2-0-c3": {
+		{HasVideo: false}:                46.0,
+		{HasVideo: true}:                 28.0,
+		{Is1080p: true, HasVideo: false}: 51.0,
+		{Is1080p: true, HasVideo: true}:  31.0,
+		{Is4k: true, HasVideo: false}:    26.0,
+		{Is4k: true, HasVideo: true}:     16.0,
+	},
 }
 
 // HasVideoInputInMetadata 检查 metadata 的 content 数组是否包含 video_url 条目

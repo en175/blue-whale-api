@@ -59,6 +59,7 @@ const BRAND_LOGO_MAP: Record<string, string> = {
   yi: `${TOS_LOGO_BASE}/yi.webp`,
   hunyuan: `${TOS_LOGO_BASE}/hunyuan.webp`,
   tencent: `${TOS_LOGO_BASE}/hunyuan.webp`,
+  xfai: '/xfai.png',
 }
 
 /**

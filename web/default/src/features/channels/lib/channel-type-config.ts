@@ -154,6 +154,16 @@ export const CHANNEL_TYPE_CONFIGS: Record<number, ChannelTypeConfig> = {
       models: 'Video models (e.g. seedance-2.0)',
     },
   },
+  60: {
+    id: 60,
+    name: CHANNEL_TYPES[60],
+    icon: 'newapi',
+    hints: {
+      baseUrl: 'Upstream base URL incl. namespace (e.g. http://host/api/v1/seedance_c3)',
+      key: 'Upstream API Key',
+      models: 'Video models (e.g. doubao-seedance-2-0-c3)',
+    },
+  },
 }
 
 /**
