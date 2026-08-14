@@ -116,6 +116,7 @@ const createModelSchema = (t: Translate) =>
     ExposeRatioEnabled: z.boolean(),
     BillingMode: createJsonStringField(t),
     BillingExpr: createJsonStringField(t),
+    VideoTierPricing: createJsonStringField(t),
   })
 
 const createGroupSchema = (t: Translate) =>
@@ -193,6 +194,7 @@ export function RatioSettingsCard({
     ExposeRatioEnabled: modelDefaults.ExposeRatioEnabled,
     BillingMode: normalizeJsonString(modelDefaults.BillingMode),
     BillingExpr: normalizeJsonString(modelDefaults.BillingExpr),
+    VideoTierPricing: normalizeJsonString(modelDefaults.VideoTierPricing),
   })
   const [savedModelValues, setSavedModelValues] = useState(
     modelNormalizedDefaults.current
@@ -229,6 +231,7 @@ export function RatioSettingsCard({
       ),
       BillingMode: formatJsonForTextarea(modelDefaults.BillingMode),
       BillingExpr: formatJsonForTextarea(modelDefaults.BillingExpr),
+      VideoTierPricing: formatJsonForTextarea(modelDefaults.VideoTierPricing),
     },
   })
 
@@ -263,6 +266,7 @@ export function RatioSettingsCard({
       ExposeRatioEnabled: modelDefaults.ExposeRatioEnabled,
       BillingMode: normalizeJsonString(modelDefaults.BillingMode),
       BillingExpr: normalizeJsonString(modelDefaults.BillingExpr),
+      VideoTierPricing: normalizeJsonString(modelDefaults.VideoTierPricing),
     }
     setSavedModelValues(modelNormalizedDefaults.current)
 
@@ -280,6 +284,7 @@ export function RatioSettingsCard({
       ),
       BillingMode: formatJsonForTextarea(modelDefaults.BillingMode),
       BillingExpr: formatJsonForTextarea(modelDefaults.BillingExpr),
+      VideoTierPricing: formatJsonForTextarea(modelDefaults.VideoTierPricing),
     })
   }, [modelDefaults, modelForm])
 
@@ -323,11 +328,13 @@ export function RatioSettingsCard({
         ExposeRatioEnabled: values.ExposeRatioEnabled,
         BillingMode: normalizeJsonString(values.BillingMode),
         BillingExpr: normalizeJsonString(values.BillingExpr),
+        VideoTierPricing: normalizeJsonString(values.VideoTierPricing),
       }
 
       const apiKeyMap: Record<string, string> = {
         BillingMode: 'billing_setting.billing_mode',
         BillingExpr: 'billing_setting.billing_expr',
+        VideoTierPricing: 'video_tier_pricing.price_table',
       }
 
       const updates = (
