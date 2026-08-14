@@ -150,3 +150,14 @@ html.theme-anim *::after {
   backdrop-filter: blur(20px) saturate(1.4);
   -webkit-backdrop-filter: blur(20px) saturate(1.4);
 }
+
+/* 首页顶栏内容铺开通栏，与门户首页头部统一（突破 fd-container 居中约束）
+   注意：DOM 为 header > div[relative] > nav，约束落在中间 div 层，须选直接子 div */
+#nd-nav > div {
+  max-width: none;
+}
+@media (min-width: 768px) {
+  #nd-nav > nav {
+    padding-inline: 1.5rem;
+  }
+}
