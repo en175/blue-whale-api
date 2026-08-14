@@ -60,6 +60,7 @@ const BRAND_LOGO_MAP: Record<string, string> = {
   hunyuan: `${TOS_LOGO_BASE}/hunyuan.webp`,
   tencent: `${TOS_LOGO_BASE}/hunyuan.webp`,
   xfai: '/xfai.png',
+  tokenhub: '/tokenhub.webp',
 }
 
 /**

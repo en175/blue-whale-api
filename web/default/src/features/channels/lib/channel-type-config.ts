@@ -164,6 +164,18 @@ export const CHANNEL_TYPE_CONFIGS: Record<number, ChannelTypeConfig> = {
       models: 'Video models (e.g. doubao-seedance-2-0-c3)',
     },
   },
+  61: {
+    id: 61,
+    name: CHANNEL_TYPES[61],
+    icon: 'tokenhub',
+    defaultBaseUrl: 'https://ai-tokenhub.ai',
+    hints: {
+      baseUrl: 'Default: https://ai-tokenhub.ai',
+      key: 'Upstream API Key',
+      models:
+        'dreamina-seedance-2-0-mini-260615, dreamina-seedance-2-0-260128, dreamina-seedance-2-0-fast-260128',
+    },
+  },
 }
 
 /**

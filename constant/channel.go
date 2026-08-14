@@ -58,6 +58,7 @@ const (
 	ChannelTypeAdvancedCustom = 58
 	ChannelTypeNewAPI         = 59
 	ChannelTypeXFAI           = 60
+	ChannelTypeTokenHub       = 61
 	ChannelTypeDummy          // this one is only for count, do not add any channel after this
 
 )
@@ -124,6 +125,7 @@ var ChannelBaseURLs = []string{
 	"",                                          //58
 	"",                                          //59
 	"",                                          //60
+	"https://ai-tokenhub.ai",                    //61
 }
 
 var ChannelTypeNames = map[int]string{
@@ -184,6 +186,7 @@ var ChannelTypeNames = map[int]string{
 	ChannelTypeAdvancedCustom: "Advanced Custom",
 	ChannelTypeNewAPI:         "New API",
 	ChannelTypeXFAI:           "XFAI",
+	ChannelTypeTokenHub:       "TokenHub",
 }
 
 func GetChannelTypeName(channelType int) string {
