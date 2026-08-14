@@ -31,6 +31,8 @@ export default async function Layout({
       tree={source.pageTree[lang]}
       links={linkItems.filter((item) => item.type === 'icon')}
       sidebar={{
+        // 边栏不收缩设计（IK7JPE）：关闭桌面端侧栏折叠，侧栏常驻展开
+        collapsible: false,
         defaultOpenLevel: 0,
         tabs: {
           transform(option, node) {

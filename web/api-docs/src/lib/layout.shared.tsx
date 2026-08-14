@@ -16,7 +16,7 @@ export const logoUrl =
 // 鲸鱼本体（含尾部星星）在 384 方画幅中的实际边界，
 // 按内嵌位图 alpha 通道实测（1536 空间 /4）
 const WHALE_BOX = { x: 89.75, y: 122, w: 193.5, h: 120.25 };
-const LOGO_H = 20; // 与导航 15px 标题文字视觉对齐
+const LOGO_H = 26; // IK7JPE 组件放大：20 → 26，与放大后的导航文字视觉对齐
 
 export const logo = (() => {
   const scale = LOGO_H / WHALE_BOX.h;
@@ -54,7 +54,7 @@ export function baseOptions(locale: string): BaseLayoutProps {
       title: (
         <>
           {logo}
-          <span className="font-medium in-[header]:text-[15px] [.uwu_&]:hidden">
+          <span className="font-medium in-[header]:text-[17px] [.uwu_&]:hidden">
             Blue Whale API
           </span>
         </>

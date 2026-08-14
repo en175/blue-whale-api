@@ -117,3 +117,47 @@ html.theme-anim *::after {
     animation: none !important;
   }
 }
+
+/* ───────── IK7JPE 导航栏统一：毛玻璃恒为组件底层 + 组件放大 ───────── */
+/* 首页顶栏(#nd-nav)与文档移动顶栏(#nd-subnav)：
+   毛玻璃恒开启、置于 logo/导航/图标各组件底层（原先仅非透明态才着色） */
+#nd-nav,
+#nd-subnav {
+  background-color: color-mix(in oklab, var(--color-fd-background) 80%, transparent);
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+}
+
+/* 首页顶栏放大：高 56 → 64px（同步内容偏移），导航文字 14 → 15px，图标升一档 */
+#nd-home-layout {
+  padding-top: 4rem;
+}
+#nd-nav nav {
+  height: 4rem;
+}
+#nd-nav nav a,
+#nd-nav nav button {
+  font-size: 0.9375rem;
+}
+#nd-nav nav svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+/* 文档桌面侧栏：改与顶栏同款毛玻璃底层，两栏视觉统一 */
+#nd-sidebar {
+  background-color: color-mix(in oklab, var(--color-fd-card) 80%, transparent);
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+}
+
+/* 首页顶栏内容铺开通栏，与门户首页头部统一（突破 fd-container 居中约束）
+   注意：DOM 为 header > div[relative] > nav，约束落在中间 div 层，须选直接子 div */
+#nd-nav > div {
+  max-width: none;
+}
+@media (min-width: 768px) {
+  #nd-nav > nav {
+    padding-inline: 1.5rem;
+  }
+}
