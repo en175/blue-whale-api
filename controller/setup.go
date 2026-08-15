@@ -8,6 +8,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type Setup struct {
@@ -110,11 +111,36 @@ func PostSetup(c *gin.Context) {
 			AccessToken: nil,
 			Quota:       100000000,
 		}
-		err = model.DB.Create(&rootUser).Error
-		if err != nil {
+		// 创建 root 用户，并在 GenerateDefaultToken 开启时一并创建默认 token。
+		// 登录逻辑 setupLogin 要求账号至少存在 1 个 token，否则报 "account default token is not configured"。
+		createErr := model.DB.Transaction(func(tx *gorm.DB) error {
+			if err := tx.Create(&rootUser).Error; err != nil {
+				return err
+			}
+			if constant.GenerateDefaultToken {
+				key, keyErr := common.GenerateKey()
+				if keyErr != nil {
+					return keyErr
+				}
+				defaultToken := model.Token{
+					UserId:             rootUser.Id,
+					Name:               rootUser.Username + "的初始令牌",
+					Key:                key,
+					CreatedTime:        common.GetTimestamp(),
+					AccessedTime:       common.GetTimestamp(),
+					ExpiredTime:        -1,
+					RemainQuota:        500000,
+					UnlimitedQuota:     true,
+					ModelLimitsEnabled: false,
+				}
+				return tx.Create(&defaultToken).Error
+			}
+			return nil
+		})
+		if createErr != nil {
 			c.JSON(200, gin.H{
 				"success": false,
-				"message": "创建管理员账号失败: " + err.Error(),
+				"message": "创建管理员账号失败: " + createErr.Error(),
 			})
 			return
 		}
