@@ -26,6 +26,7 @@ func SetApiRouter(router *gin.Engine) {
 		apiRouter.GET("/models", middleware.UserAuth(), controller.DashboardListModels)
 		apiRouter.GET("/status/test", middleware.AdminAuth(), controller.TestStatus)
 		apiRouter.GET("/notice", controller.GetNotice)
+		apiRouter.GET("/docs/config", middleware.CORS(), controller.GetDocsConfig)
 		apiRouter.GET("/user-agreement", controller.GetUserAgreement)
 		apiRouter.GET("/privacy-policy", controller.GetPrivacyPolicy)
 		apiRouter.GET("/about", controller.GetAbout)
@@ -86,6 +87,7 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.GET("/self/groups", controller.GetUserGroups)
 				selfRoute.GET("/self", controller.GetSelf)
 				selfRoute.GET("/models", controller.GetUserModels)
+				selfRoute.GET("/docs-models", controller.GetUserDocsModels)
 				selfRoute.PUT("/self", middleware.CriticalRateLimit(), controller.UpdateSelf)
 				selfRoute.DELETE("/self", controller.DeleteSelf)
 				selfRoute.GET("/token", controller.GenerateAccessToken)
@@ -389,6 +391,15 @@ func SetApiRouter(router *gin.Engine) {
 			modelsRoute.POST("/", controller.CreateModelMeta)
 			modelsRoute.PUT("/", controller.UpdateModelMeta)
 			modelsRoute.DELETE("/:id", controller.DeleteModelMeta)
+		}
+
+		docsRoute := apiRouter.Group("/docs")
+		docsRoute.Use(middleware.AdminAuth())
+		{
+			docsRoute.GET("/models", controller.ListApiDocModels)
+			docsRoute.POST("/models", controller.CreateApiDocModel)
+			docsRoute.PUT("/models", controller.UpdateApiDocModel)
+			docsRoute.DELETE("/models/:id", controller.DeleteApiDocModel)
 		}
 
 		// Deployments (model deployment management)

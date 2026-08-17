@@ -1,0 +1,65 @@
+/*
+Copyright (C) 2023-2026 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
+*/
+import { api } from '@/lib/api'
+
+import {
+  getSystemOptions,
+  updateSystemOption,
+} from '@/features/system-settings/api'
+
+import type { ApiDocModel } from './types'
+
+const DOCS_DOMAIN_OPTION_KEY = 'DocsDomain'
+
+export async function getDocsDomain(): Promise<string> {
+  const res = await getSystemOptions()
+  const option = res.data?.find((item) => item.key === DOCS_DOMAIN_OPTION_KEY)
+  return option?.value ?? ''
+}
+
+export async function setDocsDomain(value: string): Promise<void> {
+  await updateSystemOption({ key: DOCS_DOMAIN_OPTION_KEY, value })
+}
+
+export async function getApiDocModels(): Promise<ApiDocModel[]> {
+  const res = await api.get('/api/docs/models')
+  const data = res.data
+  return Array.isArray(data?.data) ? data.data : []
+}
+
+export async function createApiDocModel(
+  payload: Partial<ApiDocModel>
+): Promise<{ success: boolean; message?: string }> {
+  const res = await api.post('/api/docs/models', payload)
+  return res.data
+}
+
+export async function updateApiDocModel(
+  payload: ApiDocModel
+): Promise<{ success: boolean; message?: string }> {
+  const res = await api.put('/api/docs/models', payload)
+  return res.data
+}
+
+export async function deleteApiDocModel(
+  id: number
+): Promise<{ success: boolean; message?: string }> {
+  const res = await api.delete(`/api/docs/models/${id}`)
+  return res.data
+}

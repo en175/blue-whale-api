@@ -4,6 +4,7 @@
  */
 
 import { generateChangelog } from './build-changelog';
+import { generateDocsFromGateway } from './generate-docs-from-gateway';
 
 async function prebuild() {
   console.log('═══════════════════════════════════════════════');
@@ -14,6 +15,7 @@ async function prebuild() {
 
   try {
     await generateChangelog();
+    await generateDocsFromGateway();
 
     const duration = ((Date.now() - startTime) / 1000).toFixed(2);
 

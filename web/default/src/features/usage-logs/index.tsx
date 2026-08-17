@@ -26,6 +26,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { CacheStatsDialog } from '@/features/system-settings/general/channel-affinity/cache-stats-dialog'
 import { useSidebarConfig } from '@/hooks/use-sidebar-config'
 
+import { AvailableModels } from './components/available-models'
 import { UserInfoDialog } from './components/dialogs/user-info-dialog'
 import {
   type LogsViewScope,
@@ -151,6 +152,7 @@ function UsageLogsContent() {
                 </TabsList>
               </Tabs>
             )}
+            {activeCategory === 'task' && <AvailableModels />}
             <div className='min-h-0 flex-1'>
               <UsageLogsTable logCategory={activeCategory} />
             </div>

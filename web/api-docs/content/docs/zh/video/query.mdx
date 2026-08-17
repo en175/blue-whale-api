@@ -3,8 +3,6 @@ title: 查询任务
 description: 轮询任务状态，了解生成进度
 ---
 
-# 查询任务
-
 **GET** `/v1/video/generations/{task_id}`
 
 查询指定任务的当前状态。视频生成为异步任务，**建议每 5–10 秒轮询一次**。
