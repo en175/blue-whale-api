@@ -305,6 +305,7 @@ func migrateDB() error {
 		&CasbinRule{},
 		&AuthzRole{},
 		&RechargeTier{},
+		&ApiDocModel{},
 	)
 	if err != nil {
 		return err
