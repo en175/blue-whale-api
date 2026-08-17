@@ -21,6 +21,7 @@ export interface ApiDocModel {
   model_name: string
   display_name: string
   description: string
+  tag: string
   param_schema: string
   sort_order: number
   enabled: boolean

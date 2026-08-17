@@ -25,6 +25,7 @@ type DocModel = {
   model_name: string;
   display_name: string;
   description: string;
+  tag: string;
   param_schema: string;
   sort_order: number;
 };
@@ -104,6 +105,11 @@ export function LiveModels({ lang = 'zh' }: { lang?: 'zh' | 'en' }) {
           <div key={m.model_name}>
             <h2 className="text-lg font-semibold">
               {m.display_name || m.model_name}
+              {m.tag ? (
+                <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 align-middle text-xs font-medium text-primary">
+                  {m.tag}
+                </span>
+              ) : null}
             </h2>
             {m.description ? <p className="text-sm">{m.description}</p> : null}
 

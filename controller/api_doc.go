@@ -16,6 +16,7 @@ func docModelCard(d *model.ApiDocModel) gin.H {
 		"model_name":   d.ModelName,
 		"display_name": d.DisplayName,
 		"description":  d.Description,
+		"tag":          d.Tag,
 		"param_schema": d.ParamSchema,
 		"sort_order":   d.SortOrder,
 	}

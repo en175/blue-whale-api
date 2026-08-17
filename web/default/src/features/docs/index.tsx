@@ -78,6 +78,7 @@ const apiDocModelFormSchema = z.object({
   model_name: z.string().min(1, 'Model name is required'),
   display_name: z.string(),
   description: z.string(),
+  tag: z.string(),
   param_schema: z.string().refine((value) => {
     const trimmed = value.trim()
     if (!trimmed) return true
@@ -186,6 +187,11 @@ export function DocsPage() {
       id: 'description',
       header: t('Description'),
       cell: (row) => row.description || '-',
+    },
+    {
+      id: 'tag',
+      header: t('Tag'),
+      cell: (row) => row.tag || '-',
     },
     {
       id: 'sort_order',
@@ -311,6 +317,7 @@ function ApiDocModelMutateDrawer({
       model_name: '',
       display_name: '',
       description: '',
+      tag: '',
       param_schema: '',
       sort_order: 0,
       enabled: true,
@@ -325,6 +332,7 @@ function ApiDocModelMutateDrawer({
             model_name: currentRow.model_name,
             display_name: currentRow.display_name || '',
             description: currentRow.description || '',
+            tag: currentRow.tag || '',
             param_schema: currentRow.param_schema || '',
             sort_order: currentRow.sort_order ?? 0,
             enabled: currentRow.enabled,
@@ -333,6 +341,7 @@ function ApiDocModelMutateDrawer({
             model_name: '',
             display_name: '',
             description: '',
+            tag: '',
             param_schema: '',
             sort_order: 0,
             enabled: true,
@@ -416,6 +425,20 @@ function ApiDocModelMutateDrawer({
                   <FormLabel>{t('Description')}</FormLabel>
                   <FormControl>
                     <Textarea rows={3} {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name='tag'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('Tag')}</FormLabel>
+                  <FormControl>
+                    <Input placeholder='全面开放' {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

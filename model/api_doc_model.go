@@ -10,6 +10,7 @@ type ApiDocModel struct {
 	ModelName   string `json:"model_name" gorm:"size:128;not null;uniqueIndex"`
 	DisplayName string `json:"display_name" gorm:"size:255"`
 	Description string `json:"description" gorm:"type:text"`
+	Tag         string `json:"tag" gorm:"size:64"`
 	ParamSchema string `json:"param_schema" gorm:"type:text"` // JSON 字符串，见契约
 	SortOrder   int    `json:"sort_order" gorm:"default:0"`
 	Enabled     bool   `json:"enabled" gorm:"default:false"`
@@ -29,6 +30,7 @@ func (m *ApiDocModel) Update() error {
 		"model_name":   m.ModelName,
 		"display_name": m.DisplayName,
 		"description":  m.Description,
+		"tag":          m.Tag,
 		"param_schema": m.ParamSchema,
 		"sort_order":   m.SortOrder,
 		"enabled":      m.Enabled,
