@@ -72,6 +72,32 @@ curl "$BASE_URL/v1/video/generations" \
   }'
 ```
 
+### 完整参数（含全部可选字段）
+
+```bash
+curl "$BASE_URL/v1/video/generations" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "doubao-seedance-2-0-260128",
+    "prompt": "蓝鲸跃出海面，慢镜头，电影质感",
+    "images": ["https://example.com/first-frame.png"],
+    "seconds": "5",
+    "metadata": {
+      "resolution": "720p",
+      "ratio": "16:9",
+      "generate_audio": true,
+      "frames": 30,
+      "seed": 42,
+      "camera_fixed": false,
+      "watermark": false,
+      "service_tier": "fast",
+      "return_last_frame": false,
+      "callback_url": "https://example.com/webhook"
+    }
+  }'
+```
+
 ## 响应
 
 ```json
