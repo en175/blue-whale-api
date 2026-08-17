@@ -8,9 +8,14 @@ type BodyField = {
   default?: string;
   description?: string;
 };
+type HeaderField = {
+  name: string;
+  required: boolean;
+  description?: string;
+};
 type ParamSchema = {
   body_fields?: BodyField[];
-  headers?: { name: string; required: boolean; description?: string }[];
+  headers?: HeaderField[];
   auth?: { type?: string; description?: string };
   curl_example?: string;
   response_example?: string;
@@ -44,6 +49,18 @@ function renderFieldTable(fields: BodyField[]): string {
   return `| 字段 | 类型 | 必填 | 默认 | 说明 |\n| --- | --- | --- | --- | --- |\n${rows}`;
 }
 
+function renderHeaderTable(headers: HeaderField[]): string {
+  if (!headers.length) return '';
+  const rows = headers
+    .map((h) => {
+      const req = h.required ? '是' : '否';
+      const desc = h.description ?? '';
+      return `| \`${h.name}\` | ${req} | ${desc} |`;
+    })
+    .join('\n');
+  return `| 名称 | 必填 | 说明 |\n| --- | --- | --- |\n${rows}`;
+}
+
 function renderModelSection(m: DocModel): string {
   let schema: ParamSchema = {};
   try {
@@ -58,8 +75,19 @@ function renderModelSection(m: DocModel): string {
     lines.push(`\n### 请求参数\n`);
     lines.push(renderFieldTable(schema.body_fields));
   }
+  if (schema.headers?.length) {
+    lines.push(`\n### 请求头\n`);
+    lines.push(renderHeaderTable(schema.headers));
+  }
+  if (schema.auth?.description) {
+    lines.push(`\n### 鉴权\n`);
+    lines.push(schema.auth.description);
+  }
   if (schema.curl_example) {
     lines.push(`\n### 调用示例\n\n\`\`\`bash\n${schema.curl_example}\n\`\`\`\n`);
+  }
+  if (schema.response_example) {
+    lines.push(`\n### 响应示例\n\n\`\`\`json\n${schema.response_example}\n\`\`\`\n`);
   }
   return lines.join('\n');
 }
