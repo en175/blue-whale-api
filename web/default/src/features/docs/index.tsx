@@ -88,7 +88,7 @@ const apiDocModelFormSchema = z.object({
       return false
     }
   }, 'Invalid JSON format'),
-  sort_order: z.number().int(),
+  sort_order: z.number().int().min(0),
   enabled: z.boolean(),
 })
 
@@ -445,6 +445,7 @@ function ApiDocModelMutateDrawer({
                   <FormControl>
                     <Input
                       type='number'
+                      min={0}
                       value={field.value}
                       onChange={(e) =>
                         field.onChange(
