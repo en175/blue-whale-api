@@ -102,6 +102,30 @@ func TestAdjustBillingOnComplete_NoTokenKeepsPrecharge(t *testing.T) {
 	assert.Equal(t, 0, taskResult.TotalTokens, "无 token 不应触发重算")
 }
 
+// nestedEnvelope 取自实测 task_JQABEhn（脱敏 result_url）：上游 new-api 二开再接 doubao，
+// 把下游任务数据再套一层，token 藏在 data.data.usage.total_tokens（非平铺 usage_total_tokens）。
+// 平铺结构取不到 token 会导致 AdjustBillingOnComplete 返回 0、差额结算被跳过（不退款）。
+const nestedEnvelope = `{"code":"success","message":"","data":{"task_id":"task_nest","status":"SUCCESS","result_url":"https://example.volces.com/seedance.mp4","data":{"status":"succeeded","usage":{"total_tokens":245025,"completion_tokens":245025}}}}`
+
+// TestAdjustBillingOnComplete_NestedTokens 生产承重：嵌套信封下 token 必须从内层
+// data.data.usage.total_tokens 提取，否则按量计费模型跳过重算、预扣额不退。
+func TestAdjustBillingOnComplete_NestedTokens(t *testing.T) {
+	a := &TaskAdaptor{}
+	task := &model.Task{Data: []byte(nestedEnvelope)}
+	taskResult := &relaycommon.TaskInfo{Status: string(model.TaskStatusSuccess)}
+	assert.Equal(t, 0, a.AdjustBillingOnComplete(task, taskResult), "返回 0 以交由 RecalculateTaskQuotaByTokens")
+	assert.Equal(t, 245025, taskResult.TotalTokens)
+}
+
+// TestParseTaskResult_NestedTokens 兜底路径同样兼容嵌套 token（try-1 失败时走此方法）。
+func TestParseTaskResult_NestedTokens(t *testing.T) {
+	a := &TaskAdaptor{}
+	r, err := a.ParseTaskResult([]byte(nestedEnvelope))
+	require.NoError(t, err)
+	assert.Equal(t, string(model.TaskStatusSuccess), r.Status)
+	assert.Equal(t, 245025, r.TotalTokens)
+}
+
 // TestExtractTaskResultURL_Success 生产 happy path 承重：try-1 丢弃 result_url 后，
 // 轮询经此钩子取回上游直链，实现直链透传（不再回退本网关代理地址）。
 func TestExtractTaskResultURL_Success(t *testing.T) {
