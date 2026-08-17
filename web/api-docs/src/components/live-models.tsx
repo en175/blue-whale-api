@@ -48,6 +48,7 @@ const L = {
     name: '名称',
     yes: '是',
     no: '否',
+    toc: '目录',
   },
   en: {
     params: 'Request Parameters',
@@ -66,6 +67,7 @@ const L = {
     name: 'Name',
     yes: 'Yes',
     no: 'No',
+    toc: 'On this page',
   },
 } as const;
 
@@ -99,11 +101,23 @@ export function LiveModels({ lang = 'zh' }: { lang?: 'zh' | 'en' }) {
 
   return (
     <div className="space-y-8">
+      <nav>
+        <p className="mb-2 text-sm font-medium">{t.toc}</p>
+        <ul className="list-disc pl-5 text-sm">
+          {models.map((m) => (
+            <li key={m.model_name}>
+              <a href={`#${m.model_name}`} className="hover:underline">
+                {m.display_name || m.model_name}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </nav>
       {models.map((m) => {
         const schema = parseSchema(m.param_schema);
         return (
           <div key={m.model_name}>
-            <h2 className="text-lg font-semibold">
+            <h2 id={m.model_name} className="scroll-mt-20 text-lg font-semibold">
               {m.display_name || m.model_name}
               {m.tag ? (
                 <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 align-middle text-xs font-medium text-primary">
