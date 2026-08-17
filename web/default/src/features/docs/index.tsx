@@ -66,6 +66,8 @@ import {
   createApiDocModel,
   deleteApiDocModel,
   getApiDocModels,
+  getDocsDomain,
+  setDocsDomain,
   updateApiDocModel,
 } from './api'
 import type { ApiDocModel } from './types'
@@ -105,6 +107,34 @@ export function DocsPage() {
   const [currentRow, setCurrentRow] = useState<ApiDocModel | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<ApiDocModel | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [docsDomain, setDocsDomainValue] = useState('')
+  const [savingDomain, setSavingDomain] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    getDocsDomain()
+      .then((value) => {
+        if (active) setDocsDomainValue(value)
+      })
+      .catch(() => {
+        // Business/HTTP errors are surfaced by the global api interceptor.
+      })
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const handleSaveDomain = async () => {
+    setSavingDomain(true)
+    try {
+      await setDocsDomain(docsDomain)
+      toast.success(t('Saved successfully'))
+    } catch {
+      // Business/HTTP errors are surfaced by the global api interceptor.
+    } finally {
+      setSavingDomain(false)
+    }
+  }
 
   const openCreate = () => {
     setCurrentRow(null)
@@ -201,6 +231,26 @@ export function DocsPage() {
           </Button>
         </SectionPageLayout.Actions>
         <SectionPageLayout.Content>
+          <div className='mb-4 flex flex-col gap-2 sm:max-w-md'>
+            <label className='text-sm font-medium'>{t('Docs Domain')}</label>
+            <div className='flex items-center gap-2'>
+              <Input
+                value={docsDomain}
+                onChange={(e) => setDocsDomainValue(e.target.value)}
+                placeholder='https://docs.example.com'
+              />
+              <Button
+                onClick={handleSaveDomain}
+                disabled={savingDomain}
+                size='sm'
+              >
+                {savingDomain && (
+                  <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+                )}
+                {t('Save')}
+              </Button>
+            </div>
+          </div>
           {isLoading ? (
             <div className='flex items-center justify-center py-16'>
               <Loader2 className='text-muted-foreground h-6 w-6 animate-spin' />

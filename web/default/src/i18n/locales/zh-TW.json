@@ -1431,6 +1431,7 @@
     "Do regex replacement in the target field": "在目標欄位裡做正則替換",
     "Do string replacement in the target field": "在目標欄位裡做字串替換",
     "Docs": "文件",
+    "Docs Domain": "文件域名",
     "Documentation Link": "文件連結",
     "Documentation or external knowledge base.": "文件或外部知識庫。",
     "does not exist or might have been removed.": "不存在或可能已被移除。",

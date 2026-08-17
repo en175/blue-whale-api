@@ -1431,6 +1431,7 @@
     "Do regex replacement in the target field": "Thực hiện thay thế regex trong trường đích",
     "Do string replacement in the target field": "Thực hiện thay thế chuỗi trong trường đích",
     "Docs": "Tài liệu",
+    "Docs Domain": "Miền tài liệu",
     "Documentation Link": "Liên kết tài liệu",
     "Documentation or external knowledge base.": "Tài liệu hoặc cơ sở kiến thức bên ngoài.",
     "does not exist or might have been removed.": "không tồn tại hoặc có thể đã bị xóa.",

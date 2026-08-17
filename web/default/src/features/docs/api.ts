@@ -18,7 +18,24 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { api } from '@/lib/api'
 
+import {
+  getSystemOptions,
+  updateSystemOption,
+} from '@/features/system-settings/api'
+
 import type { ApiDocModel } from './types'
+
+const DOCS_DOMAIN_OPTION_KEY = 'DocsDomain'
+
+export async function getDocsDomain(): Promise<string> {
+  const res = await getSystemOptions()
+  const option = res.data?.find((item) => item.key === DOCS_DOMAIN_OPTION_KEY)
+  return option?.value ?? ''
+}
+
+export async function setDocsDomain(value: string): Promise<void> {
+  await updateSystemOption({ key: DOCS_DOMAIN_OPTION_KEY, value })
+}
 
 export async function getApiDocModels(): Promise<ApiDocModel[]> {
   const res = await api.get('/api/docs/models')
