@@ -17,6 +17,10 @@ COPY . .
 ARG GATEWAY_URL
 ENV GATEWAY_URL=$GATEWAY_URL
 
+# Public gateway URL for client-side LiveModels fetch (required for live model list)
+ARG NEXT_PUBLIC_API_BASE_URL
+ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
+
 # Generate changelog from GitHub API (fails gracefully)
 RUN bun run prebuild
 
