@@ -13,15 +13,15 @@ RUN bun install --frozen-lockfile --ignore-scripts
 # Copy source
 COPY . .
 
-# Generate fumadocs .source/ index (was postinstall, now explicit)
-RUN npx fumadocs-mdx
-
 # Gateway URL for prebuild docs generation (optional; static fallback if unset)
 ARG GATEWAY_URL
 ENV GATEWAY_URL=$GATEWAY_URL
 
 # Generate changelog from GitHub API (fails gracefully)
 RUN bun run prebuild
+
+# Generate fumadocs .source/ index (was postinstall, now explicit)
+RUN npx fumadocs-mdx
 
 # Build Next.js standalone output
 # Limit workers to reduce concurrent font download connections during SSG
