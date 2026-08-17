@@ -2,11 +2,12 @@ package controller
 
 import (
 	"net/http"
+	"strconv"
 
-	"github.com/gin-gonic/gin"
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/gin-gonic/gin"
 )
 
 // docModelCard 对外模型清单的统一返回形状（不含内部字段）
@@ -68,4 +69,57 @@ func GetUserDocsModels(c *gin.Context) {
 		}
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": out})
+}
+
+// ListApiDocModels 管理页：列出全部对外文档模型
+func ListApiDocModels(c *gin.Context) {
+	models, err := model.GetAllApiDocModels()
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error(), "data": nil})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": models})
+}
+
+// CreateApiDocModel 管理页：新增对外文档模型
+func CreateApiDocModel(c *gin.Context) {
+	var m model.ApiDocModel
+	if err := c.ShouldBindJSON(&m); err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error(), "data": nil})
+		return
+	}
+	if err := m.Insert(); err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error(), "data": nil})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": m})
+}
+
+// UpdateApiDocModel 管理页：更新对外文档模型
+func UpdateApiDocModel(c *gin.Context) {
+	var m model.ApiDocModel
+	if err := c.ShouldBindJSON(&m); err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error(), "data": nil})
+		return
+	}
+	if err := m.Update(); err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error(), "data": nil})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": m})
+}
+
+// DeleteApiDocModel 管理页：删除对外文档模型
+func DeleteApiDocModel(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "invalid id", "data": nil})
+		return
+	}
+	m := model.ApiDocModel{Id: id}
+	if err := m.Delete(); err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error(), "data": nil})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": nil})
 }
