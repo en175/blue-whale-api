@@ -2,82 +2,26 @@
 
 import { useEffect, useState } from 'react';
 
-type BodyField = {
-  name: string;
-  type: string;
-  required: boolean;
-  default?: string;
-  description?: string;
-};
-type HeaderField = {
-  name: string;
-  required: boolean;
-  description?: string;
-};
-type ParamSchema = {
-  body_fields?: BodyField[];
-  headers?: HeaderField[];
-  auth?: { type?: string; description?: string };
-  curl_example?: string;
-  response_example?: string;
-};
 type DocModel = {
   model_name: string;
   display_name: string;
   description: string;
   tag: string;
-  param_schema: string;
   sort_order: number;
 };
 
 const L = {
   zh: {
-    params: '请求参数',
-    headers: '请求头',
-    auth: '鉴权',
-    example: '调用示例',
-    response: '响应示例',
     empty: '暂无对外开放的模型',
     loading: '加载中…',
     error: '模型列表加载失败',
-    field: '字段',
-    type: '类型',
-    required: '必填',
-    default: '默认',
-    desc: '说明',
-    name: '名称',
-    yes: '是',
-    no: '否',
-    toc: '目录',
   },
   en: {
-    params: 'Request Parameters',
-    headers: 'Headers',
-    auth: 'Authentication',
-    example: 'Example',
-    response: 'Response',
     empty: 'No publicly available models',
     loading: 'Loading…',
     error: 'Failed to load model list',
-    field: 'Field',
-    type: 'Type',
-    required: 'Required',
-    default: 'Default',
-    desc: 'Description',
-    name: 'Name',
-    yes: 'Yes',
-    no: 'No',
-    toc: 'On this page',
   },
 } as const;
-
-function parseSchema(raw: string): ParamSchema {
-  try {
-    return JSON.parse(raw || '{}') as ParamSchema;
-  } catch {
-    return {};
-  }
-}
 
 export function LiveModels({ lang = 'zh' }: { lang?: 'zh' | 'en' }) {
   const t = L[lang];
@@ -100,120 +44,22 @@ export function LiveModels({ lang = 'zh' }: { lang?: 'zh' | 'en' }) {
   if (models.length === 0) return <p className="text-sm">{t.empty}</p>;
 
   return (
-    <div className="space-y-8">
-      <nav>
-        <p className="mb-2 text-sm font-medium">{t.toc}</p>
-        <ul className="list-disc pl-5 text-sm">
-          {models.map((m) => (
-            <li key={m.model_name}>
-              <a href={`#${m.model_name}`} className="hover:underline">
-                {m.display_name || m.model_name}
-              </a>
-            </li>
-          ))}
-        </ul>
-      </nav>
-      {models.map((m) => {
-        const schema = parseSchema(m.param_schema);
-        return (
-          <div key={m.model_name}>
-            <h2 id={m.model_name} className="scroll-mt-20 text-lg font-semibold">
-              {m.display_name || m.model_name}
-              {m.tag ? (
-                <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 align-middle text-xs font-medium text-primary">
-                  {m.tag}
-                </span>
-              ) : null}
-            </h2>
-            {m.description ? <p className="text-sm">{m.description}</p> : null}
-
-            {schema.body_fields?.length ? (
-              <div className="mt-3">
-                <h3 className="font-medium">{t.params}</h3>
-                <div className="mt-1 overflow-x-auto">
-                  <table className="w-full border-collapse text-sm">
-                    <thead>
-                      <tr className="border-b">
-                        <th className="px-2 py-1 text-left">{t.field}</th>
-                        <th className="px-2 py-1 text-left">{t.type}</th>
-                        <th className="px-2 py-1 text-left">{t.required}</th>
-                        <th className="px-2 py-1 text-left">{t.default}</th>
-                        <th className="px-2 py-1 text-left">{t.desc}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {schema.body_fields.map((f) => (
-                        <tr key={f.name} className="border-b">
-                          <td className="px-2 py-1">
-                            <code>{f.name}</code>
-                          </td>
-                          <td className="px-2 py-1">{f.type}</td>
-                          <td className="px-2 py-1">{f.required ? t.yes : t.no}</td>
-                          <td className="px-2 py-1">{f.default ?? ''}</td>
-                          <td className="px-2 py-1">{f.description ?? ''}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            ) : null}
-
-            {schema.headers?.length ? (
-              <div className="mt-3">
-                <h3 className="font-medium">{t.headers}</h3>
-                <div className="mt-1 overflow-x-auto">
-                  <table className="w-full border-collapse text-sm">
-                    <thead>
-                      <tr className="border-b">
-                        <th className="px-2 py-1 text-left">{t.name}</th>
-                        <th className="px-2 py-1 text-left">{t.required}</th>
-                        <th className="px-2 py-1 text-left">{t.desc}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {schema.headers.map((h) => (
-                        <tr key={h.name} className="border-b">
-                          <td className="px-2 py-1">
-                            <code>{h.name}</code>
-                          </td>
-                          <td className="px-2 py-1">{h.required ? t.yes : t.no}</td>
-                          <td className="px-2 py-1">{h.description ?? ''}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            ) : null}
-
-            {schema.auth?.description ? (
-              <div className="mt-3">
-                <h3 className="font-medium">{t.auth}</h3>
-                <p className="text-sm">{schema.auth.description}</p>
-              </div>
-            ) : null}
-
-            {schema.curl_example ? (
-              <div className="mt-3">
-                <h3 className="font-medium">{t.example}</h3>
-                <pre className="mt-1 overflow-x-auto rounded-md border p-3 text-xs">
-                  <code>{schema.curl_example}</code>
-                </pre>
-              </div>
-            ) : null}
-
-            {schema.response_example ? (
-              <div className="mt-3">
-                <h3 className="font-medium">{t.response}</h3>
-                <pre className="mt-1 overflow-x-auto rounded-md border p-3 text-xs">
-                  <code>{schema.response_example}</code>
-                </pre>
-              </div>
+    <div className="grid gap-4 sm:grid-cols-2">
+      {models.map((m) => (
+        <div key={m.model_name} className="rounded-lg border p-4">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold">{m.display_name || m.model_name}</span>
+            {m.tag ? (
+              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                {m.tag}
+              </span>
             ) : null}
           </div>
-        );
-      })}
+          {m.description ? (
+            <p className="mt-1 text-sm text-muted-foreground">{m.description}</p>
+          ) : null}
+        </div>
+      ))}
     </div>
   );
 }
