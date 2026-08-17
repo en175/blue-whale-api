@@ -130,6 +130,11 @@ export function useSidebarData(): SidebarData {
             icon: Box,
           },
           {
+            title: t('External Docs'),
+            url: '/docs',
+            icon: FileText,
+          },
+          {
             title: t('Users'),
             url: '/users',
             icon: Users,
