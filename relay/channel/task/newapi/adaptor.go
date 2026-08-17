@@ -39,7 +39,30 @@ type taskResultEnvelope struct {
 		UsageTotalTokens      flexInt `json:"usage_total_tokens"`
 		ResultURL             string  `json:"result_url"`
 		FailReason            string  `json:"fail_reason"`
+		// 某些上游（new-api 二开再接 doubao）会把下游任务数据再套一层，
+		// token 藏在 data.data.usage.{total,completion}_tokens，而非平铺 usage_*_tokens。
+		Inner struct {
+			Usage struct {
+				CompletionTokens flexInt `json:"completion_tokens"`
+				TotalTokens      flexInt `json:"total_tokens"`
+			} `json:"usage"`
+		} `json:"data"`
 	} `json:"data"`
+}
+
+// usageTokens 提取信封里的真实 token：优先平铺 data.usage_*_tokens，取不到再下探
+// data.data.usage.{total,completion}_tokens（上游再接 doubao 的嵌套形态）。
+func (env *taskResultEnvelope) usageTokens() int {
+	if t := int(env.Data.UsageTotalTokens); t > 0 {
+		return t
+	}
+	if t := int(env.Data.UsageCompletionTokens); t > 0 {
+		return t
+	}
+	if t := int(env.Data.Inner.Usage.TotalTokens); t > 0 {
+		return t
+	}
+	return int(env.Data.Inner.Usage.CompletionTokens)
 }
 
 // submitResponse 兼容两种提交响应取 upstream task id：
@@ -260,10 +283,7 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 		taskResult.Status = model.TaskStatusSuccess
 		taskResult.Progress = "100%"
 		taskResult.Url = env.Data.ResultURL
-		taskResult.TotalTokens = int(env.Data.UsageTotalTokens)
-		if taskResult.TotalTokens == 0 {
-			taskResult.TotalTokens = int(env.Data.UsageCompletionTokens)
-		}
+		taskResult.TotalTokens = env.usageTokens()
 	case "FAILURE", "FAILED", "CANCELLED", "CANCELED":
 		taskResult.Status = model.TaskStatusFailure
 		taskResult.Progress = "100%"
@@ -305,10 +325,7 @@ func (a *TaskAdaptor) AdjustBillingOnComplete(task *model.Task, taskResult *rela
 	if err := common.Unmarshal(task.Data, &env); err != nil {
 		return 0
 	}
-	tokens := int(env.Data.UsageTotalTokens)
-	if tokens <= 0 {
-		tokens = int(env.Data.UsageCompletionTokens)
-	}
+	tokens := env.usageTokens()
 	if tokens > 0 {
 		taskResult.TotalTokens = tokens
 	}
