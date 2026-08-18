@@ -185,6 +185,8 @@ export const CHANNEL_TYPE_CONFIGS: Record<number, ChannelTypeConfig> = {
       baseUrl: 'Default: https://openspeech.bytedance.com',
       key: 'Upstream API Key (X-Api-Key)',
       models: 'seed-audio-1.0',
+      other:
+        '请求体按上游 seed-audio 协议透传（text_prompt/references/audio_config/watermark），响应返回 {url,...}',
     },
   },
 }

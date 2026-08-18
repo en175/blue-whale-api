@@ -2,7 +2,6 @@ package doubaoaudio
 
 import (
 	"bytes"
-	"encoding/base64"
 	"encoding/json"
 	"io"
 	"math"
@@ -25,7 +24,8 @@ import (
 
 // The url-fetch path uses the general relay outbound client, which is only
 // materialized by InitHttpClient (normally called at boot). Initialize it once
-// before the suite so any test exercising fetchAudio sees a non-nil client.
+// before the suite so any test exercising the outbound client sees a non-nil
+// instance.
 func TestMain(m *testing.M) {
 	service.InitHttpClient()
 	os.Exit(m.Run())
@@ -80,64 +80,15 @@ func TestSetupRequestHeader(t *testing.T) {
 	assert.Equal(t, "volc-secret-key", req.Get("X-Api-Key"))
 }
 
-func TestConvertAudioRequestBasic(t *testing.T) {
+func TestConvertAudioRequestPassthrough(t *testing.T) {
 	t.Parallel()
 
-	adaptor := &Adaptor{}
-	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "seed-audio-1.0"}}
-	speed := 1.5
-	request := dto.AudioRequest{
-		Model:          "seed-audio-1.0",
-		Input:          "你好世界",
-		Voice:          "zh_female_linjiemei",
-		ResponseFormat: "wav",
-		Speed:          &speed,
-	}
-
-	got, err := adaptor.ConvertAudioRequest(
-		gin.CreateTestContextOnly(httptest.NewRecorder(), gin.New()),
-		info, request,
-	)
-	require.Nil(t, err)
-
-	req := unmarshalSeedAudioRequest(t, got)
-	assert.Equal(t, "seed-audio-1.0", req.Model)
-	assert.Equal(t, "你好世界", req.TextPrompt)
-	assert.Equal(t, "zh_female_linjiemei", req.Speaker)
-	require.NotNil(t, req.AudioConfig)
-	assert.Equal(t, "wav", req.AudioConfig.Format)
-	require.NotNil(t, req.AudioConfig.SpeechRate)
-	assert.Equal(t, 1, *req.AudioConfig.SpeechRate)
-	assert.Nil(t, req.AudioConfig.SampleRate)
-}
-
-func TestConvertAudioRequestDefaultFormat(t *testing.T) {
-	t.Parallel()
-
-	adaptor := &Adaptor{}
-	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "seed-audio-1.0"}}
-	request := dto.AudioRequest{Input: "hello"}
-
-	got, err := adaptor.ConvertAudioRequest(
-		gin.CreateTestContextOnly(httptest.NewRecorder(), gin.New()),
-		info, request,
-	)
-	require.Nil(t, err)
-
-	req := unmarshalSeedAudioRequest(t, got)
-	require.NotNil(t, req.AudioConfig)
-	assert.Equal(t, "mp3", req.AudioConfig.Format)
-}
-
-func TestConvertAudioRequestMetadataMerge(t *testing.T) {
-	t.Parallel()
-
-	// Metadata follows the task-channel semantics: model is locked, advanced
-	// keys override, and the OpenAI-standard fields are re-applied so they win.
-	metadata := json.RawMessage(`{
+	// The client writes the seed-audio protocol directly at the top level.
+	// The gateway must forward every field verbatim, locking only the model.
+	rawBody := []byte(`{
 		"model": "evil-model",
-		"text_prompt": "meta-prompt",
-		"speaker": "meta-voice",
+		"text_prompt": "hello seed-audio",
+		"speaker": "zh_female_linjiemei",
 		"references": [{"speaker": "ref1", "audio_url": "https://example.com/ref.mp3"}],
 		"audio_config": {
 			"format": "ogg_opus",
@@ -148,169 +99,114 @@ func TestConvertAudioRequestMetadataMerge(t *testing.T) {
 		},
 		"watermark": {"text": "bw"}
 	}`)
-	speed := 2.0
-	request := dto.AudioRequest{
-		Model:          "client-model",
-		Input:          "real input",
-		Voice:          "real-voice",
-		ResponseFormat: "wav",
-		Speed:          &speed,
-		Metadata:       metadata,
-	}
 
+	c := newContextWithBody(t, rawBody)
 	adaptor := &Adaptor{}
 	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "seed-audio-1.0"}}
-	got, err := adaptor.ConvertAudioRequest(
-		gin.CreateTestContextOnly(httptest.NewRecorder(), gin.New()),
-		info, request,
-	)
+	got, err := adaptor.ConvertAudioRequest(c, info, dto.AudioRequest{})
 	require.Nil(t, err)
 
-	req := unmarshalSeedAudioRequest(t, got)
-	// model is locked to the upstream model, metadata cannot override it.
-	assert.Equal(t, "seed-audio-1.0", req.Model)
-	// standard fields win over metadata.
-	assert.Equal(t, "real input", req.TextPrompt)
-	assert.Equal(t, "real-voice", req.Speaker)
-	require.NotNil(t, req.AudioConfig)
-	assert.Equal(t, "wav", req.AudioConfig.Format)
-	require.NotNil(t, req.AudioConfig.SpeechRate)
-	assert.Equal(t, 2, *req.AudioConfig.SpeechRate)
-	// advanced fields from metadata take effect.
-	require.NotNil(t, req.AudioConfig.SampleRate)
-	assert.Equal(t, 24000, *req.AudioConfig.SampleRate)
-	require.NotNil(t, req.AudioConfig.LoudnessRate)
-	assert.Equal(t, 120, *req.AudioConfig.LoudnessRate)
-	require.NotNil(t, req.AudioConfig.EnableSubtitle)
-	assert.True(t, *req.AudioConfig.EnableSubtitle)
-	require.Len(t, req.References, 1)
-	assert.Equal(t, "ref1", req.References[0].Speaker)
-	assert.Equal(t, "https://example.com/ref.mp3", req.References[0].AudioURL)
-	require.NotNil(t, req.Watermark)
-	assert.Equal(t, `{"text":"bw"}`, string(req.Watermark))
-}
-
-func TestConvertAudioRequestMetadataPartialAudioConfig(t *testing.T) {
-	t.Parallel()
-
-	// A partial audio_config from metadata must not drop the response-format
-	// mapping re-applied from the OpenAI-standard field.
-	metadata := json.RawMessage(`{"audio_config": {"sample_rate": 16000}}`)
-	request := dto.AudioRequest{
-		Input:          "hello",
-		ResponseFormat: "ogg_opus",
-		Metadata:       metadata,
-	}
-
-	adaptor := &Adaptor{}
-	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "seed-audio-1.0"}}
-	got, err := adaptor.ConvertAudioRequest(
-		gin.CreateTestContextOnly(httptest.NewRecorder(), gin.New()),
-		info, request,
-	)
+	body, err := io.ReadAll(got)
 	require.Nil(t, err)
 
-	req := unmarshalSeedAudioRequest(t, got)
-	require.NotNil(t, req.AudioConfig)
-	assert.Equal(t, "ogg_opus", req.AudioConfig.Format)
-	require.NotNil(t, req.AudioConfig.SampleRate)
-	assert.Equal(t, 16000, *req.AudioConfig.SampleRate)
-	assert.Nil(t, req.AudioConfig.SpeechRate)
+	var req map[string]json.RawMessage
+	require.NoError(t, common.Unmarshal(body, &req))
+
+	// model is locked to the upstream model; the client value cannot override it.
+	assert.JSONEq(t, `"seed-audio-1.0"`, string(req["model"]))
+	// every upstream field survives verbatim.
+	assert.JSONEq(t, `"hello seed-audio"`, string(req["text_prompt"]))
+	assert.JSONEq(t, `"zh_female_linjiemei"`, string(req["speaker"]))
+	assert.JSONEq(t, `[{"speaker":"ref1","audio_url":"https://example.com/ref.mp3"}]`, string(req["references"]))
+	assert.JSONEq(t, `{"format":"ogg_opus","sample_rate":24000,"speech_rate":50,"loudness_rate":120,"enable_subtitle":true}`, string(req["audio_config"]))
+	assert.JSONEq(t, `{"text":"bw"}`, string(req["watermark"]))
 }
 
-func TestConvertAudioRequestInvalidMetadata(t *testing.T) {
+func TestConvertAudioRequestNoOpenspeechFields(t *testing.T) {
 	t.Parallel()
 
-	request := dto.AudioRequest{
-		Input:    "hello",
-		Metadata: json.RawMessage(`{"text_prompt": `), // malformed
-	}
+	// Only model is supplied: the passthrough forwards a body with just the
+	// locked model, leaving any absent upstream fields absent.
+	rawBody := []byte(`{"model": "client-model", "text_prompt": "hi"}`)
+
+	c := newContextWithBody(t, rawBody)
 	adaptor := &Adaptor{}
 	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "seed-audio-1.0"}}
-	_, err := adaptor.ConvertAudioRequest(
-		gin.CreateTestContextOnly(httptest.NewRecorder(), gin.New()),
-		info, request,
-	)
+	got, err := adaptor.ConvertAudioRequest(c, info, dto.AudioRequest{})
+	require.Nil(t, err)
+
+	body, err := io.ReadAll(got)
+	require.Nil(t, err)
+
+	var req map[string]json.RawMessage
+	require.NoError(t, common.Unmarshal(body, &req))
+	assert.JSONEq(t, `"seed-audio-1.0"`, string(req["model"]))
+	assert.JSONEq(t, `"hi"`, string(req["text_prompt"]))
+	assert.NotContains(t, req, "references")
+	assert.NotContains(t, req, "audio_config")
+}
+
+func TestConvertAudioRequestInvalidBody(t *testing.T) {
+	t.Parallel()
+
+	rawBody := []byte(`{"text_prompt": `) // malformed JSON
+	c := newContextWithBody(t, rawBody)
+	adaptor := &Adaptor{}
+	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "seed-audio-1.0"}}
+	_, err := adaptor.ConvertAudioRequest(c, info, dto.AudioRequest{})
 	require.Error(t, err)
 }
 
-func TestDoResponseFromURL(t *testing.T) {
+func TestDoResponsePassthroughJSON(t *testing.T) {
 	t.Parallel()
 
-	audioBytes := []byte("fake-mp3-bytes")
-	audioServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write(audioBytes)
-	}))
-	defer audioServer.Close()
-
+	// The upstream returns its native JSON: url/duration/original_duration.
+	// The gateway forwards that body verbatim and bills by duration.
 	seedBody := mustMarshal(t, map[string]any{
 		"code":              0,
 		"message":           "success",
-		"url":               audioServer.URL,
+		"url":               "https://oss.example.com/audio.mp3",
 		"duration":          82.8,
 		"original_duration": 82.8,
 	})
 
-	info := &relaycommon.RelayInfo{
-		RelayMode: relayconstant.RelayModeAudioSpeech,
-	}
-	info.SetEstimatePromptTokens(100)
-	usage, err := runDoResponse(t, "wav", info, seedBody)
-	require.Nil(t, err)
-	require.NotNil(t, usage)
-
-	u, ok := usage.(*dto.Usage)
-	require.True(t, ok)
-	assert.Equal(t, 83, u.PromptTokens) // ceil(82.8)
-	assert.Equal(t, 83, u.TotalTokens)
-	assert.Nil(t, info.QuotaClamp)
-}
-
-func TestDoResponseFromBase64(t *testing.T) {
-	t.Parallel()
-
-	audioBytes := []byte("fake-pcm-bytes")
-	seedBody := mustMarshal(t, map[string]any{
-		"code":              0,
-		"message":           "success",
-		"audio":             base64.StdEncoding.EncodeToString(audioBytes),
-		"duration":          3.0,
-		"original_duration": 3.0,
-	})
-
 	info := &relaycommon.RelayInfo{RelayMode: relayconstant.RelayModeAudioSpeech}
-	usage, err := runDoResponse(t, "pcm", info, seedBody)
-	require.Nil(t, err)
-	require.NotNil(t, usage)
+	info.SetEstimatePromptTokens(100)
+	recorder, c, apiErr := runDoResponse(t, info, seedBody)
+	require.Nil(t, apiErr)
 
-	u, ok := usage.(*dto.Usage)
+	assert.Equal(t, "application/json", recorder.Header().Get("Content-Type"))
+	// body forwarded verbatim.
+	assert.JSONEq(t, string(seedBody), recorder.Body.String())
+
+	usage, ok := getUsage(t, c)
 	require.True(t, ok)
-	assert.Equal(t, 3, u.PromptTokens)
+	assert.Equal(t, 83, usage.PromptTokens) // ceil(82.8)
+	assert.Equal(t, 83, usage.TotalTokens)
+	assert.Nil(t, info.QuotaClamp)
 }
 
 func TestDoResponseFallsBackToEstimate(t *testing.T) {
 	t.Parallel()
 
 	// original_duration absent (0) means we cannot bill by duration, so the
-	// pre-consume estimate is used unchanged. Base64 audio keeps the test
-	// hermetic (no outbound fetch).
-	audioBytes := []byte("fake-pcm-bytes")
+	// pre-consume estimate is used unchanged.
 	seedBody := mustMarshal(t, map[string]any{
 		"code":     0,
 		"message":  "success",
-		"audio":    base64.StdEncoding.EncodeToString(audioBytes),
+		"url":      "https://oss.example.com/audio.mp3",
 		"duration": 0,
 	})
 
 	info := &relaycommon.RelayInfo{RelayMode: relayconstant.RelayModeAudioSpeech}
 	info.SetEstimatePromptTokens(42)
-	usage, err := runDoResponse(t, "", info, seedBody)
-	require.Nil(t, err)
-	require.NotNil(t, usage)
+	recorder, c, apiErr := runDoResponse(t, info, seedBody)
+	require.Nil(t, apiErr)
 
-	u, ok := usage.(*dto.Usage)
+	assert.JSONEq(t, string(seedBody), recorder.Body.String())
+	usage, ok := getUsage(t, c)
 	require.True(t, ok)
-	assert.Equal(t, 42, u.PromptTokens)
+	assert.Equal(t, 42, usage.PromptTokens)
 	assert.Nil(t, info.QuotaClamp)
 }
 
@@ -323,126 +219,62 @@ func TestDoResponseUpstreamError(t *testing.T) {
 	})
 
 	info := &relaycommon.RelayInfo{RelayMode: relayconstant.RelayModeAudioSpeech}
-	_, apiErr := runDoResponse(t, "", info, seedBody)
+	_, _, apiErr := runDoResponse(t, info, seedBody)
 	require.NotNil(t, apiErr)
 	assert.Equal(t, http.StatusBadRequest, apiErr.StatusCode)
 	assert.Contains(t, apiErr.Error(), "invalid request param")
-}
-
-func TestDoResponseNoAudio(t *testing.T) {
-	t.Parallel()
-
-	seedBody := mustMarshal(t, map[string]any{
-		"code":    0,
-		"message": "success",
-	})
-
-	info := &relaycommon.RelayInfo{RelayMode: relayconstant.RelayModeAudioSpeech}
-	_, apiErr := runDoResponse(t, "", info, seedBody)
-	require.NotNil(t, apiErr)
-	assert.Equal(t, http.StatusBadRequest, apiErr.StatusCode)
-	assert.Contains(t, apiErr.Error(), "no audio data")
 }
 
 func TestDoResponseClampsHugeDuration(t *testing.T) {
 	t.Parallel()
 
 	// An upstream-controlled duration beyond the int32 quota range must saturate
-	// and surface a QuotaClamp for audit instead of wrapping around. Base64 audio
-	// keeps the test hermetic (no outbound fetch).
-	audioBytes := []byte("fake-pcm-bytes")
+	// and surface a QuotaClamp for audit instead of wrapping around.
 	seedBody := mustMarshal(t, map[string]any{
 		"code":              0,
 		"message":           "success",
-		"audio":             base64.StdEncoding.EncodeToString(audioBytes),
+		"url":               "https://oss.example.com/audio.mp3",
 		"duration":          3e9,
 		"original_duration": 3e9,
 	})
 
 	info := &relaycommon.RelayInfo{RelayMode: relayconstant.RelayModeAudioSpeech}
-	usage, err := runDoResponse(t, "", info, seedBody)
-	require.Nil(t, err)
-	require.NotNil(t, usage)
+	_, c, apiErr := runDoResponse(t, info, seedBody)
+	require.Nil(t, apiErr)
 
-	u, ok := usage.(*dto.Usage)
+	usage, ok := getUsage(t, c)
 	require.True(t, ok)
-	assert.Equal(t, math.MaxInt32, u.PromptTokens)
+	assert.Equal(t, math.MaxInt32, usage.PromptTokens)
 	require.NotNil(t, info.QuotaClamp)
 	assert.Equal(t, math.MaxInt32, info.QuotaClamp.Clamped)
 }
 
-func TestDoResponseContentTypeAndBody(t *testing.T) {
-	t.Parallel()
-
-	audioBytes := []byte("fake-wav-bytes")
-	seedBody := mustMarshal(t, map[string]any{
-		"code":              0,
-		"message":           "success",
-		"audio":             base64.StdEncoding.EncodeToString(audioBytes),
-		"duration":          1.0,
-		"original_duration": 1.0,
-	})
-
-	gin.SetMode(gin.TestMode)
-	recorder := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(recorder)
-	c.Set(contextKeyResponseFormat, "wav")
-	resp := &http.Response{
-		StatusCode: http.StatusOK,
-		Header:     make(http.Header),
-		Body:       nopCloser(bytes.NewReader(seedBody)),
-	}
-
-	adaptor := &Adaptor{}
-	info := &relaycommon.RelayInfo{RelayMode: relayconstant.RelayModeAudioSpeech}
-	_, err := adaptor.DoResponse(c, resp, info)
-	require.Nil(t, err)
-
-	assert.Equal(t, "audio/wav", recorder.Header().Get("Content-Type"))
-	assert.Equal(t, audioBytes, recorder.Body.Bytes())
-}
-
-func TestDoResponseDefaultContentType(t *testing.T) {
-	t.Parallel()
-
-	// No response_format means the default mp3: the audio_config.format in the
-	// request and the response Content-Type header must both be audio/mpeg.
-	audioBytes := []byte("fake-mp3-bytes")
-	seedBody := mustMarshal(t, map[string]any{
-		"code":              0,
-		"message":           "success",
-		"audio":             base64.StdEncoding.EncodeToString(audioBytes),
-		"duration":          1.0,
-		"original_duration": 1.0,
-	})
-
-	gin.SetMode(gin.TestMode)
-	recorder := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(recorder)
-	resp := &http.Response{
-		StatusCode: http.StatusOK,
-		Header:     make(http.Header),
-		Body:       nopCloser(bytes.NewReader(seedBody)),
-	}
-
-	adaptor := &Adaptor{}
-	info := &relaycommon.RelayInfo{RelayMode: relayconstant.RelayModeAudioSpeech}
-	_, err := adaptor.DoResponse(c, resp, info)
-	require.Nil(t, err)
-
-	assert.Equal(t, "audio/mpeg", recorder.Header().Get("Content-Type"))
-	assert.Equal(t, audioBytes, recorder.Body.Bytes())
-}
-
-// runDoResponse drives a single DoResponse call, returning the usage and the
-// API error (nil when the call succeeded).
-func runDoResponse(t *testing.T, responseFormat string, info *relaycommon.RelayInfo, seedBody []byte) (any, *types.NewAPIError) {
+// newContextWithBody builds a gin test context whose body storage is seeded
+// from rawBody, mirroring what UnmarshalBodyReusable leaves in place for the
+// adaptor to re-read.
+func newContextWithBody(t *testing.T, rawBody []byte) *gin.Context {
 	t.Helper()
 
 	gin.SetMode(gin.TestMode)
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
-	c.Set(contextKeyResponseFormat, responseFormat)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/audio/speech", bytes.NewReader(rawBody))
+
+	storage, err := common.CreateBodyStorage(rawBody)
+	require.Nil(t, err)
+	c.Set(common.KeyBodyStorage, storage)
+	return c
+}
+
+// runDoResponse drives a single DoResponse call and returns the recorder
+// (carrying the forwarded body), the gin context (usage stashed under
+// "usage" on success), and the API error (nil on success).
+func runDoResponse(t *testing.T, info *relaycommon.RelayInfo, seedBody []byte) (*httptest.ResponseRecorder, *gin.Context, *types.NewAPIError) {
+	t.Helper()
+
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
 	resp := &http.Response{
 		StatusCode: http.StatusOK,
 		Header:     make(http.Header),
@@ -450,7 +282,11 @@ func runDoResponse(t *testing.T, responseFormat string, info *relaycommon.RelayI
 	}
 
 	adaptor := &Adaptor{}
-	return adaptor.DoResponse(c, resp, info)
+	usage, apiErr := adaptor.DoResponse(c, resp, info)
+	if apiErr == nil {
+		c.Set("usage", usage)
+	}
+	return recorder, c, apiErr
 }
 
 func mustMarshal(t *testing.T, v any) []byte {
@@ -461,14 +297,16 @@ func mustMarshal(t *testing.T, v any) []byte {
 	return body
 }
 
-func unmarshalSeedAudioRequest(t *testing.T, got io.Reader) *seedAudioRequest {
+// getUsage extracts the usage stashed on the gin context by runDoResponse.
+func getUsage(t *testing.T, c *gin.Context) (*dto.Usage, bool) {
 	t.Helper()
 
-	body, err := io.ReadAll(got)
-	require.Nil(t, err)
-	var req seedAudioRequest
-	require.NoError(t, common.Unmarshal(body, &req))
-	return &req
+	raw, exists := c.Get("usage")
+	if !exists {
+		return nil, false
+	}
+	usage, ok := raw.(*dto.Usage)
+	return usage, ok
 }
 
 type nopReadCloser struct {
