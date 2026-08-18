@@ -12,8 +12,8 @@ IMAGE="blue-whale-api:latest"
 BIN_NAME="new-api"                           # 容器内二进制名
 
 # new-api 连接：容器经公网 IP 回连宿主 mysql8/redis
-MYSQL_DSN="${MYSQL_DSN:-root:weitian1024@tcp($DEPLOY_HOST:3306)/new-api?parseTime=true}"
-REDIS_DSN="${REDIS_DSN:-redis://:weitian1024@$DEPLOY_HOST:6379/1}"   # db1，与 Java db0 隔离
+MYSQL_DSN="${MYSQL_DSN:-root:b3f9b3c44dda7225a88c90903df84c5818d964ce23c56be5@tcp($DEPLOY_HOST:3306)/new-api?parseTime=true}"
+REDIS_DSN="${REDIS_DSN:-redis://:9b119316892237613fa8dddfa3d2b5cc8274bac99edbbb45@$DEPLOY_HOST:6379/1}"   # db1，与 Java db0 隔离
 
 # 国内 docker mirror（失效自动 fallback）；apk 包源
 MIRRORS=(docker.m.daocloud.io docker.1ms.run dockerproxy.cn dockerhub.icu)
