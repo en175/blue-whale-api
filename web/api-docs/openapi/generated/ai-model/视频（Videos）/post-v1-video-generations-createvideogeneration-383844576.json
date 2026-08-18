@@ -80,7 +80,7 @@
                   },
                   "duration": {
                     "type": "integer",
-                    "description": "视频时长（秒）",
+                    "description": "视频时长（秒），仅用于计费校验；实际生成时长以 seconds 为准",
                     "examples": [
                       5
                     ]
@@ -268,48 +268,29 @@
             }
           },
           "400": {
-            "description": "请求参数错误",
+            "description": "参数校验失败",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string",
-                          "description": "错误信息"
-                        },
-                        "type": {
-                          "type": "string",
-                          "description": "错误类型"
-                        },
-                        "param": {
-                          "type": [
-                            "string",
-                            "null"
-                          ],
-                          "description": "相关参数"
-                        },
-                        "code": {
-                          "type": [
-                            "string",
-                            "null"
-                          ],
-                          "description": "错误代码"
-                        }
-                      },
-                      "x-apifox-orders": [
-                        "message",
-                        "type",
-                        "param",
-                        "code"
-                      ]
+                    "code": {
+                      "type": "string",
+                      "description": "错误码"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "错误描述"
+                    },
+                    "data": {
+                      "type": "null",
+                      "description": "附加数据，通常为 null"
                     }
                   },
                   "x-apifox-orders": [
-                    "error"
+                    "code",
+                    "message",
+                    "data"
                   ]
                 }
               }

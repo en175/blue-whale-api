@@ -5,7 +5,7 @@ description: Unified error response format and common error codes
 
 ## Error Response Format
 
-Task-level errors use a unified envelope (auth failures use an OpenAI-compatible error format; see [Authentication](./authentication)):
+Task-level errors use a unified envelope (auth failures and an incomplete [download](./video/download) return an OpenAI-compatible error format; see [Authentication](./authentication)):
 
 ```json
 { "code": "invalid_request", "message": "prompt is required", "data": null }

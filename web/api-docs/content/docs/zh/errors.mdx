@@ -5,7 +5,7 @@ description: 统一错误响应格式与常见错误码
 
 ## 错误响应格式
 
-任务类错误使用统一信封（鉴权失败为 OpenAI 兼容错误格式，见[鉴权](./authentication)）：
+任务类错误使用统一信封（鉴权失败、[下载视频](./video/download)未完成时返回 OpenAI 兼容错误格式，见[鉴权](./authentication)）：
 
 ```json
 { "code": "invalid_request", "message": "prompt is required", "data": null }

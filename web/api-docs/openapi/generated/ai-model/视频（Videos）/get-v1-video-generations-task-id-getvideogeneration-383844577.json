@@ -3,7 +3,7 @@
   "info": {
     "title": "获取视频生成任务状态",
     "version": "1.0.0",
-    "description": "查询视频生成任务的状态和结果。\n\n任务状态：\n- `queued`: 排队中\n- `in_progress`: 生成中\n- `completed`: 已完成\n- `failed`: 失败\n"
+    "description": "查询视频生成任务的实时状态和结果。\n\n任务状态：\n- `SUBMITTED` / `QUEUED`: 排队中\n- `IN_PROGRESS`: 处理中\n- `SUCCESS`: 已完成\n- `FAILURE`: 失败\n- `UNKNOWN`: 未知"
   },
   "tags": [
     {
@@ -26,7 +26,7 @@
           "视频（Videos）"
         ],
         "summary": "获取视频生成任务状态",
-        "description": "查询视频生成任务的状态和结果。\n\n任务状态：\n- `queued`: 排队中\n- `in_progress`: 生成中\n- `completed`: 已完成\n- `failed`: 失败\n",
+        "description": "查询视频生成任务的实时状态和结果。\n\n任务状态：\n- `SUBMITTED` / `QUEUED`: 排队中\n- `IN_PROGRESS`: 处理中\n- `SUCCESS`: 已完成\n- `FAILURE`: 失败\n- `UNKNOWN`: 未知",
         "operationId": "getvideogeneration",
         "parameters": [
           {
@@ -131,49 +131,30 @@
               }
             }
           },
-          "404": {
+          "400": {
             "description": "任务不存在",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string",
-                          "description": "错误信息"
-                        },
-                        "type": {
-                          "type": "string",
-                          "description": "错误类型"
-                        },
-                        "param": {
-                          "type": [
-                            "string",
-                            "null"
-                          ],
-                          "description": "相关参数"
-                        },
-                        "code": {
-                          "type": [
-                            "string",
-                            "null"
-                          ],
-                          "description": "错误代码"
-                        }
-                      },
-                      "x-apifox-orders": [
-                        "message",
-                        "type",
-                        "param",
-                        "code"
-                      ]
+                    "code": {
+                      "type": "string",
+                      "description": "错误码"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "错误描述"
+                    },
+                    "data": {
+                      "type": "null",
+                      "description": "附加数据，通常为 null"
                     }
                   },
                   "x-apifox-orders": [
-                    "error"
+                    "code",
+                    "message",
+                    "data"
                   ]
                 }
               }
