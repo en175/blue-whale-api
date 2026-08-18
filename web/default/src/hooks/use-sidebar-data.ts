@@ -24,6 +24,7 @@ import {
   FlaskConical,
   Key,
   LayoutDashboard,
+  Library,
   ListTodo,
   MessageSquare,
   Radio,
@@ -84,6 +85,11 @@ export function useSidebarData(): SidebarData {
             title: t('API Keys'),
             url: '/keys',
             icon: Key,
+          },
+          {
+            title: t('Materials'),
+            url: '/materials',
+            icon: Library,
           },
           {
             title: t('Usage Logs'),

@@ -5329,6 +5329,22 @@
     "Max Requests": "最大请求数",
     "Max requests per window": "每个时间窗口内的最大请求数",
     "Window (minutes)": "时间窗口 (分钟)",
-    "Payment Methods": "支付方式"
+    "Payment Methods": "支付方式",
+    "Materials": "素材中心",
+    "Real Person Materials": "真人素材",
+    "AIGC Materials": "AIGC 素材",
+    "No material groups": "暂无素材组",
+    "Select a material group to view assets": "请选择素材组以查看素材",
+    "No assets": "暂无素材",
+    "Created Time": "创建时间",
+    "New Material Group": "新建素材组",
+    "Group Type": "素材组类型",
+    "Upload Asset": "上传素材",
+    "Asset URL": "素材地址",
+    "Asset Name": "素材名称",
+    "Asset Type": "素材类型",
+    "Delete Material Group": "删除素材组",
+    "Delete Asset": "删除素材",
+    "Rename Asset": "重命名素材"
   }
 }

@@ -222,6 +222,29 @@ func SetApiRouter(router *gin.Engine) {
 			rechargeAdminRoute.DELETE("/:id", controller.AdminDeleteTier)
 		}
 
+		// 素材库 API：/api/material/* 透明转发到 ai-tokenhub，TokenAuth（API key）。
+		// 供 API 客户端调用（与生成任务同口径）。
+		materialRoute := apiRouter.Group("/material")
+		materialRoute.Use(middleware.TokenAuth())
+		{
+			materialRoute.Any("/*path", controller.MaterialLibraryProxy)
+		}
+
+		// 素材库管理界面：/api/materials/*（UserAuth，登录用户）。
+		// 与 TokenAuth 的 API 代理分开；左侧组列表查本地归属表（隔离），右侧素材查上游。
+		materialConsoleRoute := apiRouter.Group("/materials")
+		materialConsoleRoute.Use(middleware.UserAuth())
+		materialConsoleRoute.Use(controller.RequireMaterialLibraryEnabled())
+		{
+			materialConsoleRoute.GET("/groups", controller.GetMaterialGroups)
+			materialConsoleRoute.POST("/groups", controller.CreateMaterialGroup)
+			materialConsoleRoute.DELETE("/groups/:id", controller.DeleteMaterialGroup)
+			materialConsoleRoute.GET("/groups/:id/assets", controller.ListMaterialGroupAssets)
+			materialConsoleRoute.POST("/groups/:id/assets", controller.CreateMaterialAsset)
+			materialConsoleRoute.PUT("/groups/:id/assets/:assetId", controller.UpdateMaterialAsset)
+			materialConsoleRoute.DELETE("/groups/:id/assets/:assetId", controller.DeleteMaterialAsset)
+		}
+
 		optionRoute := apiRouter.Group("/option")
 		optionRoute.Use(middleware.RootAuth())
 		{

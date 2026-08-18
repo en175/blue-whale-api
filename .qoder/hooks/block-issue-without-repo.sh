@@ -67,14 +67,14 @@ BLOCKED: ${reason}
   project_id: ${PROJECT_ID:-（空）}
   program_id: ${PROGRAM_ID:-（空）}
 
-本项目所有 issue 必须关联到 blue-whale-ai 仓库、且归属其项目：
+本项目所有 issue 必须关联到 blue-whale-api 仓库、且归属其项目：
 - 不关联仓库的 issue（project_id=0）只出现在企业工作项列表，仓库 Issues 页看不到
 - 不归属项目的根 issue（program_id=0）游离于企业「项目管理」之外
 - 子工作项还必须继承父项的 project_id/program_id，否则父项页可见但仓库 Issues/MCP 仓库过滤查不到
 - 团队按仓库 Issues / 项目管理查工单时会漏掉它（历史事件 IJZ5WA / IJZ74J-N / IK0FL6-7）
 
 改法：
-- 根 issue：创建时传 project_id（blue-whale-ai 仓库 ID，用 list_enterprise_repositories 查）和 program_id（项目 ID，用 list_programs 查）
+- 根 issue：创建时传 project_id（blue-whale-api 仓库 ID，用 list_enterprise_repositories 查）和 program_id（项目 ID，用 list_programs 查）
 - 子 issue：先 get 父 issue，创建/更新时传 parent_id=父项 id、project_id=父项 project_id、program_id=父项 program_id
 - 发布后用 list_enterprise_issues(project_id, search=ident) 反查确认仓库可见
 

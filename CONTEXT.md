@@ -35,3 +35,29 @@ _Avoid_: TTS、语音合成
 **语音合成（WS TTS）**:
 火山引擎语音合成接口，通过 WebSocket 把文本流式合成为人声朗读音频。区别于音频生成。
 _Avoid_: 音频生成、音频大模型
+
+### 素材库
+
+**素材库（material library）**:
+网关内一个共享、单租户的素材资源能力，透明反向代理 ai-tokenhub 素材库 API（火山 ARK 兼容接口）。凭证（AK/SK）内置在全局 JSON 配置 `material_library` 中，下游客户端不持有，租户隐含在凭证中。
+_Avoid_: 上游控制台、渠道（它不是渠道，不提供模型请求）
+
+**素材组（material group）**:
+按"真人主体/虚拟人像"划分的资源集合，上游称 seedance asset group。一个真人素材组只对应一个真人主体。
+_Avoid_: 素材库（那是整体能力，组是其中的一个集合）
+
+**真人素材组（LivenessFace group）**:
+需真人通过火山 H5 刷脸认证才能启用的素材组；认证经 `CreateVisualValidateSession` 发起，回调由调用方自持，组 id 需上游开放后才能记录归属。
+_Avoid_: 真人组、人脸组
+
+**虚拟素材组（AIGC group）**:
+同步创建即用、无需认证的素材组（`CreateAssetGroup`，`GroupType: AIGC`）。
+_Avoid_: 虚拟组
+
+**素材（material / asset）**:
+素材组下的单个图片/视频/音频，生成任务以 `asset://<assetId>` 引用，经上游 `ListAssets` 按组查询。
+_Avoid_: 文件、附件
+
+**素材状态**:
+Active（就绪）、Processing（处理中）、Failed（失败）。状态以上游为准，本地不镜像。
+_Avoid_: 状态码

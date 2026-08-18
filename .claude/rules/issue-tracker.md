@@ -1,6 +1,6 @@
 # Gitee Issue 与 MCP 工具
 
-Issues 追踪在 Gitee 仓库 `git@gitee.com:hangzhou_xuanfu_1/blue-whale-ai.git`。详细流程：`docs/agents/issue-tracker.md`
+Issues 追踪在 Gitee 仓库 `git@gitee.com:hangzhou_xuanfu_1/blue-whale-api.git`。详细流程：`docs/agents/issue-tracker.md`
 
 > ⚠️ **所有 `mcp__gitee-ent__*` 调用**：`enterprise_id` / `project_id` / `program_id` 的兜底值见 CLAUDE.md「Gitee ID 兜底常量」（日常直接用）。**永不从网页 URL 抄**——URL 的 `883843` 是 program_id，误当 `enterprise_id` / `project_id` 传入会触发误导性 401。疑似变更或 401 时，用 `list` API 动态查 + `scripts/gitee-resolve-ids.sh resolve <URL>` 校验。详见 `docs/agents/issue-tracker.md`「ID 解析约定」。
 
@@ -18,7 +18,7 @@ Issues 追踪在 Gitee 仓库 `git@gitee.com:hangzhou_xuanfu_1/blue-whale-ai.git
 
 ## 创建 PR
 
-- `mcp__gitee-ent__create_enterprise_repo_pull` — **必传数字 `project_id`**（值用 `list_enterprise_repositories` 查）。工具描述写「Project ID or PathWithNamespace」，**实际传 PathWithNamespace（如 `hangzhou_xuanfu_1/blue-whale-ai`）会 404「仓库不存在」**，勿被误导。
+- `mcp__gitee-ent__create_enterprise_repo_pull` — **必传数字 `project_id`**（值用 `list_enterprise_repositories` 查）。工具描述写「Project ID or PathWithNamespace」，**实际传 PathWithNamespace（如 `hangzhou_xuanfu_1/blue-whale-api`）会 404「仓库不存在」**，勿被误导。
 - 查询方式：`list_enterprise_repositories(enterprise_id, search=...)` → 取返回结果中的数字 `id`。
 
 ## 子 Issue

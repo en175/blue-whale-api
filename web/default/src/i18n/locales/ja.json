@@ -5252,6 +5252,22 @@
     "Effective": "Effective",
     "Orders": "Orders",
     "{{points}} pts": "{{points}} pts",
-    "+{{bonus}} bonus": "+{{bonus}} bonus"
+    "+{{bonus}} bonus": "+{{bonus}} bonus",
+    "Materials": "素材",
+    "Real Person Materials": "リアル素材",
+    "AIGC Materials": "AIGC素材",
+    "No material groups": "素材グループがありません",
+    "Select a material group to view assets": "素材グループを選択してください",
+    "No assets": "素材がありません",
+    "Created Time": "作成時間",
+    "New Material Group": "新規素材グループ",
+    "Group Type": "グループタイプ",
+    "Upload Asset": "素材をアップロード",
+    "Asset URL": "素材URL",
+    "Asset Name": "素材名",
+    "Asset Type": "素材タイプ",
+    "Delete Material Group": "素材グループを削除",
+    "Delete Asset": "素材を削除",
+    "Rename Asset": "素材名を変更"
   }
 }

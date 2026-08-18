@@ -27,9 +27,9 @@ usage() {
   gitee-resolve-ids.sh diagnose-401
 
 resolve 示例：
-  gitee-resolve-ids.sh resolve "https://e.gitee.com/hangzhou-xuanfu_1/projects/883843/repos/hangzhou-xuanfu_1/blue-whale-ai/pulls/93"
-  gitee-resolve-ids.sh resolve "hangzhou-xuanfu_1/blue-whale-ai"
-  gitee-resolve-ids.sh resolve "https://gitee.com/hangzhou-xuanfu_1/blue-whale-ai/pulls/93"
+  gitee-resolve-ids.sh resolve "https://e.gitee.com/hangzhou-xuanfu_1/projects/883843/repos/hangzhou-xuanfu_1/blue-whale-api/pulls/93"
+  gitee-resolve-ids.sh resolve "hangzhou-xuanfu_1/blue-whale-api"
+  gitee-resolve-ids.sh resolve "https://gitee.com/hangzhou-xuanfu_1/blue-whale-api/pulls/93"
 
 check-id 示例：
   gitee-resolve-ids.sh check-id enterprise_id 883843
@@ -39,7 +39,7 @@ EOF
 
 # ─── resolve ──────────────────────────────────────────────────────────────
 # 从输入抽出：企业 path、仓库 path-with-namespace、资源类型(pull/issue)及编号。
-# URL 里【唯一可信】的是 path 段（hangzhou-xuanfu_1、blue-whale-ai）和 pulls/issues 的编号；
+# URL 里【唯一可信】的是 path 段（hangzhou-xuanfu_1、blue-whale-api）和 pulls/issues 的编号；
 # projects/ 后的数字（如 883843）是网页路由 ID，不可用作 API ID。
 do_resolve() {
   local input="$1"
@@ -164,8 +164,8 @@ do_check_id() {
     echo "✔ 正确做法：list_enterprises() → 取 path==\"hangzhou-xuanfu_1\" 的 id。"
     echo "  enterprise_id 不出现在任何网页 URL 中。"
   else
-    echo "✔ 正确做法：list_enterprise_repositories(enterprise_id, search=\"blue-whale-ai\")"
-    echo "            → 取 path_with_namespace==\"hangzhou-xuanfu_1/blue-whale-ai\" 的 id。"
+    echo "✔ 正确做法：list_enterprise_repositories(enterprise_id, search=\"blue-whale-api\")"
+    echo "            → 取 path_with_namespace==\"hangzhou-xuanfu_1/blue-whale-api\" 的 id。"
     echo "  project_id 不出现在任何网页 URL 中。"
   fi
   echo ""
