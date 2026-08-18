@@ -35,9 +35,8 @@ export function createMetadata(override: Metadata): Metadata {
   return {
     ...override,
     icons: {
-      icon: { url: '/favicon.png', type: 'image/png' },
-      shortcut: '/favicon.png',
-      apple: '/favicon.png',
+      icon: [{ url: '/favicon.png', sizes: '256x256', type: 'image/png' }],
+      apple: [{ url: '/favicon.png', sizes: '256x256', type: 'image/png' }],
     },
     openGraph: {
       title: override.title ?? undefined,
