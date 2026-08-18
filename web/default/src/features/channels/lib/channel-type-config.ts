@@ -176,6 +176,17 @@ export const CHANNEL_TYPE_CONFIGS: Record<number, ChannelTypeConfig> = {
         'dreamina-seedance-2-0-mini-260615, dreamina-seedance-2-0-260128, dreamina-seedance-2-0-fast-260128',
     },
   },
+  62: {
+    id: 62,
+    name: CHANNEL_TYPES[62],
+    icon: 'doubao',
+    defaultBaseUrl: 'https://openspeech.bytedance.com',
+    hints: {
+      baseUrl: 'Default: https://openspeech.bytedance.com',
+      key: 'Upstream API Key (X-Api-Key)',
+      models: 'seed-audio-1.0',
+    },
+  },
 }
 
 /**

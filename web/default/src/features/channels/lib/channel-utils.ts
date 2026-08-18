@@ -105,6 +105,7 @@ export function getChannelTypeIcon(type: number): string {
     56: 'Replicate', // Replicate
     60: 'XFAI', // XFAI
     61: 'TokenHub', // TokenHub
+    62: 'Doubao', // DoubaoAudio
 
     // Tools & Platforms
     37: 'Dify', // Dify
