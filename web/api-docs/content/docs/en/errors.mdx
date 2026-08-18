@@ -5,7 +5,7 @@ description: Unified error response format and common error codes
 
 ## Error Response Format
 
-All errors use a unified envelope:
+Task-level errors use a unified envelope (auth failures and an incomplete [download](./video/download) return an OpenAI-compatible error format; see [Authentication](./authentication)):
 
 ```json
 { "code": "invalid_request", "message": "prompt is required", "data": null }
@@ -23,7 +23,7 @@ All errors use a unified envelope:
 | --- | --- | --- | --- |
 | 400 | `invalid_request` | Missing or invalid parameter (e.g. empty prompt) | Check the request parameters |
 | 400 | `task_not_exist` | Task does not exist | Check the task_id |
-| 401 | `invalid_api_key` | Key missing / invalid / disabled | Check the Authorization header and key status |
+| 401 | — | Key missing / invalid / disabled, OpenAI-compatible error (`type: new_api_error`) | Check the Authorization header and key status |
 | 429 | Rate limited | Request rate limit exceeded | Slow down; see [Rate Limits](./rate-limits) |
 | 500 | `get_task_failed` | Failed to query the task | Retry; contact support if it persists |
 | 500 | `fail_to_fetch_task` | Upstream request failed | Retry |

@@ -35,105 +35,155 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "description": "视频生成请求",
+                "required": [
+                  "prompt",
+                  "model"
+                ],
                 "properties": {
-                  "model": {
-                    "type": "string",
-                    "description": "模型/风格 ID",
-                    "examples": [
-                      "kling-v1"
-                    ]
-                  },
                   "prompt": {
                     "type": "string",
-                    "description": "文本描述提示词",
+                    "description": "提示词（视频内容描述）",
                     "examples": [
-                      "宇航员站起身走了"
+                      "蓝鲸跃出海面，慢镜头，电影质感"
                     ]
+                  },
+                  "model": {
+                    "type": "string",
+                    "description": "模型标识，可选值见模型列表",
+                    "examples": [
+                      "doubao-seedance-2-0-260128"
+                    ]
+                  },
+                  "mode": {
+                    "type": "string",
+                    "description": "生成模式"
                   },
                   "image": {
                     "type": "string",
-                    "description": "图片输入 (URL 或 Base64)",
+                    "description": "图片输入（URL 或 Base64）"
+                  },
+                  "images": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "图生视频：首帧/参考图 URL 数组（公网可访问）",
                     "examples": [
-                      "https://example.com/image.jpg"
+                      [
+                        "https://example.com/first-frame.png"
+                      ]
                     ]
                   },
+                  "size": {
+                    "type": "string",
+                    "description": "视频尺寸"
+                  },
                   "duration": {
-                    "type": "number",
-                    "description": "视频时长（秒）",
+                    "type": "integer",
+                    "description": "视频时长（秒），仅用于计费校验；实际生成时长以 seconds 为准",
                     "examples": [
                       5
                     ]
                   },
-                  "width": {
-                    "type": "integer",
-                    "description": "视频宽度",
-                    "examples": [
-                      1280
-                    ]
-                  },
-                  "height": {
-                    "type": "integer",
-                    "description": "视频高度",
-                    "examples": [
-                      720
-                    ]
-                  },
-                  "fps": {
-                    "type": "integer",
-                    "description": "视频帧率",
-                    "examples": [
-                      30
-                    ]
-                  },
-                  "seed": {
-                    "type": "integer",
-                    "description": "随机种子",
-                    "examples": [
-                      20231234
-                    ]
-                  },
-                  "n": {
-                    "type": "integer",
-                    "description": "生成视频数量",
-                    "examples": [
-                      1
-                    ]
-                  },
-                  "response_format": {
+                  "seconds": {
                     "type": "string",
-                    "description": "响应格式",
+                    "description": "视频时长（秒，字符串）",
                     "examples": [
-                      "url"
+                      "5"
                     ]
                   },
-                  "user": {
+                  "input_reference": {
                     "type": "string",
-                    "description": "用户标识",
-                    "examples": [
-                      "user-1234"
-                    ]
+                    "description": "输入参考"
                   },
                   "metadata": {
                     "type": "object",
-                    "description": "扩展参数 (如 negative_prompt, style, quality_level 等)",
+                    "description": "扩展参数：resolution/ratio/generate_audio/frames/seed/camera_fixed/watermark/service_tier/return_last_frame/callback_url",
                     "additionalProperties": true,
-                    "properties": {},
-                    "x-apifox-orders": []
+                    "properties": {
+                      "resolution": {
+                        "type": "string",
+                        "description": "分辨率 480p/720p/1080p/4k",
+                        "examples": [
+                          "720p"
+                        ]
+                      },
+                      "ratio": {
+                        "type": "string",
+                        "description": "画面比例 16:9/4:3/1:1/3:4/9:16/21:9/adaptive",
+                        "examples": [
+                          "16:9"
+                        ]
+                      },
+                      "generate_audio": {
+                        "type": "boolean",
+                        "description": "是否生成音频",
+                        "examples": [
+                          true
+                        ]
+                      },
+                      "frames": {
+                        "type": "integer",
+                        "description": "帧数",
+                        "examples": [
+                          30
+                        ]
+                      },
+                      "seed": {
+                        "type": "integer",
+                        "description": "随机种子",
+                        "examples": [
+                          42
+                        ]
+                      },
+                      "camera_fixed": {
+                        "type": "boolean",
+                        "description": "固定机位",
+                        "examples": [
+                          false
+                        ]
+                      },
+                      "watermark": {
+                        "type": "boolean",
+                        "description": "水印",
+                        "examples": [
+                          false
+                        ]
+                      },
+                      "service_tier": {
+                        "type": "string",
+                        "description": "服务档位（如 fast）",
+                        "examples": [
+                          "fast"
+                        ]
+                      },
+                      "return_last_frame": {
+                        "type": "boolean",
+                        "description": "返回尾帧",
+                        "examples": [
+                          false
+                        ]
+                      },
+                      "callback_url": {
+                        "type": "string",
+                        "description": "回调地址",
+                        "examples": [
+                          "https://example.com/webhook"
+                        ]
+                      }
+                    }
                   }
                 },
                 "x-apifox-orders": [
-                  "model",
                   "prompt",
+                  "model",
+                  "mode",
                   "image",
+                  "images",
+                  "size",
                   "duration",
-                  "width",
-                  "height",
-                  "fps",
-                  "seed",
-                  "n",
-                  "response_format",
-                  "user",
+                  "seconds",
+                  "input_reference",
                   "metadata"
                 ]
               }
@@ -152,74 +202,95 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "description": "视频生成任务提交响应",
+                  "description": "创建视频生成任务的响应（OpenAI 兼容 video 对象）",
                   "properties": {
+                    "id": {
+                      "type": "string",
+                      "description": "任务 ID（与 task_id 相同）",
+                      "examples": [
+                        "task_9f3a2b7c"
+                      ]
+                    },
                     "task_id": {
                       "type": "string",
                       "description": "任务 ID",
                       "examples": [
-                        "abcd1234efgh"
+                        "task_9f3a2b7c"
+                      ]
+                    },
+                    "object": {
+                      "type": "string",
+                      "description": "对象类型",
+                      "examples": [
+                        "video"
+                      ]
+                    },
+                    "model": {
+                      "type": "string",
+                      "description": "模型标识",
+                      "examples": [
+                        "doubao-seedance-2-0-260128"
                       ]
                     },
                     "status": {
                       "type": "string",
-                      "description": "任务状态",
+                      "description": "任务状态（排队中）",
                       "examples": [
                         "queued"
+                      ]
+                    },
+                    "progress": {
+                      "type": "integer",
+                      "description": "进度百分比",
+                      "examples": [
+                        0
+                      ]
+                    },
+                    "created_at": {
+                      "type": "integer",
+                      "description": "创建时间（Unix 秒）",
+                      "examples": [
+                        1786344639
                       ]
                     }
                   },
                   "x-apifox-orders": [
+                    "id",
                     "task_id",
-                    "status"
+                    "object",
+                    "model",
+                    "status",
+                    "progress",
+                    "created_at"
                   ]
                 }
               }
             }
           },
           "400": {
-            "description": "请求参数错误",
+            "description": "参数校验失败",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string",
-                          "description": "错误信息"
-                        },
-                        "type": {
-                          "type": "string",
-                          "description": "错误类型"
-                        },
-                        "param": {
-                          "type": [
-                            "string",
-                            "null"
-                          ],
-                          "description": "相关参数"
-                        },
-                        "code": {
-                          "type": [
-                            "string",
-                            "null"
-                          ],
-                          "description": "错误代码"
-                        }
-                      },
-                      "x-apifox-orders": [
-                        "message",
-                        "type",
-                        "param",
-                        "code"
-                      ]
+                    "code": {
+                      "type": "string",
+                      "description": "错误码"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "错误描述"
+                    },
+                    "data": {
+                      "type": "null",
+                      "description": "附加数据，通常为 null"
                     }
                   },
                   "x-apifox-orders": [
-                    "error"
+                    "code",
+                    "message",
+                    "data"
                   ]
                 }
               }
