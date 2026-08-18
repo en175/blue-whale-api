@@ -20,17 +20,26 @@ curl "$BASE_URL/v1/video/generations" \
   -H "Authorization: Bearer sk-YOUR-KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "seedance-2.0-whitelist",
+    "model": "doubao-seedance-2-0-260128",
     "prompt": "A blue whale leaping out of the ocean, slow motion, cinematic look",
-    "size": "720p",
-    "duration": 5
+    "seconds": "5",
+    "metadata": {
+      "resolution": "720p",
+      "ratio": "16:9",
+      "generate_audio": true
+    }
   }'
 ```
 
-`data.task_id` in the response is the unique identifier of this task:
+The `id` (same as `task_id`) in the response is the unique identifier of this task:
 
 ```json
-{ "code": "success", "message": "", "data": { "task_id": "task_9f3a2b7c" } }
+{
+  "id": "task_9f3a2b7c",
+  "task_id": "task_9f3a2b7c",
+  "object": "video",
+  "status": "queued"
+}
 ```
 
 ## 3. Poll the Task Status
@@ -55,5 +64,5 @@ curl "$BASE_URL/v1/videos/task_9f3a2b7c/content" \
 ## Next Steps
 
 - [Authentication](./authentication): using API keys and their lifecycle
-- [Models](./models): full parameter reference for seedance-2.0-whitelist
+- [Models](./models): full parameter reference for doubao-seedance-2-0-260128
 - [Error Codes](./errors): look here when something goes wrong

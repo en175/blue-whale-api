@@ -5,7 +5,7 @@ description: 统一错误响应格式与常见错误码
 
 ## 错误响应格式
 
-所有错误使用统一信封：
+任务类错误使用统一信封（鉴权失败为 OpenAI 兼容错误格式，见[鉴权](./authentication)）：
 
 ```json
 { "code": "invalid_request", "message": "prompt is required", "data": null }
@@ -23,7 +23,7 @@ description: 统一错误响应格式与常见错误码
 | --- | --- | --- | --- |
 | 400 | `invalid_request` | 参数缺失或非法（如 prompt 为空） | 检查请求参数 |
 | 400 | `task_not_exist` | 任务不存在 | 检查 task_id |
-| 401 | `invalid_api_key` | Key 缺失/无效/被禁用 | 检查 Authorization 头与 Key 状态 |
+| 401 | — | Key 缺失/无效/被禁用，返回 OpenAI 兼容错误（`type: new_api_error`） | 检查 Authorization 头与 Key 状态 |
 | 429 | 限流 | 超出调用频率限制 | 降低频率，见[限流说明](./rate-limits) |
 | 500 | `get_task_failed` | 任务查询失败 | 重试，持续出现联系支持 |
 | 500 | `fail_to_fetch_task` | 上游请求失败 | 重试 |

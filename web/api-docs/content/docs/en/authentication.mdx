@@ -21,10 +21,16 @@ Replace `sk-YOUR-KEY` with an API key created in the console.
 
 ## Authentication Failures
 
-A missing, invalid, or disabled key returns `401`:
+A missing, invalid, or disabled key returns `401`, with an OpenAI-compatible error envelope (`message` contains the request id of this call):
 
 ```json
-{ "code": "invalid_api_key", "message": "Invalid API key", "data": null }
+{
+  "error": {
+    "message": "Invalid token (request id: ...)",
+    "type": "new_api_error",
+    "code": ""
+  }
+}
 ```
 
 For the full list, see [Error Codes](./errors).

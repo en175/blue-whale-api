@@ -51,116 +51,81 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "description": "视频任务状态查询响应",
+                  "description": "查询任务状态响应",
                   "properties": {
-                    "task_id": {
+                    "code": {
                       "type": "string",
-                      "description": "任务 ID",
+                      "description": "状态码",
                       "examples": [
-                        "abcd1234efgh"
+                        "success"
                       ]
                     },
-                    "status": {
+                    "message": {
                       "type": "string",
-                      "description": "任务状态",
-                      "enum": [
-                        "queued",
-                        "in_progress",
-                        "completed",
-                        "failed"
-                      ],
-                      "examples": [
-                        "completed"
-                      ]
+                      "description": "消息"
                     },
-                    "url": {
-                      "type": "string",
-                      "description": "视频资源 URL（成功时）",
-                      "examples": [
-                        "https://example.com/video.mp4"
-                      ]
-                    },
-                    "format": {
-                      "type": "string",
-                      "description": "视频格式",
-                      "examples": [
-                        "mp4"
-                      ]
-                    },
-                    "metadata": {
+                    "data": {
                       "type": "object",
-                      "description": "视频任务元数据",
+                      "description": "任务详情",
                       "properties": {
-                        "duration": {
-                          "type": "number",
-                          "description": "实际生成的视频时长",
-                          "examples": [
-                            5
-                          ]
-                        },
-                        "fps": {
-                          "type": "integer",
-                          "description": "实际帧率",
-                          "examples": [
-                            30
-                          ]
-                        },
-                        "width": {
-                          "type": "integer",
-                          "description": "实际宽度",
-                          "examples": [
-                            1280
-                          ]
-                        },
-                        "height": {
-                          "type": "integer",
-                          "description": "实际高度",
-                          "examples": [
-                            720
-                          ]
-                        },
-                        "seed": {
-                          "type": "integer",
-                          "description": "使用的随机种子",
-                          "examples": [
-                            20231234
-                          ]
-                        }
-                      },
-                      "x-apifox-orders": [
-                        "duration",
-                        "fps",
-                        "width",
-                        "height",
-                        "seed"
-                      ]
-                    },
-                    "error": {
-                      "type": "object",
-                      "description": "视频任务错误信息",
-                      "properties": {
-                        "code": {
-                          "type": "integer",
-                          "description": "错误码"
-                        },
-                        "message": {
+                        "task_id": {
                           "type": "string",
-                          "description": "错误信息"
+                          "description": "任务 ID",
+                          "examples": [
+                            "task_9f3a2b7c"
+                          ]
+                        },
+                        "status": {
+                          "type": "string",
+                          "description": "任务状态：SUBMITTED/QUEUED/IN_PROGRESS/SUCCESS/FAILURE/UNKNOWN",
+                          "examples": [
+                            "SUCCESS"
+                          ]
+                        },
+                        "fail_reason": {
+                          "type": "string",
+                          "description": "失败原因"
+                        },
+                        "result_url": {
+                          "type": "string",
+                          "description": "结果视频 URL"
+                        },
+                        "submit_time": {
+                          "type": "integer",
+                          "description": "提交时间（Unix 秒）"
+                        },
+                        "start_time": {
+                          "type": "integer",
+                          "description": "开始时间（Unix 秒）"
+                        },
+                        "finish_time": {
+                          "type": "integer",
+                          "description": "完成时间（Unix 秒）"
+                        },
+                        "progress": {
+                          "type": "string",
+                          "description": "进度",
+                          "examples": [
+                            "100%"
+                          ]
                         }
                       },
                       "x-apifox-orders": [
-                        "code",
-                        "message"
+                        "task_id",
+                        "status",
+                        "fail_reason",
+                        "result_url",
+                        "submit_time",
+                        "start_time",
+                        "finish_time",
+                        "progress"
                       ]
                     }
                   },
                   "x-apifox-orders": [
-                    "task_id",
-                    "status",
-                    "url",
-                    "format",
-                    "metadata",
-                    "error"
+                    "code",
+                    "message",
+                    "data"
                   ]
                 }
               }

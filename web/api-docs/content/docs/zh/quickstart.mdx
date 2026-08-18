@@ -20,17 +20,26 @@ curl "$BASE_URL/v1/video/generations" \
   -H "Authorization: Bearer sk-YOUR-KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "seedance-2.0-whitelist",
+    "model": "doubao-seedance-2-0-260128",
     "prompt": "蓝鲸跃出海面，慢镜头，电影质感",
-    "size": "720p",
-    "duration": 5
+    "seconds": "5",
+    "metadata": {
+      "resolution": "720p",
+      "ratio": "16:9",
+      "generate_audio": true
+    }
   }'
 ```
 
-响应中的 `data.task_id` 就是这次任务的唯一标识：
+响应中的 `id`（即 `task_id`）就是这次任务的唯一标识：
 
 ```json
-{ "code": "success", "message": "", "data": { "task_id": "task_9f3a2b7c" } }
+{
+  "id": "task_9f3a2b7c",
+  "task_id": "task_9f3a2b7c",
+  "object": "video",
+  "status": "queued"
+}
 ```
 
 ## 3. 轮询任务状态
@@ -55,5 +64,5 @@ curl "$BASE_URL/v1/videos/task_9f3a2b7c/content" \
 ## 下一步
 
 - [鉴权](./authentication)：API Key 的使用与生命周期
-- [模型列表](./models)：seedance-2.0-whitelist 支持的完整参数
+- [模型列表](./models)：doubao-seedance-2-0-260128 支持的完整参数
 - [错误码](./errors)：遇到问题时查这里
