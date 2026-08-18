@@ -44,6 +44,7 @@ import (
 	taskvertex "github.com/QuantumNous/new-api/relay/channel/task/vertex"
 	taskVidu "github.com/QuantumNous/new-api/relay/channel/task/vidu"
 	taskxfai "github.com/QuantumNous/new-api/relay/channel/task/xfai"
+	doubaoaudio "github.com/QuantumNous/new-api/relay/channel/doubaoaudio"
 	"github.com/QuantumNous/new-api/relay/channel/tencent"
 	"github.com/QuantumNous/new-api/relay/channel/vertex"
 	"github.com/QuantumNous/new-api/relay/channel/volcengine"
@@ -126,6 +127,8 @@ func GetAdaptor(apiType int) channel.Adaptor {
 		return &codex.Adaptor{}
 	case constant.APITypeAdvancedCustom:
 		return &advancedcustom.Adaptor{}
+	case constant.APITypeDoubaoAudio:
+		return &doubaoaudio.Adaptor{}
 	}
 	return nil
 }
