@@ -5269,6 +5269,10 @@
     "Delete Material Group": "Supprimer le groupe",
     "Delete Asset": "Supprimer le matériau",
     "Rename Asset": "Renommer",
-    "Material library management (AIGC and real-person assets).": "Gestion de la bibliothèque de matériaux (actifs AIGC et personnes réelles)."
+    "Material library management (AIGC and real-person assets).": "Gestion de la bibliothèque de matériaux (actifs AIGC et personnes réelles).",
+    "General Config": "Configuration générale",
+    "Saving": "Enregistrement",
+    "No configs": "Aucune configuration",
+    "Load failed": "Échec du chargement"
   }
 }

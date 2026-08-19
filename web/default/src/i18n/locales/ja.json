@@ -5269,6 +5269,10 @@
     "Delete Material Group": "素材グループを削除",
     "Delete Asset": "素材を削除",
     "Rename Asset": "素材名を変更",
-    "Material library management (AIGC and real-person assets).": "素材ライブラリ管理（AIGC とリアル素材）。"
+    "Material library management (AIGC and real-person assets).": "素材ライブラリ管理（AIGC とリアル素材）。",
+    "General Config": "一般設定",
+    "Saving": "保存中",
+    "No configs": "設定がありません",
+    "Load failed": "読み込み失敗"
   }
 }

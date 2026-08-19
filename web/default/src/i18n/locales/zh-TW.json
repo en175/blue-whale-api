@@ -5269,6 +5269,10 @@
     "Delete Material Group": "刪除素材組",
     "Delete Asset": "刪除素材",
     "Rename Asset": "重新命名素材",
-    "Material library management (AIGC and real-person assets).": "素材庫管理（AIGC 與真人素材）。"
+    "Material library management (AIGC and real-person assets).": "素材庫管理（AIGC 與真人素材）。",
+    "General Config": "通用配置",
+    "Saving": "保存中",
+    "No configs": "暫無配置",
+    "Load failed": "載入失敗"
   }
 }
