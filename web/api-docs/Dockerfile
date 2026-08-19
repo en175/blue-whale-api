@@ -3,6 +3,9 @@ FROM node:22-alpine AS builder
 
 WORKDIR /build
 
+# taskset 限核用（node:22-alpine busybox 无此命令）；放最早层以命中 buildkit 层缓存
+RUN apk add --no-cache util-linux
+
 # Install bun (project convention from blue_whale_api/Dockerfile)
 RUN npm install -g bun --registry=https://registry.npmmirror.com
 
@@ -29,10 +32,8 @@ RUN npx fumadocs-mdx
 
 # Build Next.js standalone output
 # taskset 限核 0-7：规避构建机报告核数 > 实际配额导致的 Turbopack 线程超订抖动
-# (node:22-alpine busybox 无 taskset，先装 util-linux；失败在编译前快速报出)
 # Retry on transient network errors (font downloads, socket resets)
-RUN apk add --no-cache util-linux >/dev/null && \
-    taskset -c 0-7 sh -c \
+RUN taskset -c 0-7 sh -c \
     'for i in 1 2 3; do bun run build && exit 0; echo "Build attempt $i failed, retrying..."; sleep 10; done; exit 1'
 
 
