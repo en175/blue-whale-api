@@ -5346,6 +5346,9 @@
     "Delete Material Group": "Delete Material Group",
     "Delete Asset": "Delete Asset",
     "Rename Asset": "Rename Asset",
-    "Material library management (AIGC and real-person assets).": "Material library management (AIGC and real-person assets)."
+    "Material library management (AIGC and real-person assets).": "Material library management (AIGC and real-person assets).",
+    "General Config": "General Config",
+    "Saving": "Saving",
+    "No configs": "No configs"
   }
 }
