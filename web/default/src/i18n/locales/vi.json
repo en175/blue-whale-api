@@ -5269,6 +5269,9 @@
     "Delete Material Group": "Xóa nhóm",
     "Delete Asset": "Xóa nguyên liệu",
     "Rename Asset": "Đổi tên nguyên liệu",
-    "Material library management (AIGC and real-person assets).": "Quản lý thư viện nguyên liệu (AIGC và người thật)."
+    "Material library management (AIGC and real-person assets).": "Quản lý thư viện nguyên liệu (AIGC và người thật).",
+    "General Config": "Cấu hình chung",
+    "Saving": "Đang lưu",
+    "No configs": "Không có cấu hình"
   }
 }

@@ -5269,6 +5269,9 @@
     "Delete Material Group": "Удалить группу",
     "Delete Asset": "Удалить материал",
     "Rename Asset": "Переименовать",
-    "Material library management (AIGC and real-person assets).": "Управление библиотекой материалов (AIGC и реальные люди)."
+    "Material library management (AIGC and real-person assets).": "Управление библиотекой материалов (AIGC и реальные люди).",
+    "General Config": "Общие настройки",
+    "Saving": "Сохранение",
+    "No configs": "Нет конфигураций"
   }
 }

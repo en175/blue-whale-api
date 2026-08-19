@@ -25,8 +25,26 @@ import { PerformanceSection } from '../maintenance/performance-section'
 import { UpdateCheckerSection } from '../maintenance/update-checker-section'
 import type { OperationsSettings } from '../types'
 import { createSectionRegistry } from '../utils/section-registry'
+import { GeneralConfigSection } from './general-config-section'
 
 const OPERATIONS_SECTIONS = [
+  {
+    id: 'behavior',
+    titleKey: 'System Behavior',
+    build: (settings: OperationsSettings) => (
+      <SystemBehaviorSection
+        defaultValues={{
+          DefaultCollapseSidebar: settings.DefaultCollapseSidebar,
+          DemoSiteEnabled: settings.DemoSiteEnabled,
+        }}
+      />
+    ),
+  },
+  {
+    id: 'general-config',
+    titleKey: 'General Config',
+    build: () => <GeneralConfigSection />,
+  },
   {
     id: 'behavior',
     titleKey: 'System Behavior',
