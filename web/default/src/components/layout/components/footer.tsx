@@ -149,6 +149,23 @@ function ProjectAttribution(props: { currentYear: number; inline?: boolean }) {
   )
 }
 
+// ICP 备案号(工单 IK9T9F):固定显示在页面底部中央,链接至工信部备案管理系统。
+// 无论系统设置中是否配置了 Footer(页脚)字段都会展示。
+function IcpBeian() {
+  return (
+    <div className='mt-3 text-center'>
+      <a
+        href='https://beian.miit.gov.cn'
+        target='_blank'
+        rel='noopener noreferrer'
+        className='text-muted-foreground/45 text-xs transition-colors hover:text-foreground'
+      >
+        蜀ICP备2026047980号-1
+      </a>
+    </div>
+  )
+}
+
 export function Footer(props: FooterProps) {
   const { t } = useTranslation()
   const {
@@ -241,6 +258,7 @@ export function Footer(props: FooterProps) {
               <ProjectAttribution currentYear={currentYear} inline />
             </div>
           </div>
+          <IcpBeian />
         </div>
       </footer>
     )
@@ -302,6 +320,7 @@ export function Footer(props: FooterProps) {
           </div>
           <ProjectAttribution currentYear={currentYear} />
         </div>
+        <IcpBeian />
       </div>
     </footer>
   )
