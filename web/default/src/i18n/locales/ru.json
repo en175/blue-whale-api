@@ -5252,6 +5252,22 @@
     "Effective": "Effective",
     "Orders": "Orders",
     "{{points}} pts": "{{points}} pts",
-    "+{{bonus}} bonus": "+{{bonus}} bonus"
+    "+{{bonus}} bonus": "+{{bonus}} bonus",
+    "Materials": "Материалы",
+    "Real Person Materials": "Реальные материалы",
+    "AIGC Materials": "Материалы AIGC",
+    "No material groups": "Нет групп материалов",
+    "Select a material group to view assets": "Выберите группу для просмотра материалов",
+    "No assets": "Нет материалов",
+    "Created Time": "Время создания",
+    "New Material Group": "Новая группа",
+    "Group Type": "Тип группы",
+    "Upload Asset": "Загрузить",
+    "Asset URL": "URL материала",
+    "Asset Name": "Имя материала",
+    "Asset Type": "Тип материала",
+    "Delete Material Group": "Удалить группу",
+    "Delete Asset": "Удалить материал",
+    "Rename Asset": "Переименовать"
   }
 }

@@ -5252,6 +5252,22 @@
     "Effective": "Effective",
     "Orders": "Orders",
     "{{points}} pts": "{{points}} pts",
-    "+{{bonus}} bonus": "+{{bonus}} bonus"
+    "+{{bonus}} bonus": "+{{bonus}} bonus",
+    "Materials": "Nguyên liệu",
+    "Real Person Materials": "Nguyên liệu người thật",
+    "AIGC Materials": "Nguyên liệu AIGC",
+    "No material groups": "Không có nhóm nguyên liệu",
+    "Select a material group to view assets": "Chọn nhóm để xem nguyên liệu",
+    "No assets": "Không có nguyên liệu",
+    "Created Time": "Thời gian tạo",
+    "New Material Group": "Nhóm nguyên liệu mới",
+    "Group Type": "Loại nhóm",
+    "Upload Asset": "Tải nguyên liệu",
+    "Asset URL": "URL nguyên liệu",
+    "Asset Name": "Tên nguyên liệu",
+    "Asset Type": "Loại nguyên liệu",
+    "Delete Material Group": "Xóa nhóm",
+    "Delete Asset": "Xóa nguyên liệu",
+    "Rename Asset": "Đổi tên nguyên liệu"
   }
 }

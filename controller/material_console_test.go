@@ -1,0 +1,164 @@
+package controller
+
+import (
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service"
+	"github.com/gin-gonic/gin"
+	"github.com/glebarez/sqlite"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
+)
+
+// openMaterialConsoleDB 为管理端点测试准备隔离的归属表。
+func openMaterialConsoleDB(t *testing.T) *gorm.DB {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+	common.SetDatabaseTypes(common.DatabaseTypeSQLite, common.DatabaseTypeSQLite)
+	common.RedisEnabled = false
+	model.InitCol()
+
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	model.DB = db
+	model.LOG_DB = db
+	t.Cleanup(func() {
+		sqlDB, err := db.DB()
+		if err == nil {
+			_ = sqlDB.Close()
+		}
+	})
+	require.NoError(t, db.AutoMigrate(&model.UserMaterialGroup{}))
+	return db
+}
+
+func performGetMaterialGroups(t *testing.T, role, userID int, groupType string) *httptest.ResponseRecorder {
+	t.Helper()
+	r := gin.New()
+	// 模拟 UserAuth 注入的 role/id，再进入真实 handler。
+	r.GET("/materials/groups", func(c *gin.Context) {
+		c.Set("role", role)
+		c.Set("id", userID)
+		GetMaterialGroups(c)
+	})
+
+	url := "/materials/groups"
+	if groupType != "" {
+		url += "?type=" + groupType
+	}
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, url, nil))
+	return w
+}
+
+// TestGetMaterialGroups_isolation 验证数据隔离：普通用户只见自己，admin 看全部，类型可过滤。
+func TestGetMaterialGroups_isolation(t *testing.T) {
+	openMaterialConsoleDB(t)
+	require.NoError(t, model.AddUserMaterialGroup(1, "g_admin", "admin-aigc", "AIGC"))
+	require.NoError(t, model.AddUserMaterialGroup(2, "g_user", "user-aigc", "AIGC"))
+	require.NoError(t, model.AddUserMaterialGroup(2, "g_real", "user-real", "LivenessFace"))
+	t.Cleanup(func() {
+		_ = model.DeleteUserMaterialGroup("g_admin")
+		_ = model.DeleteUserMaterialGroup("g_user")
+		_ = model.DeleteUserMaterialGroup("g_real")
+	})
+
+	t.Run("普通用户只见自己的组", func(t *testing.T) {
+		w := performGetMaterialGroups(t, common.RoleCommonUser, 2, "")
+		require.Equal(t, http.StatusOK, w.Code)
+		var resp struct {
+			Data []model.UserMaterialGroup `json:"data"`
+		}
+		require.NoError(t, common.Unmarshal(w.Body.Bytes(), &resp))
+		require.Len(t, resp.Data, 2)
+		for _, g := range resp.Data {
+			assert.Equal(t, 2, g.UserId)
+		}
+	})
+
+	t.Run("admin 看全部", func(t *testing.T) {
+		w := performGetMaterialGroups(t, common.RoleAdminUser, 1, "")
+		require.Equal(t, http.StatusOK, w.Code)
+		var resp struct {
+			Data []model.UserMaterialGroup `json:"data"`
+		}
+		require.NoError(t, common.Unmarshal(w.Body.Bytes(), &resp))
+		require.Len(t, resp.Data, 3)
+	})
+
+	t.Run("按类型过滤", func(t *testing.T) {
+		w := performGetMaterialGroups(t, common.RoleAdminUser, 1, "LivenessFace")
+		require.Equal(t, http.StatusOK, w.Code)
+		var resp struct {
+			Data []model.UserMaterialGroup `json:"data"`
+		}
+		require.NoError(t, common.Unmarshal(w.Body.Bytes(), &resp))
+		require.Len(t, resp.Data, 1)
+		assert.Equal(t, "LivenessFace", resp.Data[0].GroupType)
+	})
+}
+
+// TestListMaterialGroupAssets_callsUpstream 验证管理端点按组 id 直连上游并返回素材（admin 放行）。
+func TestListMaterialGroupAssets_callsUpstream(t *testing.T) {
+	openMaterialConsoleDB(t)
+	service.InitHttpClient()
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "ListAssets", r.URL.Query().Get("Action"))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ResponseMetadata":{},"Result":{"TotalCount":1,"Items":[{"Id":"asset-9","Name":"n","Status":"Active"}],"PageNumber":1,"PageSize":10}}`))
+	}))
+	defer upstream.Close()
+
+	setMaterialConfig(t, fmt.Sprintf(`{"enabled":true,"ak":"pak_x","sk":"psk_y","base_url":%q}`, upstream.URL))
+
+	r := gin.New()
+	r.GET("/materials/groups/:id/assets", func(c *gin.Context) {
+		c.Set("role", common.RoleAdminUser)
+		c.Set("id", 1)
+		ListMaterialGroupAssets(c)
+	})
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/materials/groups/group-1/assets?p=1&page_size=10", nil))
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var resp struct {
+		Data struct {
+			TotalCount int `json:"TotalCount"`
+			Items      []struct {
+				Id string `json:"Id"`
+			} `json:"Items"`
+		} `json:"data"`
+	}
+	require.NoError(t, common.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, 1, resp.Data.TotalCount)
+	assert.Len(t, resp.Data.Items, 1)
+	assert.Equal(t, "asset-9", resp.Data.Items[0].Id)
+}
+
+// TestMaterialConsole_rejectsUnownedGroup 验证数据隔离：非 admin 用户操作无归属的组被拒。
+func TestMaterialConsole_rejectsUnownedGroup(t *testing.T) {
+	openMaterialConsoleDB(t)
+	require.NoError(t, model.AddUserMaterialGroup(1, "g_owned", "mine", "AIGC"))
+	t.Cleanup(func() { _ = model.DeleteUserMaterialGroup("g_owned") })
+
+	r := gin.New()
+	// 普通用户（role=1）id=2，只拥有 g_owned 由 user 1 持有 → 操作 g_owned 应被拒
+	r.DELETE("/materials/groups/:id", func(c *gin.Context) {
+		c.Set("role", common.RoleCommonUser)
+		c.Set("id", 2)
+		DeleteMaterialGroup(c)
+	})
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodDelete, "/materials/groups/g_owned", nil))
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), "material group not found or not owned")
+}

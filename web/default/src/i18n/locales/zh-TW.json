@@ -5252,6 +5252,22 @@
     "Effective": "生效日期",
     "Orders": "訂單數",
     "{{points}} pts": "{{points}} 積分",
-    "+{{bonus}} bonus": "+{{bonus}} 贈送"
+    "+{{bonus}} bonus": "+{{bonus}} 贈送",
+    "Materials": "素材中心",
+    "Real Person Materials": "真人素材",
+    "AIGC Materials": "AIGC 素材",
+    "No material groups": "暫無素材組",
+    "Select a material group to view assets": "請選擇素材組以查看素材",
+    "No assets": "暫無素材",
+    "Created Time": "建立時間",
+    "New Material Group": "新建素材組",
+    "Group Type": "素材組類型",
+    "Upload Asset": "上傳素材",
+    "Asset URL": "素材地址",
+    "Asset Name": "素材名稱",
+    "Asset Type": "素材類型",
+    "Delete Material Group": "刪除素材組",
+    "Delete Asset": "刪除素材",
+    "Rename Asset": "重新命名素材"
   }
 }

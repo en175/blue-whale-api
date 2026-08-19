@@ -5252,6 +5252,22 @@
     "Effective": "Effective",
     "Orders": "Orders",
     "{{points}} pts": "{{points}} pts",
-    "+{{bonus}} bonus": "+{{bonus}} bonus"
+    "+{{bonus}} bonus": "+{{bonus}} bonus",
+    "Materials": "Matériaux",
+    "Real Person Materials": "Matériaux réels",
+    "AIGC Materials": "Matériaux AIGC",
+    "No material groups": "Aucun groupe de matériaux",
+    "Select a material group to view assets": "Sélectionnez un groupe pour voir les matériaux",
+    "No assets": "Aucun matériau",
+    "Created Time": "Date de création",
+    "New Material Group": "Nouveau groupe",
+    "Group Type": "Type de groupe",
+    "Upload Asset": "Téléverser",
+    "Asset URL": "URL du matériau",
+    "Asset Name": "Nom du matériau",
+    "Asset Type": "Type de matériau",
+    "Delete Material Group": "Supprimer le groupe",
+    "Delete Asset": "Supprimer le matériau",
+    "Rename Asset": "Renommer"
   }
 }

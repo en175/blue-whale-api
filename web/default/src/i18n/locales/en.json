@@ -5329,6 +5329,22 @@
     "Max Requests": "Max Requests",
     "Max requests per window": "Max requests per window",
     "Window (minutes)": "Window (minutes)",
-    "Payment Methods": "Payment Methods"
+    "Payment Methods": "Payment Methods",
+    "Materials": "Materials",
+    "Real Person Materials": "Real Person Materials",
+    "AIGC Materials": "AIGC Materials",
+    "No material groups": "No material groups",
+    "Select a material group to view assets": "Select a material group to view assets",
+    "No assets": "No assets",
+    "Created Time": "Created Time",
+    "New Material Group": "New Material Group",
+    "Group Type": "Group Type",
+    "Upload Asset": "Upload Asset",
+    "Asset URL": "Asset URL",
+    "Asset Name": "Asset Name",
+    "Asset Type": "Asset Type",
+    "Delete Material Group": "Delete Material Group",
+    "Delete Asset": "Delete Asset",
+    "Rename Asset": "Rename Asset"
   }
 }
