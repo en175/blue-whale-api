@@ -5268,6 +5268,7 @@
     "Asset Type": "素材タイプ",
     "Delete Material Group": "素材グループを削除",
     "Delete Asset": "素材を削除",
-    "Rename Asset": "素材名を変更"
+    "Rename Asset": "素材名を変更",
+    "Material library management (AIGC and real-person assets).": "素材ライブラリ管理（AIGC とリアル素材）。"
   }
 }

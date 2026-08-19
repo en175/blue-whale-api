@@ -5268,6 +5268,7 @@
     "Asset Type": "Loại nguyên liệu",
     "Delete Material Group": "Xóa nhóm",
     "Delete Asset": "Xóa nguyên liệu",
-    "Rename Asset": "Đổi tên nguyên liệu"
+    "Rename Asset": "Đổi tên nguyên liệu",
+    "Material library management (AIGC and real-person assets).": "Quản lý thư viện nguyên liệu (AIGC và người thật)."
   }
 }

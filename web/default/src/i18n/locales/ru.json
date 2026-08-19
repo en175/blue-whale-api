@@ -5268,6 +5268,7 @@
     "Asset Type": "Тип материала",
     "Delete Material Group": "Удалить группу",
     "Delete Asset": "Удалить материал",
-    "Rename Asset": "Переименовать"
+    "Rename Asset": "Переименовать",
+    "Material library management (AIGC and real-person assets).": "Управление библиотекой материалов (AIGC и реальные люди)."
   }
 }
