@@ -22,7 +22,7 @@ ARG NEXT_PUBLIC_API_BASE_URL
 ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
 
 # Generate changelog from GitHub API (fails gracefully)
-RUN bun run prebuild
+RUN bun run prebuild:run
 
 # Generate fumadocs .source/ index (was postinstall, now explicit)
 RUN npx fumadocs-mdx
