@@ -28,10 +28,10 @@ RUN bun run prebuild:run
 RUN npx fumadocs-mdx
 
 # Build Next.js standalone output
-# Limit workers to reduce concurrent font download connections during SSG
+# .next/cache 经 buildkit cache mount 跨构建持久化，Turbopack 增量编译
 # Retry on transient network errors (font downloads, socket resets)
-ENV NEXT_WORKERS=16
-RUN for i in 1 2 3; do \
+RUN --mount=type=cache,target=/build/.next/cache \
+    for i in 1 2 3; do \
     bun run build && exit 0; \
     echo "Build attempt $i failed, retrying..."; \
     sleep 10; \
