@@ -36,8 +36,9 @@ Parameters fall into two groups:
 | --- | --- | --- | --- | --- |
 | `resolution` | string | No | `720p` | Resolution: `480p` / `720p` / `1080p` / `4k` |
 | `ratio` | string | No | `16:9` | Aspect ratio: `16:9` / `4:3` / `1:1` / `3:4` / `9:16` / `21:9` / `adaptive` |
-| `generate_audio` | bool | No | `true` | Whether to generate audio |
+| `generate_audio` | bool | No | `true` | Whether to generate audio (keep `true` when using a reference audio / background music) |
 | `content` | array | No | — | Multi-modal reference inputs (reference image / video / audio). Array items: `{type, image_url\|video_url\|audio_url, role}`; reference video uses `type:"video_url"` + `role:"reference_video"` (public URL, up to 3 clips, 2–15s each) |
+| `content[].audio_url` | object | No | — | Reference audio (background music / sound effects): `{type:"audio_url", audio_url:{url}, role:"reference_audio"}`; public URL, up to 3 clips; **cannot be used alone** — pair with at least 1 reference image or 1 reference video |
 | `frames` | int | No | — | Number of frames |
 | `seed` | int | No | — | Random seed (deterministic result) |
 | `camera_fixed` | bool | No | `false` | Fixed camera position |
@@ -97,7 +98,7 @@ curl "$BASE_URL/v1/video/generations" \
 
 ### Reference-to-Video (Multi-modal)
 
-Reference images / videos / audio can be combined freely; put them all in `metadata.content`, which maps to the official Seedance `content` array (`role` values: `reference_image` / `reference_video` / `reference_audio`). The "first frame / last frame" wording in the prompt is narrative about the video content; material roles are controlled by `role`, not by the `first_frame` / `last_frame` controls in the placement rules.
+Reference images / videos / audio can be combined freely (audio cannot be used alone — pair it with at least 1 reference image or 1 reference video); put them all in `metadata.content`, which maps to the official Seedance `content` array (`role` values: `reference_image` / `reference_video` / `reference_audio`). The "first frame / last frame" wording in the prompt is narrative about the video content; material roles are controlled by `role`, not by the `first_frame` / `last_frame` controls in the placement rules.
 
 ```bash
 curl "$BASE_URL/v1/video/generations" \
@@ -115,6 +116,30 @@ curl "$BASE_URL/v1/video/generations" \
         {"type": "image_url", "image_url": {"url": "https://ark-project.tos-cn-beijing.volces.com/doc_image/r2v_tea_pic1.jpg"}, "role": "reference_image"},
         {"type": "image_url", "image_url": {"url": "https://ark-project.tos-cn-beijing.volces.com/doc_image/r2v_tea_pic2.jpg"}, "role": "reference_image"},
         {"type": "video_url", "video_url": {"url": "https://ark-project.tos-cn-beijing.volces.com/doc_video/r2v_tea_video1.mp4"}, "role": "reference_video"},
+        {"type": "audio_url", "audio_url": {"url": "https://ark-project.tos-cn-beijing.volces.com/doc_audio/r2v_tea_audio1.mp3"}, "role": "reference_audio"}
+      ]
+    }
+  }'
+```
+
+### Audio-Reference to Video
+
+A reference audio (`role:"reference_audio"`) serves as background music / sound effects and is referred to as "audio 1" in the prompt; **audio cannot be used alone** — pair it with at least 1 reference image or 1 reference video, and keep `generate_audio` `true`.
+
+```bash
+curl "$BASE_URL/v1/video/generations" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "doubao-seedance-2-0-260128",
+    "prompt": "Using image 1 as the visual reference and audio 1 as the background music: a sunrise by the sea, waves gently lapping the shore, the camera slowly pushes in toward a lighthouse in the morning light, calm and healing.",
+    "seconds": "5",
+    "metadata": {
+      "resolution": "720p",
+      "ratio": "16:9",
+      "generate_audio": true,
+      "content": [
+        {"type": "image_url", "image_url": {"url": "https://ark-project.tos-cn-beijing.volces.com/doc_image/r2v_tea_pic1.jpg"}, "role": "reference_image"},
         {"type": "audio_url", "audio_url": {"url": "https://ark-project.tos-cn-beijing.volces.com/doc_audio/r2v_tea_audio1.mp3"}, "role": "reference_audio"}
       ]
     }

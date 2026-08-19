@@ -36,8 +36,9 @@ description: 提交视频生成任务，获取 task_id
 | --- | --- | --- | --- | --- |
 | `resolution` | string | 否 | `720p` | 分辨率：`480p` / `720p` / `1080p` / `4k` |
 | `ratio` | string | 否 | `16:9` | 画面比例：`16:9` / `4:3` / `1:1` / `3:4` / `9:16` / `21:9` / `adaptive` |
-| `generate_audio` | bool | 否 | `true` | 是否生成音频 |
+| `generate_audio` | bool | 否 | `true` | 是否生成音频（使用参考音频/背景音乐时需为 `true`） |
 | `content` | array | 否 | — | 多模态参考素材数组（参考图 / 参考视频 / 参考音频），元素形如 `{type, image_url\|video_url\|audio_url, role}`；参考视频：`type:"video_url"` + `role:"reference_video"`（公网 URL，最多 3 段、单段 2–15s） |
+| `content[].audio_url` | object | 否 | — | 参考音频（背景音乐/音效）：`{type:"audio_url", audio_url:{url}, role:"reference_audio"}`；公网 URL，最多 3 段；**不能单独作为参考**——须至少搭配 1 张参考图或 1 段参考视频 |
 | `frames` | int | 否 | — | 帧数 |
 | `seed` | int | 否 | — | 随机种子（固定结果） |
 | `camera_fixed` | bool | 否 | `false` | 固定机位 |
@@ -97,7 +98,7 @@ curl "$BASE_URL/v1/video/generations" \
 
 ### 参考生视频（多模态）
 
-参考图 / 参考视频 / 参考音频可任意组合，全部放在 `metadata.content` 中；对应官网 Seedance 的 `content` 数组（`role` 取值：`reference_image` / `reference_video` / `reference_audio`）。提示词里的「首帧/尾帧」是视频内容的叙述，素材角色由 `role` 决定，与放置规则中的 `first_frame` / `last_frame` 控制无关。
+参考图 / 参考视频 / 参考音频可任意组合（音频不能单独作为参考，须至少搭配 1 张参考图或 1 段参考视频），全部放在 `metadata.content` 中；对应官网 Seedance 的 `content` 数组（`role` 取值：`reference_image` / `reference_video` / `reference_audio`）。提示词里的「首帧/尾帧」是视频内容的叙述，素材角色由 `role` 决定，与放置规则中的 `first_frame` / `last_frame` 控制无关。
 
 ```bash
 curl "$BASE_URL/v1/video/generations" \
@@ -115,6 +116,30 @@ curl "$BASE_URL/v1/video/generations" \
         {"type": "image_url", "image_url": {"url": "https://ark-project.tos-cn-beijing.volces.com/doc_image/r2v_tea_pic1.jpg"}, "role": "reference_image"},
         {"type": "image_url", "image_url": {"url": "https://ark-project.tos-cn-beijing.volces.com/doc_image/r2v_tea_pic2.jpg"}, "role": "reference_image"},
         {"type": "video_url", "video_url": {"url": "https://ark-project.tos-cn-beijing.volces.com/doc_video/r2v_tea_video1.mp4"}, "role": "reference_video"},
+        {"type": "audio_url", "audio_url": {"url": "https://ark-project.tos-cn-beijing.volces.com/doc_audio/r2v_tea_audio1.mp3"}, "role": "reference_audio"}
+      ]
+    }
+  }'
+```
+
+### 音频参考生视频
+
+参考音频（`role:"reference_audio"`）作为背景音乐/音效，提示词用「音频1」指代；**音频不能单独作为参考**，须至少搭配 1 张参考图或 1 段参考视频，`generate_audio` 保持 `true`。
+
+```bash
+curl "$BASE_URL/v1/video/generations" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "doubao-seedance-2-0-260128",
+    "prompt": "以图片1为画面参考、音频1为背景音乐：海边日出，浪花轻拍沙滩，镜头缓缓推进到晨光中的灯塔，氛围宁静治愈。",
+    "seconds": "5",
+    "metadata": {
+      "resolution": "720p",
+      "ratio": "16:9",
+      "generate_audio": true,
+      "content": [
+        {"type": "image_url", "image_url": {"url": "https://ark-project.tos-cn-beijing.volces.com/doc_image/r2v_tea_pic1.jpg"}, "role": "reference_image"},
         {"type": "audio_url", "audio_url": {"url": "https://ark-project.tos-cn-beijing.volces.com/doc_audio/r2v_tea_audio1.mp3"}, "role": "reference_audio"}
       ]
     }
