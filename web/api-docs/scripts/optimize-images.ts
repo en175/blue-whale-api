@@ -45,6 +45,8 @@ async function main(): Promise<void> {
       }
     } else {
       console.log(`reuse   ${it.old} -> existing ${it.target}`);
+      // 目标 webp 已存在：只改引用，同时删掉原图，避免泄漏孤儿
+      if (!DRY_RUN) unlinkSync(it.abs);
     }
     mapping.set(it.old, it.target);
   }
