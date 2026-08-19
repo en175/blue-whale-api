@@ -4,7 +4,7 @@ FROM node:22-alpine AS builder
 WORKDIR /build
 
 # Install bun (project convention from blue_whale_api/Dockerfile)
-RUN npm install -g bun
+RUN npm install -g bun --registry=https://registry.npmmirror.com
 
 # Install deps (skip postinstall — fumadocs-mdx needs source files not yet present)
 COPY package.json bun.lock ./
@@ -22,7 +22,7 @@ ARG NEXT_PUBLIC_API_BASE_URL
 ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
 
 # Generate changelog from GitHub API (fails gracefully)
-RUN bun run prebuild
+RUN bun run prebuild:run
 
 # Generate fumadocs .source/ index (was postinstall, now explicit)
 RUN npx fumadocs-mdx
