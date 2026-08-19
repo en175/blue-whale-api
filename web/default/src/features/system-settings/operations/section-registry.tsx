@@ -46,18 +46,6 @@ const OPERATIONS_SECTIONS = [
     build: () => <GeneralConfigSection />,
   },
   {
-    id: 'behavior',
-    titleKey: 'System Behavior',
-    build: (settings: OperationsSettings) => (
-      <SystemBehaviorSection
-        defaultValues={{
-          DefaultCollapseSidebar: settings.DefaultCollapseSidebar,
-          DemoSiteEnabled: settings.DemoSiteEnabled,
-        }}
-      />
-    ),
-  },
-  {
     id: 'alerts',
     titleKey: 'Monitoring & Alerts',
     build: (settings: OperationsSettings) => (

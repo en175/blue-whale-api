@@ -5272,6 +5272,7 @@
     "Material library management (AIGC and real-person assets).": "素材ライブラリ管理（AIGC とリアル素材）。",
     "General Config": "一般設定",
     "Saving": "保存中",
-    "No configs": "設定がありません"
+    "No configs": "設定がありません",
+    "Load failed": "読み込み失敗"
   }
 }

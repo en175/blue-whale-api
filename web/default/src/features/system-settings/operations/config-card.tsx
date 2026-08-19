@@ -20,10 +20,14 @@ export function ConfigCard({ entry, onSaved }: ConfigCardProps) {
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
+  // 只接受「非 null 普通对象」：标量/数组/null 会静默破坏 .config 配置，
+  // 后端 updateConfigFromMap 对反序列化失败是静默 continue，前端必须先拦住。
   const isValidJson = () => {
     try {
-      JSON.parse(value)
-      return true
+      const parsed = JSON.parse(value)
+      return (
+        parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)
+      )
     } catch {
       return false
     }

@@ -5272,6 +5272,7 @@
     "Material library management (AIGC and real-person assets).": "Управление библиотекой материалов (AIGC и реальные люди).",
     "General Config": "Общие настройки",
     "Saving": "Сохранение",
-    "No configs": "Нет конфигураций"
+    "No configs": "Нет конфигураций",
+    "Load failed": "Ошибка загрузки"
   }
 }

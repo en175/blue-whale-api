@@ -5272,6 +5272,7 @@
     "Material library management (AIGC and real-person assets).": "Gestion de la bibliothèque de matériaux (actifs AIGC et personnes réelles).",
     "General Config": "Configuration générale",
     "Saving": "Enregistrement",
-    "No configs": "Aucune configuration"
+    "No configs": "Aucune configuration",
+    "Load failed": "Échec du chargement"
   }
 }

@@ -5272,6 +5272,7 @@
     "Material library management (AIGC and real-person assets).": "Quản lý thư viện nguyên liệu (AIGC và người thật).",
     "General Config": "Cấu hình chung",
     "Saving": "Đang lưu",
-    "No configs": "Không có cấu hình"
+    "No configs": "Không có cấu hình",
+    "Load failed": "Tải thất bại"
   }
 }

@@ -14,7 +14,7 @@ export function GeneralConfigSection() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ['general-config-options'],
     queryFn: getSystemOptions,
   })
@@ -32,6 +32,14 @@ export function GeneralConfigSection() {
       <div className='space-y-3'>
         <Skeleton className='h-48 w-full' />
         <Skeleton className='h-48 w-full' />
+      </div>
+    )
+  }
+
+  if (isError) {
+    return (
+      <div className='text-muted-foreground flex h-32 items-center justify-center rounded-lg border text-sm'>
+        {t('Load failed')}
       </div>
     )
   }
