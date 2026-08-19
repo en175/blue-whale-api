@@ -16,22 +16,45 @@ description: 提交视频生成任务，获取 task_id
 
 ## 请求参数
 
+接口参数分两类:
+
+- **顶层参数**(外部参数):由网关统一解析,所有通道共用,字段名固定。
+- **`metadata` 参数**:一个透传对象,承载上游/模型特有的扩展能力(分辨率、画面比例、多模态参考素材、水印等)。网关不解析其内部结构,**下表列出的 `metadata` 字段会透传给上游**——因此官网(火山方舟 Seedance)的 `content` / `ratio` / `generate_audio` / `watermark` 等参数,在本接口中统一放进 `metadata`(时长除外:`duration` 对应顶层 `seconds`)。
+
+### 顶层参数
+
 | 字段 | 类型 | 必填 | 默认 | 说明 |
 | --- | --- | --- | --- | --- |
 | `prompt` | string | 是 | — | 提示词（视频内容描述） |
 | `model` | string | 是 | — | 模型标识，可选值见[模型列表](../models) |
-| `images` | string[] | 否 | — | 图生视频：首帧/参考图 URL 数组（公网可访问） |
-| `seconds` | string | 否 | `5` | 视频时长（秒） |
-| `metadata.resolution` | string | 否 | `720p` | 分辨率：`480p` / `720p` / `1080p` / `4k` |
-| `metadata.ratio` | string | 否 | `16:9` | 画面比例：`16:9` / `4:3` / `1:1` / `3:4` / `9:16` / `21:9` / `adaptive` |
-| `metadata.generate_audio` | bool | 否 | `true` | 是否生成音频 |
-| `metadata.frames` | int | 否 | — | 帧数 |
-| `metadata.seed` | int | 否 | — | 随机种子（固定结果） |
-| `metadata.camera_fixed` | bool | 否 | `false` | 固定机位 |
-| `metadata.watermark` | bool | 否 | `false` | 水印 |
-| `metadata.service_tier` | string | 否 | — | 服务档位（如 `fast`） |
-| `metadata.return_last_frame` | bool | 否 | `false` | 返回尾帧 |
-| `metadata.callback_url` | string | 否 | — | 回调地址（Webhook） |
+| `images` | string[] | 否 | — | 图生视频：首帧 URL 数组（公网可访问；参考图请用 `metadata.content` + `role:"reference_image"`） |
+| `seconds` | string | 否 | `5` | 视频时长（秒），对应官网 `duration` |
+
+### metadata 参数
+
+| 字段 | 类型 | 必填 | 默认 | 说明 |
+| --- | --- | --- | --- | --- |
+| `resolution` | string | 否 | `720p` | 分辨率：`480p` / `720p` / `1080p` / `4k` |
+| `ratio` | string | 否 | `16:9` | 画面比例：`16:9` / `4:3` / `1:1` / `3:4` / `9:16` / `21:9` / `adaptive` |
+| `generate_audio` | bool | 否 | `true` | 是否生成音频 |
+| `content` | array | 否 | — | 多模态参考素材数组（参考图 / 参考视频 / 参考音频），元素形如 `{type, image_url\|video_url\|audio_url, role}`；参考视频：`type:"video_url"` + `role:"reference_video"`（公网 URL，最多 3 段、单段 2–15s） |
+| `frames` | int | 否 | — | 帧数 |
+| `seed` | int | 否 | — | 随机种子（固定结果） |
+| `camera_fixed` | bool | 否 | `false` | 固定机位 |
+| `watermark` | bool | 否 | `false` | 水印 |
+| `service_tier` | string | 否 | — | 服务档位（如 `fast`） |
+| `return_last_frame` | bool | 否 | `false` | 返回尾帧 |
+| `callback_url` | string | 否 | — | 回调地址（Webhook） |
+
+各模型支持的 `metadata` 选项见[模型列表](../models)。
+
+### 参数放置规则
+
+- **必填/公共**：`prompt` / `model` / `seconds` → 放**顶层**
+- **扩展能力**：`resolution` / `ratio` / `generate_audio` / `content` / `watermark` 等 → 放 **`metadata`**
+- **首帧/首尾帧**：顶层 `images`（单首帧，最简）或 `metadata.content` 里 `role:"first_frame"` / `"last_frame"`
+- **参考素材**（参考图 / 参考视频 / 参考音频）：统一走 `metadata.content` + `role:"reference_*"`；不要与顶层 `images` 混用（混用时 `metadata.content` 会覆盖 `images`）
+- **时长**：统一用顶层 `seconds`（字符串），勿用顶层 `duration`
 
 ## 示例
 
@@ -72,7 +95,35 @@ curl "$BASE_URL/v1/video/generations" \
   }'
 ```
 
-### 完整参数（含全部可选字段）
+### 参考生视频（多模态）
+
+参考图 / 参考视频 / 参考音频可任意组合，全部放在 `metadata.content` 中；对应官网 Seedance 的 `content` 数组（`role` 取值：`reference_image` / `reference_video` / `reference_audio`）。提示词里的「首帧/尾帧」是视频内容的叙述，素材角色由 `role` 决定，与放置规则中的 `first_frame` / `last_frame` 控制无关。
+
+```bash
+curl "$BASE_URL/v1/video/generations" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "doubao-seedance-2-0-260128",
+    "prompt": "全程使用视频1的第一视角构图，全程使用音频1作为背景音乐。第一人称视角果茶宣传广告，seedance牌「苹苹安安」苹果果茶限定款；首帧为图片1，你的手摘下一颗带晨露的阿克苏红苹果，轻脆的苹果碰撞声；2-4 秒：快速切镜，你的手将苹果块投入雪克杯，加入冰块与茶底，用力摇晃，冰块碰撞声与摇晃声卡点轻快鼓点，背景音：「鲜切现摇」；4-6 秒：第一人称成品特写，分层果茶倒入透明杯，你的手轻挤奶盖在顶部铺展，在杯身贴上粉红包标，镜头拉近看奶盖与果茶的分层纹理；6-8 秒：第一人称手持举杯，你将图片2中的果茶举到镜头前（模拟递到观众面前的视角），杯身标签清晰可见，背景音「来一口鲜爽」，尾帧定格为图片2。背景声音统一为女生音色。",
+    "seconds": "11",
+    "metadata": {
+      "ratio": "16:9",
+      "generate_audio": true,
+      "watermark": false,
+      "content": [
+        {"type": "image_url", "image_url": {"url": "https://ark-project.tos-cn-beijing.volces.com/doc_image/r2v_tea_pic1.jpg"}, "role": "reference_image"},
+        {"type": "image_url", "image_url": {"url": "https://ark-project.tos-cn-beijing.volces.com/doc_image/r2v_tea_pic2.jpg"}, "role": "reference_image"},
+        {"type": "video_url", "video_url": {"url": "https://ark-project.tos-cn-beijing.volces.com/doc_video/r2v_tea_video1.mp4"}, "role": "reference_video"},
+        {"type": "audio_url", "audio_url": {"url": "https://ark-project.tos-cn-beijing.volces.com/doc_audio/r2v_tea_audio1.mp3"}, "role": "reference_audio"}
+      ]
+    }
+  }'
+```
+
+### 完整参数（首帧 + 可选 metadata 字段）
+
+> 说明：本示例以顶层 `images` 作首帧，因此不含 `metadata.content`——多模态参考与首帧互斥（见参数放置规则），参考生视频请用上方示例。
 
 ```bash
 curl "$BASE_URL/v1/video/generations" \

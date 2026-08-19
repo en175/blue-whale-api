@@ -11,27 +11,50 @@ Submit a video generation task. The endpoint returns a `task_id` immediately; ge
 
 | Name | Required | Description |
 | --- | --- | --- |
-| `Authorization` | Yes | `Bearer sk-xxx` (API key created in the console; see [Authentication](../authentication)) |
+| `Authorization` | Yes | `Bearer sk-xxx` (API Key from the console, see [Authentication](../authentication)) |
 | `Content-Type` | Yes | `application/json` |
 
 ## Request Parameters
 
+Parameters fall into two groups:
+
+- **Top-level (external) parameters**: parsed by the gateway, shared across all channels, with fixed field names.
+- **`metadata` parameters**: a pass-through object carrying upstream/model-specific capabilities (resolution, aspect ratio, multi-modal reference inputs, watermark, etc.). The gateway does not inspect its internals and **forwards the documented metadata fields listed below to the upstream** — so official Volcengine Seedance params such as `content`, `ratio`, `generate_audio`, and `watermark` go inside `metadata` (duration is the exception: the official `duration` maps to the top-level `seconds` field).
+
+### Top-level Parameters
+
 | Field | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `prompt` | string | Yes | — | Description of the video content |
-| `model` | string | Yes | — | Model identifier; available values see [Models](../models) |
-| `images` | string[] | No | — | Image-to-video: first-frame/reference image URL array (publicly accessible) |
-| `seconds` | string | No | `5` | Video duration in seconds |
-| `metadata.resolution` | string | No | `720p` | Resolution: `480p` / `720p` / `1080p` / `4k` |
-| `metadata.ratio` | string | No | `16:9` | Aspect ratio: `16:9` / `4:3` / `1:1` / `3:4` / `9:16` / `21:9` / `adaptive` |
-| `metadata.generate_audio` | bool | No | `true` | Whether to generate audio |
-| `metadata.frames` | int | No | — | Number of frames |
-| `metadata.seed` | int | No | — | Random seed (for deterministic results) |
-| `metadata.camera_fixed` | bool | No | `false` | Fixed camera |
-| `metadata.watermark` | bool | No | `false` | Watermark |
-| `metadata.service_tier` | string | No | — | Service tier (e.g. `fast`) |
-| `metadata.return_last_frame` | bool | No | `false` | Return the last frame |
-| `metadata.callback_url` | string | No | — | Callback URL (webhook) |
+| `model` | string | Yes | — | Model identifier; see [Models](../models) for available options |
+| `seconds` | string | No | `5` | Video duration in seconds (string), maps to the official `duration` |
+| `images` | string[] | No | — | Image-to-video: first-frame image URLs (publicly accessible; reference images use `metadata.content` + `role:"reference_image"`) |
+
+### metadata Parameters
+
+| Field | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `resolution` | string | No | `720p` | Resolution: `480p` / `720p` / `1080p` / `4k` |
+| `ratio` | string | No | `16:9` | Aspect ratio: `16:9` / `4:3` / `1:1` / `3:4` / `9:16` / `21:9` / `adaptive` |
+| `generate_audio` | bool | No | `true` | Whether to generate audio |
+| `content` | array | No | — | Multi-modal reference inputs (reference image / video / audio). Array items: `{type, image_url\|video_url\|audio_url, role}`; reference video uses `type:"video_url"` + `role:"reference_video"` (public URL, up to 3 clips, 2–15s each) |
+| `frames` | int | No | — | Number of frames |
+| `seed` | int | No | — | Random seed (deterministic result) |
+| `camera_fixed` | bool | No | `false` | Fixed camera position |
+| `watermark` | bool | No | `false` | Watermark |
+| `service_tier` | string | No | — | Service tier (e.g. `fast`) |
+| `return_last_frame` | bool | No | `false` | Return the last frame |
+| `callback_url` | string | No | — | Webhook callback URL |
+
+For per-model supported metadata options, see [Models](../models).
+
+### Parameter Placement Rules
+
+- **Required / common**: `prompt` / `model` / `seconds` → put at the **top level**
+- **Extended capabilities**: `resolution` / `ratio` / `generate_audio` / `content` / `watermark`, etc. → put in **`metadata`**
+- **First / first+last frame**: top-level `images` (single first frame, simplest) or `metadata.content` with `role:"first_frame"` / `"last_frame"`
+- **Reference materials** (reference image / video / audio): always use `metadata.content` with `role:"reference_*"`; do not mix with top-level `images` (when both are present, `metadata.content` overrides `images`)
+- **Duration**: always use top-level `seconds` (string); do not use top-level `duration`
 
 ## Examples
 
@@ -72,7 +95,35 @@ curl "$BASE_URL/v1/video/generations" \
   }'
 ```
 
-### Full Parameters (All Optional Fields)
+### Reference-to-Video (Multi-modal)
+
+Reference images / videos / audio can be combined freely; put them all in `metadata.content`, which maps to the official Seedance `content` array (`role` values: `reference_image` / `reference_video` / `reference_audio`). The "first frame / last frame" wording in the prompt is narrative about the video content; material roles are controlled by `role`, not by the `first_frame` / `last_frame` controls in the placement rules.
+
+```bash
+curl "$BASE_URL/v1/video/generations" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "doubao-seedance-2-0-260128",
+    "prompt": "Keep the first-person perspective of video 1 throughout, with audio 1 as the background music. A first-person fruit tea commercial for the seedance-brand \"Ping Ping An An\" apple fruit tea limited edition; frame 1 is image 1: your hand picks a dewy Aksu red apple with a crisp crunch; 2-4s: quick cut, you drop apple chunks into a shaker, add ice and tea base, shake hard, the clinking of ice syncing with a light beat, voiceover: \"fresh-cut and freshly shaken\"; 4-6s: first-person close-up of the finished drink, layered fruit tea poured into a clear cup, your hand squeezes milk cap on top, a pink label is stuck on the cup, the camera zooms in on the layering; 6-8s: first-person handheld toast, you raise the drink from image 2 toward the camera (as if handing it to the viewer), the label clearly visible, voiceover: \"have a fresh sip\", and the last frame freezes on image 2. Background voice: female throughout.",
+    "seconds": "11",
+    "metadata": {
+      "ratio": "16:9",
+      "generate_audio": true,
+      "watermark": false,
+      "content": [
+        {"type": "image_url", "image_url": {"url": "https://ark-project.tos-cn-beijing.volces.com/doc_image/r2v_tea_pic1.jpg"}, "role": "reference_image"},
+        {"type": "image_url", "image_url": {"url": "https://ark-project.tos-cn-beijing.volces.com/doc_image/r2v_tea_pic2.jpg"}, "role": "reference_image"},
+        {"type": "video_url", "video_url": {"url": "https://ark-project.tos-cn-beijing.volces.com/doc_video/r2v_tea_video1.mp4"}, "role": "reference_video"},
+        {"type": "audio_url", "audio_url": {"url": "https://ark-project.tos-cn-beijing.volces.com/doc_audio/r2v_tea_audio1.mp3"}, "role": "reference_audio"}
+      ]
+    }
+  }'
+```
+
+### Complete Parameters (First Frame + Optional Metadata Fields)
+
+> Note: this example uses top-level `images` as the first frame, so it omits `metadata.content` — multi-modal references and the first frame are mutually exclusive (see Parameter Placement Rules); use the Reference-to-Video example above for multi-modal references.
 
 ```bash
 curl "$BASE_URL/v1/video/generations" \
