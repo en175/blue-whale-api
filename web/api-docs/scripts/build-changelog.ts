@@ -76,7 +76,7 @@ async function fetchGitHubReleases(): Promise<Release[]> {
 
   try {
     console.log(`Fetching Releases: ${url}`);
-    const response = await fetch(url, { headers });
+    const response = await fetch(url, { headers, signal: AbortSignal.timeout(10_000) });
 
     if (!response.ok) {
       throw new Error(

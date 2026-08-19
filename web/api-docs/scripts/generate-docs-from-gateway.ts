@@ -4,7 +4,9 @@ import path from 'node:path';
 type DocsConfig = { docs_domain: string };
 
 async function fetchDocsConfig(gatewayUrl: string): Promise<DocsConfig> {
-  const res = await fetch(`${gatewayUrl.replace(/\/$/, '')}/api/docs/config`);
+  const res = await fetch(`${gatewayUrl.replace(/\/$/, '')}/api/docs/config`, {
+    signal: AbortSignal.timeout(10_000),
+  });
   if (!res.ok) throw new Error(`docs config fetch failed: ${res.status}`);
   const json = (await res.json()) as { data: DocsConfig };
   return json.data;
