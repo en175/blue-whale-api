@@ -27,4 +27,10 @@ describe('extractAssetRefsFromText', () => {
   test('matches line-start refs', () => {
     expect(extractAssetRefsFromText('/assets/start.png')).toContain('/assets/start.png');
   });
+
+  test('handles non-ascii filename (em-dash) without truncation', () => {
+    const refs = extractAssetRefsFromText('![logo](/assets/aionui/aionui—logo.png)');
+    expect(refs).toContain('/assets/aionui/aionui—logo.png');
+    expect(refs).not.toContain('/assets/aionui/aionui');
+  });
 });
