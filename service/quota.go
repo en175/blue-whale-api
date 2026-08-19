@@ -232,6 +232,14 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 		logger.LogError(ctx, "error settling billing: "+err.Error())
 	}
 
+	// Charge the settled tokens against the Run Capability that authorized this call. The capability
+	// bounds spend in tokens, which is only knowable here — the pre-flight check can bound what one
+	// call asks for, never what it turns out to cost.
+	if relayInfo.RunCapabilityBilling {
+		RecordRunCapabilityUsage(ctx, relayInfo.RunCapabilityDigest, totalTokens)
+	}
+
+
 	logModel := modelName
 	if extraContent != "" {
 		logContent += ", " + extraContent
@@ -354,6 +362,14 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 	if err := SettleBilling(ctx, relayInfo, quota); err != nil {
 		logger.LogError(ctx, "error settling billing: "+err.Error())
 	}
+
+	// Charge the settled tokens against the Run Capability that authorized this call. The capability
+	// bounds spend in tokens, which is only knowable here — the pre-flight check can bound what one
+	// call asks for, never what it turns out to cost.
+	if relayInfo.RunCapabilityBilling {
+		RecordRunCapabilityUsage(ctx, relayInfo.RunCapabilityDigest, totalTokens)
+	}
+
 
 	logModel := relayInfo.OriginModelName
 	if extraContent != "" {

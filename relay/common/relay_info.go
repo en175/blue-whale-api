@@ -94,6 +94,7 @@ type RelayInfo struct {
 	UserGroup            string // 用户所在分组
 	TokenUnlimited       bool
 	RunCapabilityBilling bool
+	RunCapabilityDigest  string
 	RunCapabilityId      string
 	StartTime            time.Time
 	FirstResponseTime    time.Time
@@ -484,6 +485,7 @@ func genBaseRelayInfo(c *gin.Context, request dto.Request) *RelayInfo {
 		TokenKey:             common.GetContextKeyString(c, constant.ContextKeyTokenKey),
 		TokenUnlimited:       common.GetContextKeyBool(c, constant.ContextKeyTokenUnlimited),
 		RunCapabilityBilling: common.GetContextKeyBool(c, constant.ContextKeyRunCapabilityBilling),
+		RunCapabilityDigest:  common.GetContextKeyString(c, constant.ContextKeyRunCapabilityDigest),
 		RunCapabilityId:      common.GetContextKeyString(c, constant.ContextKeyRunCapabilityId),
 		TokenGroup:           tokenGroup,
 
