@@ -20,6 +20,7 @@ const (
 	ContextKeyTokenModelLimit        ContextKey = "token_model_limit"
 	ContextKeyTokenCrossGroupRetry   ContextKey = "token_cross_group_retry"
 	ContextKeyRunCapabilityBilling   ContextKey = "run_capability_billing"
+	ContextKeyRunCapabilityDigest    ContextKey = "run_capability_digest"
 	ContextKeyRunCapabilityId        ContextKey = "run_capability_id"
 	ContextKeyRunCapabilityMaxInput  ContextKey = "run_capability_max_input_tokens"
 

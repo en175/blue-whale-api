@@ -64,6 +64,8 @@ func RunCapabilityOrTokenAuth() gin.HandlerFunc {
 		common.SetContextKey(c, constant.ContextKeyRunCapabilityBilling, true)
 		common.SetContextKey(c, constant.ContextKeyRunCapabilityId, capability.CapabilityId)
 		common.SetContextKey(c, constant.ContextKeyRunCapabilityMaxInput, capability.MaxInputTokens)
+		// Carried so the post-billing path can charge real usage against this same record.
+		common.SetContextKey(c, constant.ContextKeyRunCapabilityDigest, capability.Digest)
 		c.Next()
 	}
 }
