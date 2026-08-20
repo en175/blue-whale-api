@@ -48,9 +48,15 @@ curl "$BASE_URL/v1/video/generations/task_9f3a2b7c" \
     "submit_time": 1786344639,
     "start_time": 1786344645,
     "finish_time": 1786344768,
-    "progress": "100%"
+    "progress": "100%",
+    "usage": {
+      "completion_tokens": 108900,
+      "total_tokens": 108900
+    }
   }
 }
 ```
+
+> `usage` 为任务完成后的真实 token 消耗。**仅支持返回真实 token 的上游（如 doubao / seedance 等）在任务完成后才有此字段**；kling、ali 等渠道不返回。token 与网关计费（quota）有关联但单位不同，展示口径由消费方自行换算。
 
 状态为 `SUCCESS` 后，调用[下载视频](./download)获取成片，或直接使用响应中的 `result_url`（地址形态与有效期以官方确认为准）。
