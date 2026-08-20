@@ -46,12 +46,12 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { toIntlLocale } from '@/i18n/languages'
 import {
   formatCurrencyFromUSD,
   formatQuotaWithCurrency,
   getCurrencyLabel,
 } from '@/lib/currency'
-import { toIntlLocale } from '@/i18n/languages'
 import { formatTimestampToDate } from '@/lib/format'
 import { truncateText } from '@/lib/utils'
 
@@ -506,6 +506,48 @@ function BalanceCell({ channel }: { channel: Channel }) {
         isRefreshing={isUpdating}
       />
     </TooltipProvider>
+  )
+}
+
+// IK9W58: QuotaLimitCell — 渠道配额限额消耗展示
+// - 未配置限额（limit = 0）时显示 "-"
+// - 配置限额后显示 "已用 / 限额 (百分比%)"，颜色按阈值变化
+// - < 80% 正常，80-95% 警告（黄），>= 95% 危险（红）
+function QuotaLimitCell({
+  used,
+  limit,
+  locale,
+}: {
+  used: number
+  limit: number
+  locale: string | undefined
+}) {
+  if (!limit || limit <= 0) {
+    return <span className='text-muted-foreground text-xs'>-</span>
+  }
+
+  const percentage = (used / limit) * 100
+  const usedText = formatQuotaWithCurrency(used, { locale, showSymbol: true })
+  const limitText = formatQuotaWithCurrency(limit, { locale, showSymbol: true })
+
+  let variant: StatusBadgeProps['variant'] = 'success'
+  if (percentage >= 95) {
+    variant = 'danger'
+  } else if (percentage >= 80) {
+    variant = 'warning'
+  }
+
+  const label = `${usedText} / ${limitText} (${percentage.toFixed(1)}%)`
+
+  return (
+    <StatusBadge
+      label={label}
+      variant={variant}
+      size='sm'
+      copyable={false}
+      showDot={false}
+      className='-ml-1.5'
+    />
   )
 }
 
@@ -1063,6 +1105,38 @@ export function useChannelsColumns(
         header: t('Used / Remaining'),
         cell: ({ row }) => <BalanceCell channel={row.original} />,
         size: 180,
+      },
+
+      // IK9W58: Period quota limit consumption
+      {
+        accessorKey: 'period_quota_limit',
+        header: t('Period Quota Limit'),
+        meta: { mobileHidden: true },
+        cell: ({ row }) => (
+          <QuotaLimitCell
+            used={row.original.period_used_quota || 0}
+            limit={row.original.period_quota_limit || 0}
+            locale={locale}
+          />
+        ),
+        size: 170,
+        enableSorting: false,
+      },
+
+      // IK9W58: Hard quota limit consumption
+      {
+        accessorKey: 'hard_quota_limit',
+        header: t('Hard Quota Limit'),
+        meta: { mobileHidden: true },
+        cell: ({ row }) => (
+          <QuotaLimitCell
+            used={row.original.used_quota_original || 0}
+            limit={row.original.hard_quota_limit || 0}
+            locale={locale}
+          />
+        ),
+        size: 170,
+        enableSorting: false,
       },
 
       // Response Time column

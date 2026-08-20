@@ -736,7 +736,6 @@ export function ChannelMutateDrawer({
   const currentAutoBan = form.watch('auto_ban')
   // IK9W58: Quota limit watched values
   const currentPeriodQuotaLimit = form.watch('period_quota_limit')
-  const currentPeriodHours = form.watch('period_hours')
   const currentHardQuotaLimit = form.watch('hard_quota_limit')
   const currentTag = form.watch('tag')
   const currentRemark = form.watch('remark')
@@ -3783,16 +3782,12 @@ export function ChannelMutateDrawer({
                                         placeholder='0'
                                         {...field}
                                         onChange={(e) =>
-                                          field.onChange(
-                                            Number(e.target.value)
-                                          )
+                                          field.onChange(Number(e.target.value))
                                         }
                                       />
                                     </FormControl>
                                     <FormDescription>
-                                      {t(
-                                        FIELD_DESCRIPTIONS.PERIOD_QUOTA_LIMIT
-                                      )}
+                                      {t(FIELD_DESCRIPTIONS.PERIOD_QUOTA_LIMIT)}
                                     </FormDescription>
                                     <FormMessage />
                                   </FormItem>
@@ -3814,16 +3809,12 @@ export function ChannelMutateDrawer({
                                         placeholder='0'
                                         {...field}
                                         onChange={(e) =>
-                                          field.onChange(
-                                            Number(e.target.value)
-                                          )
+                                          field.onChange(Number(e.target.value))
                                         }
                                       />
                                     </FormControl>
                                     <FormDescription>
-                                      {t(
-                                        FIELD_DESCRIPTIONS.HARD_QUOTA_LIMIT
-                                      )}
+                                      {t(FIELD_DESCRIPTIONS.HARD_QUOTA_LIMIT)}
                                     </FormDescription>
                                     <FormMessage />
                                   </FormItem>
