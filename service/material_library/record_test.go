@@ -99,7 +99,7 @@ func TestProxy_recordsGroupAssociation(t *testing.T) {
 // TestProxy_removesGroupAssociationOnDelete 端到端验证：DeleteAssetGroup 成功后，归属表同步清理。
 func TestProxy_removesGroupAssociationOnDelete(t *testing.T) {
 	model.DB = openMaterialRecordDB(t)
-	require.NoError(t, model.AddUserMaterialGroup(42, "group-del", "g", "AIGC"))
+	require.NoError(t, model.AddUserMaterialGroup(42, "tokenhub", "group-del", "g", "AIGC"))
 
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

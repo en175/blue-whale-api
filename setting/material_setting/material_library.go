@@ -16,7 +16,7 @@ const (
 const DefaultBaseURL = "https://ai-tokenhub.ai"
 
 // DefaultVolcengineBaseURL 火山引擎素材库管控面默认地址（不同 Region 由 volcengine_base_url 配置覆盖）。
-const DefaultVolcengineBaseURL = "https://ark-cn-beijing.volcengineapi.com"
+const DefaultVolcengineBaseURL = "https://ark.cn-beijing.volcengineapi.com"
 
 // DefaultVolcengineRegion 火山管控面默认区域。
 const DefaultVolcengineRegion = "cn-beijing"

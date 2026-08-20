@@ -9,6 +9,8 @@ import (
 
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/material_setting"
+
+	"github.com/volcengine/volc-sdk-golang/base"
 )
 
 // Provider 抽象素材库上游：执行一个 Action，返回上游完整响应。
@@ -25,8 +27,11 @@ type Response struct {
 	Body       []byte
 }
 
-// currentProvider 按配置返回当前素材库上游。tokenhub 是默认实现；volcengine 在后续任务接入。
+// currentProvider 按配置返回当前素材库上游（tokenhub / volcengine）。
 func currentProvider() Provider {
+	if material_setting.GetConfig().Provider == material_setting.ProviderVolcengine {
+		return volcengineProvider{}
+	}
 	return tokenhubProvider{}
 }
 
@@ -77,5 +82,60 @@ func (tokenhubProvider) newRequest(ctx context.Context, action string, query url
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+cfg.AK+":"+cfg.SK)
+	return req, nil
+}
+
+// volcengineProvider 对接火山引擎官方素材库（管控面 API）：
+// POST {volcengine_base_url}/?Action=...&Version=...，火山账号 AK/SK 做 SigV4 签名（Service=ark）。
+type volcengineProvider struct{}
+
+func (volcengineProvider) DoAction(ctx context.Context, action string, query url.Values, body []byte) (*Response, error) {
+	req, err := volcengineProvider{}.newRequest(ctx, action, query, body)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := service.GetHttpClient().Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	return &Response{StatusCode: resp.StatusCode, Header: resp.Header, Body: data}, nil
+}
+
+// newRequest 构造火山管控面请求：Action/Version 注入 query（客户端 query 保留）、
+// 用账号 AK/SK 签名（volc-sdk-golang base.Credentials.Sign，SigV4，Service=ark）。
+func (volcengineProvider) newRequest(ctx context.Context, action string, query url.Values, body []byte) (*http.Request, error) {
+	cfg := material_setting.GetConfig()
+	target, err := url.Parse(cfg.VolcengineBaseURL)
+	if err != nil {
+		return nil, err
+	}
+	q := target.Query()
+	for k, vs := range query {
+		for _, v := range vs {
+			q.Add(k, v)
+		}
+	}
+	q.Set("Action", action)
+	q.Set("Version", arkVersion)
+	target.RawQuery = q.Encode()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target.String(), bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	// 管控面 API 走 SigV4 签名（非 Bearer）：Service=ark，Region 取配置（默认 cn-beijing）。
+	base.Credentials{
+		AccessKeyID:     cfg.VolcengineAccessKey,
+		SecretAccessKey: cfg.VolcengineSecretKey,
+		Service:         "ark",
+		Region:          cfg.VolcengineRegion,
+	}.Sign(req)
 	return req, nil
 }

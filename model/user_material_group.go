@@ -10,10 +10,13 @@ import (
 // UserMaterialGroup 用户与素材组（上游 seedance asset group）的归属关联。
 // 素材组内的具体素材不落库，需要时透传上游查询。为后续用户隔离与素材管理界面提供数据基础。
 // 上游 ARK 接口的素材组无状态字段，故本地不镜像状态。
+// Provider 记录该组属于哪个上游（tokenhub/volcengine），切换上游后按当前 provider 过滤，
+// 互不干扰。组 id 由各上游生成，跨上游可能碰撞，故唯一约束含 provider。
 type UserMaterialGroup struct {
 	Id                   int    `json:"id" gorm:"primaryKey;autoIncrement"`
-	UserId               int    `json:"user_id" gorm:"index;not null"`
-	SeedanceAssetGroupId string `json:"seedance_asset_group_id" gorm:"type:varchar(128);uniqueIndex;not null"`
+	UserId               int    `json:"user_id" gorm:"index;not null;uniqueIndex:uniq_user_provider_group,priority:1"`
+	Provider             string `json:"provider" gorm:"type:varchar(32);not null;default:'tokenhub';uniqueIndex:uniq_user_provider_group,priority:2"`
+	SeedanceAssetGroupId string `json:"seedance_asset_group_id" gorm:"type:varchar(128);not null;uniqueIndex:uniq_user_provider_group,priority:3"`
 	Name                 string `json:"name" gorm:"type:varchar(255)"`
 	GroupType            string `json:"group_type" gorm:"type:varchar(32)"` // AIGC（当前上游仅支持虚拟组）
 	CreatedAt            int64  `json:"created_at" gorm:"bigint"`
@@ -24,13 +27,14 @@ func (UserMaterialGroup) TableName() string {
 	return "user_material_groups"
 }
 
-// AddUserMaterialGroup upsert 用户↔素材组归属。
+// AddUserMaterialGroup upsert 用户↔素材组归属（按 provider 隔离）。
 // 已存在的组只更新元数据（Name/GroupType），**不覆盖既有归属（UserId）**，
 // 避免同一素材组 id 被另一个用户重复创建时发生归属转手。
-func AddUserMaterialGroup(userId int, groupId, name, groupType string) error {
+func AddUserMaterialGroup(userId int, provider, groupId, name, groupType string) error {
 	now := time.Now().Unix()
 	record := UserMaterialGroup{
 		UserId:               userId,
+		Provider:             provider,
 		SeedanceAssetGroupId: groupId,
 		Name:                 name,
 		GroupType:            groupType,
@@ -39,7 +43,7 @@ func AddUserMaterialGroup(userId int, groupId, name, groupType string) error {
 	}
 	// 显式 find→create/update，保持"归属不可转移"这一不变量清晰可见。
 	var existing UserMaterialGroup
-	err := DB.Where("seedance_asset_group_id = ?", groupId).First(&existing).Error
+	err := DB.Where("provider = ? AND seedance_asset_group_id = ?", provider, groupId).First(&existing).Error
 	if err == nil {
 		existing.Name = name
 		existing.GroupType = groupType
@@ -52,17 +56,20 @@ func AddUserMaterialGroup(userId int, groupId, name, groupType string) error {
 	return DB.Create(&record).Error
 }
 
-// DeleteUserMaterialGroup 删除素材组归属（上游素材组被删除时同步清理）。
-func DeleteUserMaterialGroup(groupId string) error {
-	return DB.Where("seedance_asset_group_id = ?", groupId).Delete(&UserMaterialGroup{}).Error
+// DeleteUserMaterialGroup 删除素材组归属（上游素材组被删除时同步清理，按 provider 定位）。
+func DeleteUserMaterialGroup(provider, groupId string) error {
+	return DB.Where("provider = ? AND seedance_asset_group_id = ?", provider, groupId).Delete(&UserMaterialGroup{}).Error
 }
 
-// GetMaterialGroups 按用户/类型查询归属列表，供管理界面使用。
-// userId<=0 表示不过滤用户（admin 查全部）；groupType 为空表示不过滤类型。
-func GetMaterialGroups(userId int, groupType string) ([]*UserMaterialGroup, error) {
+// GetMaterialGroups 按用户/provider/类型查询归属列表，供管理界面使用。
+// userId<=0 表示不过滤用户（admin 查全部）；provider/groupType 为空表示不过滤对应维度。
+func GetMaterialGroups(userId int, provider, groupType string) ([]*UserMaterialGroup, error) {
 	query := DB.Model(&UserMaterialGroup{})
 	if userId > 0 {
 		query = query.Where("user_id = ?", userId)
+	}
+	if provider != "" {
+		query = query.Where("provider = ?", provider)
 	}
 	if groupType != "" {
 		query = query.Where("group_type = ?", groupType)
@@ -74,14 +81,45 @@ func GetMaterialGroups(userId int, groupType string) ([]*UserMaterialGroup, erro
 
 // GetUserMaterialGroups 返回用户归属的素材组列表（管理界面的"我的素材组"查询）。
 func GetUserMaterialGroups(userId int) ([]*UserMaterialGroup, error) {
-	return GetMaterialGroups(userId, "")
+	return GetMaterialGroups(userId, "", "")
 }
 
 // UserMaterialGroupExists 校验指定用户是否拥有该素材组（管理界面写操作的数据隔离守卫）。
-func UserMaterialGroupExists(userId int, groupId string) (bool, error) {
+func UserMaterialGroupExists(userId int, provider, groupId string) (bool, error) {
 	var count int64
 	err := DB.Model(&UserMaterialGroup{}).
-		Where("user_id = ? AND seedance_asset_group_id = ?", userId, groupId).
+		Where("user_id = ? AND provider = ? AND seedance_asset_group_id = ?", userId, provider, groupId).
 		Count(&count).Error
 	return count > 0, err
+}
+
+// GetMaterialGroupType 返回素材组在当前 provider 下的类型（AIGC/LivenessFace），
+// 供管理端列表透传给上游 Filter.GroupType（火山管控面 ListAssets 必填；tokenhub 兼容忽略）。
+// 组不存在时返回空串。
+func GetMaterialGroupType(provider, groupId string) string {
+	var g UserMaterialGroup
+	if err := DB.Where("provider = ? AND seedance_asset_group_id = ?", provider, groupId).
+		First(&g).Error; err != nil {
+		return ""
+	}
+	return g.GroupType
+}
+
+// ensureMaterialGroupProviderIndex 清理历史单列唯一索引。唯一约束升级为
+// user_id+provider+group_id 复合索引后，AutoMigrate 只加不删，旧单列唯一索引
+// （seedance_asset_group_id）残留会把跨 provider 的相同组 id 误判为冲突。
+// 不同 GORM 版本/旧模型生成过两个名字（idx_... 前缀与裸字段名），一并清理；
+// 三数据库用 GORM Migrator 幂等删除（HasIndex 判定，索引不存在直接跳过）。
+func ensureMaterialGroupProviderIndex() error {
+	for _, legacyIdx := range []string{
+		"idx_user_material_groups_seedance_asset_group_id",
+		"seedance_asset_group_id",
+	} {
+		if DB.Migrator().HasIndex(&UserMaterialGroup{}, legacyIdx) {
+			if err := DB.Migrator().DropIndex(&UserMaterialGroup{}, legacyIdx); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }

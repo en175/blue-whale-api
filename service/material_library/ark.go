@@ -50,19 +50,32 @@ func doArkAction(ctx context.Context, action string, body []byte) ([]byte, error
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		return resp.Body, nil
 	}
+	// 错误信封兼容两种格式：tokenhub 用顶层 ResponseError，火山管控面用 ResponseMetadata.Error。
 	var envelope struct {
 		ResponseError *ArkError `json:"ResponseError"`
+		ResponseMetadata struct {
+			Error *ArkError `json:"Error"`
+		} `json:"ResponseMetadata"`
 	}
-	if err := common.Unmarshal(resp.Body, &envelope); err != nil || envelope.ResponseError == nil {
-		return nil, &ArkError{Code: "HTTP" + strconv.Itoa(resp.StatusCode), Message: "upstream error"}
+	if err := common.Unmarshal(resp.Body, &envelope); err == nil {
+		if envelope.ResponseError != nil {
+			return nil, envelope.ResponseError
+		}
+		if envelope.ResponseMetadata.Error != nil {
+			return nil, envelope.ResponseMetadata.Error
+		}
 	}
-	return nil, envelope.ResponseError
+	return nil, &ArkError{Code: "HTTP" + strconv.Itoa(resp.StatusCode), Message: "upstream error"}
 }
 
 // ListAssets 按素材组 id 列表查询上游素材，供管理界面右侧表格使用。
-// name 非空时透传给上游做名称模糊匹配。
-func ListAssets(ctx context.Context, groupIDs []string, page, pageSize int, name string) (*ListAssetsResult, error) {
+// groupType 非空时透传给上游 Filter.GroupType（火山管控面必填；tokenhub 兼容忽略），
+// name 非空时透传做名称模糊匹配。
+func ListAssets(ctx context.Context, groupIDs []string, groupType string, page, pageSize int, name string) (*ListAssetsResult, error) {
 	filter := map[string]any{"GroupIds": groupIDs}
+	if groupType != "" {
+		filter["GroupType"] = groupType
+	}
 	if name != "" {
 		filter["Name"] = name
 	}

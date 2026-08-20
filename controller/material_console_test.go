@@ -60,13 +60,13 @@ func performGetMaterialGroups(t *testing.T, role, userID int, groupType string) 
 // TestGetMaterialGroups_isolation 验证数据隔离：普通用户只见自己，admin 看全部，类型可过滤。
 func TestGetMaterialGroups_isolation(t *testing.T) {
 	openMaterialConsoleDB(t)
-	require.NoError(t, model.AddUserMaterialGroup(1, "g_admin", "admin-aigc", "AIGC"))
-	require.NoError(t, model.AddUserMaterialGroup(2, "g_user", "user-aigc", "AIGC"))
-	require.NoError(t, model.AddUserMaterialGroup(2, "g_real", "user-real", "LivenessFace"))
+	require.NoError(t, model.AddUserMaterialGroup(1, "tokenhub", "g_admin", "admin-aigc", "AIGC"))
+	require.NoError(t, model.AddUserMaterialGroup(2, "tokenhub", "g_user", "user-aigc", "AIGC"))
+	require.NoError(t, model.AddUserMaterialGroup(2, "tokenhub", "g_real", "user-real", "LivenessFace"))
 	t.Cleanup(func() {
-		_ = model.DeleteUserMaterialGroup("g_admin")
-		_ = model.DeleteUserMaterialGroup("g_user")
-		_ = model.DeleteUserMaterialGroup("g_real")
+		_ = model.DeleteUserMaterialGroup("tokenhub", "g_admin")
+		_ = model.DeleteUserMaterialGroup("tokenhub", "g_user")
+		_ = model.DeleteUserMaterialGroup("tokenhub", "g_real")
 	})
 
 	t.Run("普通用户只见自己的组", func(t *testing.T) {
@@ -145,8 +145,8 @@ func TestListMaterialGroupAssets_callsUpstream(t *testing.T) {
 // TestMaterialConsole_rejectsUnownedGroup 验证数据隔离：非 admin 用户操作无归属的组被拒。
 func TestMaterialConsole_rejectsUnownedGroup(t *testing.T) {
 	openMaterialConsoleDB(t)
-	require.NoError(t, model.AddUserMaterialGroup(1, "g_owned", "mine", "AIGC"))
-	t.Cleanup(func() { _ = model.DeleteUserMaterialGroup("g_owned") })
+	require.NoError(t, model.AddUserMaterialGroup(1, "tokenhub", "g_owned", "mine", "AIGC"))
+	t.Cleanup(func() { _ = model.DeleteUserMaterialGroup("tokenhub", "g_owned") })
 
 	r := gin.New()
 	// 普通用户（role=1）id=2，只拥有 g_owned 由 user 1 持有 → 操作 g_owned 应被拒

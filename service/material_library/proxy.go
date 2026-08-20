@@ -10,6 +10,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/setting/material_setting"
 
 	"github.com/gin-gonic/gin"
 )
@@ -91,13 +92,13 @@ func observeOwnership(ctx context.Context, resp *Response) {
 			return
 		}
 		name, _ := ctx.Value(ctxGroupName).(string)
-		if err := model.AddUserMaterialGroup(userID, out.Result.Id, name, groupType); err != nil {
+		if err := model.AddUserMaterialGroup(userID, material_setting.GetConfig().Provider, out.Result.Id, name, groupType); err != nil {
 			logger.LogError(ctx, "material library record group failed: "+err.Error())
 		}
 		return
 	}
 
-	if err := model.DeleteUserMaterialGroup(groupID); err != nil {
+	if err := model.DeleteUserMaterialGroup(material_setting.GetConfig().Provider, groupID); err != nil {
 		logger.LogError(ctx, "material library delete group record failed: "+err.Error())
 	}
 }
