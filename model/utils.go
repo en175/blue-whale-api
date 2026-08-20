@@ -50,6 +50,14 @@ func addNewRecord(type_ int, id int, value int) {
 	}
 }
 
+// pendingBatchDelta 返回某类型批量记录中某 id 尚未落库的增量。
+// 供配额限额判定叠加实时消耗使用（IK9W58），锁保护读取。
+func pendingBatchDelta(type_ int, id int) int {
+	batchUpdateLocks[type_].Lock()
+	defer batchUpdateLocks[type_].Unlock()
+	return batchUpdateStores[type_][id]
+}
+
 func batchUpdate() {
 	// check if there's any data to update
 	hasData := false
