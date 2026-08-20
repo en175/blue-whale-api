@@ -84,9 +84,9 @@ export const CHANNEL_TYPES = {
 } as const
 
 const CHANNEL_TYPE_DISPLAY_ORDER: number[] = [
-  1, 14, 33, 24, 43, 3, 41, 48, 58, 59, 42, 34, 20, 4, 40, 27, 25, 17, 26, 15, 46,
-  23, 18, 45, 31, 35, 49, 19, 47, 37, 38, 39, 11, 8, 57, 22, 21, 44, 2, 5, 36,
-  50, 51, 52, 53, 54, 55, 56, 60, 61, 62,
+  1, 14, 33, 24, 43, 3, 41, 48, 58, 59, 42, 34, 20, 4, 40, 27, 25, 17, 26, 15,
+  46, 23, 18, 45, 31, 35, 49, 19, 47, 37, 38, 39, 11, 8, 57, 22, 21, 44, 2, 5,
+  36, 50, 51, 52, 53, 54, 55, 56, 60, 61, 62,
 ]
 
 export const CHANNEL_TYPE_OPTIONS: { value: number; label: string }[] = (() => {
@@ -375,11 +375,11 @@ export const FIELD_DESCRIPTIONS = {
   BATCH_ADD: 'Create multiple channels from multiple keys',
   OPENAI_ORG: 'OpenAI Organization ID (optional)',
   PERIOD_QUOTA_LIMIT:
-    'Maximum quota this channel can consume within the period. 0 = no limit.',
+    'Maximum amount this channel can consume within the period, saved as quota using the system rate. 0 = no limit.',
   PERIOD_HOURS:
     'Length of the quota reset period in hours. Usage resets to 0 at the end of each period.',
   HARD_QUOTA_LIMIT:
-    'Lifetime cumulative quota cap for this channel. Once reached, the channel stays disabled permanently. 0 = no limit.',
+    'Lifetime cumulative amount cap for this channel, saved as quota using the system rate. Once reached, the channel stays disabled permanently. 0 = no limit.',
 } as const
 
 // ============================================================================

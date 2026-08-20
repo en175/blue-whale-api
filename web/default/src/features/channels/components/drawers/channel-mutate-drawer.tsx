@@ -3779,6 +3779,7 @@ export function ChannelMutateDrawer({
                                       <Input
                                         type='number'
                                         min={0}
+                                        step='0.01'
                                         placeholder='0'
                                         {...field}
                                         onChange={(e) =>
@@ -3806,6 +3807,7 @@ export function ChannelMutateDrawer({
                                       <Input
                                         type='number'
                                         min={0}
+                                        step='0.01'
                                         placeholder='0'
                                         {...field}
                                         onChange={(e) =>

@@ -1130,7 +1130,7 @@ export function useChannelsColumns(
         meta: { mobileHidden: true },
         cell: ({ row }) => (
           <QuotaLimitCell
-            used={row.original.used_quota_original || 0}
+            used={row.original.used_quota || 0}
             limit={row.original.hard_quota_limit || 0}
             locale={locale}
           />
