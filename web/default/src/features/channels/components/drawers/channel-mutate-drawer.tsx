@@ -32,6 +32,7 @@ import {
   Sparkles,
   Trash2,
   Copy,
+  DollarSign,
   FileText,
   Eraser,
   Plus,
@@ -253,6 +254,7 @@ const CHANNEL_EDITOR_MAIN_SECTION_IDS = [
 ]
 const ADVANCED_SETTINGS_SECTION_IDS = {
   routingStrategy: 'channel-section-advanced-routing-strategy',
+  quotaLimits: 'channel-section-advanced-quota-limits',
   internalNotes: 'channel-section-advanced-internal-notes',
   overrideRules: 'channel-section-advanced-override-rules',
   extraSettings: 'channel-section-advanced-extra-settings',
@@ -732,6 +734,10 @@ export function ChannelMutateDrawer({
   const currentWeight = form.watch('weight')
   const currentTestModel = form.watch('test_model')
   const currentAutoBan = form.watch('auto_ban')
+  // IK9W58: Quota limit watched values
+  const currentPeriodQuotaLimit = form.watch('period_quota_limit')
+  const currentPeriodHours = form.watch('period_hours')
+  const currentHardQuotaLimit = form.watch('hard_quota_limit')
   const currentTag = form.watch('tag')
   const currentRemark = form.watch('remark')
   const currentStatusCodeMapping = form.watch('status_code_mapping')
@@ -995,6 +1001,10 @@ export function ChannelMutateDrawer({
     currentTestModel?.trim() ||
     (currentAutoBan ?? 1) !== 1
   )
+  // IK9W58: Quota limits configured detection
+  const quotaLimitsConfigured = Boolean(
+    currentPeriodQuotaLimit || currentHardQuotaLimit
+  )
   const internalNotesConfigured = Boolean(
     currentTag?.trim() || currentRemark?.trim()
   )
@@ -1036,6 +1046,7 @@ export function ChannelMutateDrawer({
   )
   const advancedConfigured = Boolean(
     routingStrategyConfigured ||
+    quotaLimitsConfigured ||
     internalNotesConfigured ||
     overrideRulesConfigured ||
     extraSettingsConfigured ||
@@ -1047,6 +1058,11 @@ export function ChannelMutateDrawer({
       id: ADVANCED_SETTINGS_SECTION_IDS.routingStrategy,
       title: t('Routing Strategy'),
       configured: routingStrategyConfigured,
+    },
+    {
+      id: ADVANCED_SETTINGS_SECTION_IDS.quotaLimits,
+      title: t('Quota Limits'),
+      configured: quotaLimitsConfigured,
     },
     {
       id: ADVANCED_SETTINGS_SECTION_IDS.internalNotes,
@@ -3704,6 +3720,116 @@ export function ChannelMutateDrawer({
                                 </FormItem>
                               )}
                             />
+                          </div>
+
+                          {/* IK9W58: Quota Limits Section */}
+                          <div
+                            id={ADVANCED_SETTINGS_SECTION_IDS.quotaLimits}
+                            className={configuredAdvancedSectionClassName(
+                              'flex scroll-mt-4 flex-col gap-4 border-t pt-4',
+                              quotaLimitsConfigured
+                            )}
+                          >
+                            <SubHeading
+                              title={t('Quota Limits')}
+                              icon={<DollarSign className='h-3.5 w-3.5' />}
+                              iconTone='warning'
+                            />
+                            <div className='grid gap-4 sm:grid-cols-2'>
+                              <FormField
+                                control={form.control}
+                                name='period_hours'
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>
+                                      {t('Period Length (Hours)')}
+                                    </FormLabel>
+                                    <FormControl>
+                                      <Input
+                                        type='number'
+                                        min={1}
+                                        placeholder='24'
+                                        {...field}
+                                        onChange={(e) =>
+                                          field.onChange(
+                                            Math.max(
+                                              1,
+                                              Number(e.target.value) || 1
+                                            )
+                                          )
+                                        }
+                                      />
+                                    </FormControl>
+                                    <FormDescription>
+                                      {t(FIELD_DESCRIPTIONS.PERIOD_HOURS)}
+                                    </FormDescription>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+
+                              <FormField
+                                control={form.control}
+                                name='period_quota_limit'
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>
+                                      {t('Period Quota Limit')}
+                                    </FormLabel>
+                                    <FormControl>
+                                      <Input
+                                        type='number'
+                                        min={0}
+                                        placeholder='0'
+                                        {...field}
+                                        onChange={(e) =>
+                                          field.onChange(
+                                            Number(e.target.value)
+                                          )
+                                        }
+                                      />
+                                    </FormControl>
+                                    <FormDescription>
+                                      {t(
+                                        FIELD_DESCRIPTIONS.PERIOD_QUOTA_LIMIT
+                                      )}
+                                    </FormDescription>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+
+                              <FormField
+                                control={form.control}
+                                name='hard_quota_limit'
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>
+                                      {t('Hard Quota Limit')}
+                                    </FormLabel>
+                                    <FormControl>
+                                      <Input
+                                        type='number'
+                                        min={0}
+                                        placeholder='0'
+                                        {...field}
+                                        onChange={(e) =>
+                                          field.onChange(
+                                            Number(e.target.value)
+                                          )
+                                        }
+                                      />
+                                    </FormControl>
+                                    <FormDescription>
+                                      {t(
+                                        FIELD_DESCRIPTIONS.HARD_QUOTA_LIMIT
+                                      )}
+                                    </FormDescription>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            </div>
                           </div>
 
                           <div

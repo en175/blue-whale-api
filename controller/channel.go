@@ -520,6 +520,23 @@ func validateChannel(channel *model.Channel, isAdd bool) error {
 		}
 	}
 
+	// IK9W58: 配额限制字段校验
+	if channel.PeriodQuotaLimit < 0 {
+		return fmt.Errorf("period_quota_limit must be >= 0")
+	}
+	if channel.HardQuotaLimit < 0 {
+		return fmt.Errorf("hard_quota_limit must be >= 0")
+	}
+	if channel.PeriodQuotaLimit > 0 {
+		if channel.PeriodHours <= 0 {
+			return fmt.Errorf("period_hours must be > 0 when period_quota_limit is set")
+		}
+		// 初始化周期重置时间（如果是新增或首次配置）
+		if isAdd && channel.PeriodResetTime == 0 {
+			channel.PeriodResetTime = common.GetTimestamp() + int64(channel.PeriodHours)*3600
+		}
+	}
+
 	return nil
 }
 
@@ -1046,6 +1063,16 @@ func UpdateChannel(c *gin.Context) {
 			// 覆盖模式：直接使用新密钥（默认行为，不需要特殊处理）
 		}
 	}
+
+	// IK9W58: 如果 PeriodHours 变更，重新计算 PeriodResetTime
+	if channel.PeriodQuotaLimit > 0 && channel.PeriodHours > 0 {
+		if channel.PeriodHours != originChannel.PeriodHours || originChannel.PeriodResetTime == 0 {
+			// PeriodHours 变更或首次配置，重置周期时间
+			channel.PeriodResetTime = common.GetTimestamp() + int64(channel.PeriodHours)*3600
+			channel.PeriodUsedQuota = 0 // 重置周期已用
+		}
+	}
+
 	err = channel.Update()
 	if err != nil {
 		common.ApiError(c, err)

@@ -53,6 +53,12 @@ export const channelSchema = z.object({
   models: z.string().default(''),
   group: z.string().default('default'),
   used_quota: z.number().default(0),
+  // IK9W58: 配额限制字段
+  period_quota_limit: z.number().default(0),
+  period_hours: z.number().default(24),
+  period_used_quota: z.number().default(0),
+  period_reset_time: z.number().default(0),
+  hard_quota_limit: z.number().default(0),
   model_mapping: z.string().nullish(),
   status_code_mapping: z.string().nullish(),
   priority: z.number().nullish(),
