@@ -47,7 +47,7 @@ type Channel struct {
 	PeriodResetTime  int64 `json:"period_reset_time" gorm:"bigint;default:0"`  // 下次刷新时间戳
 	HardQuotaLimit   int64 `json:"hard_quota_limit" gorm:"bigint;default:0"`   // 累计硬上限（0=不限）
 
-	ModelMapping       *string `json:"model_mapping" gorm:"type:text"`
+	ModelMapping *string `json:"model_mapping" gorm:"type:text"`
 	//MaxInputTokens     *int    `json:"max_input_tokens" gorm:"default:0"`
 	StatusCodeMapping *string `json:"status_code_mapping" gorm:"type:varchar(1024);default:''"`
 	Priority          *int64  `json:"priority" gorm:"bigint;default:0"`
@@ -891,20 +891,34 @@ func updateChannelPeriodUsedQuota(id int, quota int) {
 	}
 }
 
-// IK9W58: 判断渠道配额是否超限（使用内存缓存，最多延迟 60s）
+// IK9W58: 判断渠道配额是否超限。
+// 判定基于内存渠道快照（最多滞后 SYNC_FREQUENCY），并叠加尚未批量落库的
+// 实时增量，堵住批量落库（BATCH_UPDATE_INTERVAL）窗口内的继续放行。
 func ChannelIsQuotaExceeded(ch *Channel) bool {
 	if ch == nil {
 		return false
 	}
 	// 周期限额检查
-	if ch.PeriodQuotaLimit > 0 && ch.PeriodUsedQuota >= ch.PeriodQuotaLimit {
+	if ch.PeriodQuotaLimit > 0 && usedExceeds(ch.PeriodUsedQuota,
+		int64(pendingBatchDelta(BatchUpdateTypeChannelPeriodUsedQuota, ch.Id)), ch.PeriodQuotaLimit) {
 		return true
 	}
 	// 累计硬上限检查（复用 UsedQuota 字段）
-	if ch.HardQuotaLimit > 0 && ch.UsedQuota >= ch.HardQuotaLimit {
+	if ch.HardQuotaLimit > 0 && usedExceeds(ch.UsedQuota,
+		int64(pendingBatchDelta(BatchUpdateTypeChannelUsedQuota, ch.Id)), ch.HardQuotaLimit) {
 		return true
 	}
 	return false
+}
+
+// usedExceeds 判断 used + pending 是否达到 limit。两个加数均非负，
+// 相加溢出回绕为负即按已超限处理（fail-closed），防止理论上的漏拦。
+func usedExceeds(used, pending, limit int64) bool {
+	live := used + pending
+	if live < used { // 非负相加溢出必然回绕为负
+		return true
+	}
+	return live >= limit
 }
 
 // IK9W58: 过滤配额超限的渠道列表
