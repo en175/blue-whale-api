@@ -332,6 +332,31 @@ func (a *TaskAdaptor) AdjustBillingOnComplete(task *model.Task, taskResult *rela
 	return 0
 }
 
+// ExtractTaskUsage 实现 channel.TaskUsageExtractor：从 task.Data（轮询时存的完整信封）提取真实 token。
+// 平铺 usage_*_tokens 优先，取不到再下探 data.data.usage（上游再接 doubao 的嵌套形态）。
+// 仅 total_tokens > 0 时返回非 nil。
+func (a *TaskAdaptor) ExtractTaskUsage(task *model.Task) *dto.TaskUsage {
+	var env taskResultEnvelope
+	if err := common.Unmarshal(task.Data, &env); err != nil {
+		return nil
+	}
+	usage := &dto.TaskUsage{}
+	if c := int(env.Data.UsageCompletionTokens); c > 0 {
+		usage.CompletionTokens = c
+	} else if c := int(env.Data.Inner.Usage.CompletionTokens); c > 0 {
+		usage.CompletionTokens = c
+	}
+	if t := int(env.Data.UsageTotalTokens); t > 0 {
+		usage.TotalTokens = t
+	} else if t := int(env.Data.Inner.Usage.TotalTokens); t > 0 {
+		usage.TotalTokens = t
+	}
+	if usage.TotalTokens <= 0 {
+		return nil
+	}
+	return usage
+}
+
 // ConvertToOpenAIVideo 把存储的任务转换为客户端 OpenAI 视频响应，从信封提取直链 mp4。
 func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, error) {
 	var env taskResultEnvelope

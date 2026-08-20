@@ -1,6 +1,7 @@
 package newapi
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -287,4 +288,36 @@ func TestDoResponse_EmptyTaskIDError(t *testing.T) {
 	info := newSubmitInfo()
 	_, _, taskErr := a.DoResponse(newSubmitCtx(), resp, info)
 	require.NotNil(t, taskErr, "空 task_id 必须返回错误")
+}
+
+// TestExtractTaskUsage_FlatTokens 平铺信封：data.usage_*_tokens。
+func TestExtractTaskUsage_FlatTokens(t *testing.T) {
+	task := &model.Task{
+		Data: json.RawMessage(`{"code":"success","message":"","data":{"task_id":"task_x","status":"SUCCESS","usage_completion_tokens":108900,"usage_total_tokens":108900,"result_url":"https://x.mp4"}}`),
+	}
+	usage := (&TaskAdaptor{}).ExtractTaskUsage(task)
+	require.NotNil(t, usage)
+	assert.Equal(t, 108900, usage.CompletionTokens)
+	assert.Equal(t, 108900, usage.TotalTokens)
+	assert.Zero(t, usage.PromptTokens)
+}
+
+// TestExtractTaskUsage_NestedTokens 嵌套信封：data.data.usage.total_tokens。
+func TestExtractTaskUsage_NestedTokens(t *testing.T) {
+	task := &model.Task{
+		Data: json.RawMessage(`{"code":"success","message":"","data":{"task_id":"task_nest","status":"SUCCESS","result_url":"https://x.mp4","data":{"status":"succeeded","usage":{"total_tokens":245025,"completion_tokens":245025}}}}`),
+	}
+	usage := (&TaskAdaptor{}).ExtractTaskUsage(task)
+	require.NotNil(t, usage)
+	assert.Equal(t, 245025, usage.CompletionTokens)
+	assert.Equal(t, 245025, usage.TotalTokens)
+}
+
+// TestExtractTaskUsage_NoTokens 无 token / 解析失败 → nil。
+func TestExtractTaskUsage_NoTokens(t *testing.T) {
+	empty := &model.Task{Data: json.RawMessage(`{"code":"success","data":{"status":"IN_PROGRESS"}}`)}
+	assert.Nil(t, (&TaskAdaptor{}).ExtractTaskUsage(empty))
+
+	bad := &model.Task{Data: json.RawMessage(`not-json`)}
+	assert.Nil(t, (&TaskAdaptor{}).ExtractTaskUsage(bad))
 }

@@ -342,3 +342,19 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, erro
 
 	return common.Marshal(openAIVideo)
 }
+
+// ExtractTaskUsage 实现 channel.TaskUsageExtractor：从 task.Data（xfai 查询响应）提取 usage 的真实 token。
+// 仅 total_tokens > 0 时返回非 nil。
+func (a *TaskAdaptor) ExtractTaskUsage(task *model.Task) *dto.TaskUsage {
+	var res responseTask
+	if err := common.Unmarshal(task.Data, &res); err != nil {
+		return nil
+	}
+	if res.Usage.TotalTokens <= 0 {
+		return nil
+	}
+	return &dto.TaskUsage{
+		CompletionTokens: res.Usage.CompletionTokens,
+		TotalTokens:      res.Usage.TotalTokens,
+	}
+}

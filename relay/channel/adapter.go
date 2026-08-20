@@ -81,3 +81,9 @@ type TaskAdaptor interface {
 type OpenAIVideoConverter interface {
 	ConvertToOpenAIVideo(originTask *model.Task) ([]byte, error)
 }
+
+// TaskUsageExtractor 可选接口：从任务存储数据（task.Data）提取真实 token 消耗。
+// 实现该接口的适配器使查询任务响应返回一等 usage 字段；未实现则不返回。
+type TaskUsageExtractor interface {
+	ExtractTaskUsage(task *model.Task) *dto.TaskUsage
+}

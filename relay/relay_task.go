@@ -548,7 +548,7 @@ func mapTaskStatusToSimple(status model.TaskStatus) string {
 }
 
 func TaskModel2Dto(task *model.Task) *dto.TaskDto {
-	return &dto.TaskDto{
+	result := &dto.TaskDto{
 		ID:         task.ID,
 		CreatedAt:  task.CreatedAt,
 		UpdatedAt:  task.UpdatedAt,
@@ -570,4 +570,11 @@ func TaskModel2Dto(task *model.Task) *dto.TaskDto {
 		Username:   task.Username,
 		Data:       task.Data,
 	}
+	// 真实消耗 token：按平台从 task.Data 提取（可选接口，未实现平台不返回）
+	if adaptor := GetTaskAdaptor(task.Platform); adaptor != nil {
+		if ue, ok := adaptor.(channel.TaskUsageExtractor); ok {
+			result.Usage = ue.ExtractTaskUsage(task)
+		}
+	}
+	return result
 }
