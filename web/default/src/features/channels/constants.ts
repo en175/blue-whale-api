@@ -374,6 +374,12 @@ export const FIELD_DESCRIPTIONS = {
   MULTI_KEY_MODE: 'How to select keys: random or sequential polling',
   BATCH_ADD: 'Create multiple channels from multiple keys',
   OPENAI_ORG: 'OpenAI Organization ID (optional)',
+  PERIOD_QUOTA_LIMIT:
+    'Maximum quota this channel can consume within the period. 0 = no limit.',
+  PERIOD_HOURS:
+    'Length of the quota reset period in hours. Usage resets to 0 at the end of each period.',
+  HARD_QUOTA_LIMIT:
+    'Lifetime cumulative quota cap for this channel. Once reached, the channel stays disabled permanently. 0 = no limit.',
 } as const
 
 // ============================================================================

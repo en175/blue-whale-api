@@ -39,6 +39,14 @@ type Channel struct {
 	Models             string  `json:"models"`
 	Group              string  `json:"group" gorm:"type:varchar(64);default:'default'"`
 	UsedQuota          int64   `json:"used_quota" gorm:"bigint;default:0"`
+
+	// Quota limit fields (IK9W58)
+	PeriodQuotaLimit int64 `json:"period_quota_limit" gorm:"bigint;default:0"` // 周期限额（0=不限）
+	PeriodHours      int   `json:"period_hours" gorm:"default:24"`             // 周期小时数（默认 24h）
+	PeriodUsedQuota  int64 `json:"period_used_quota" gorm:"bigint;default:0"`  // 周期内已用额度
+	PeriodResetTime  int64 `json:"period_reset_time" gorm:"bigint;default:0"`  // 下次刷新时间戳
+	HardQuotaLimit   int64 `json:"hard_quota_limit" gorm:"bigint;default:0"`   // 累计硬上限（0=不限）
+
 	ModelMapping       *string `json:"model_mapping" gorm:"type:text"`
 	//MaxInputTokens     *int    `json:"max_input_tokens" gorm:"default:0"`
 	StatusCodeMapping *string `json:"status_code_mapping" gorm:"type:varchar(1024);default:''"`
@@ -865,6 +873,58 @@ func updateChannelUsedQuota(id int, quota int) {
 	if err != nil {
 		common.SysLog(fmt.Sprintf("failed to update channel used quota: channel_id=%d, delta_quota=%d, error=%v", id, quota, err))
 	}
+}
+
+// IK9W58: 更新渠道周期已用额度
+func UpdateChannelPeriodUsedQuota(id int, quota int) {
+	if common.BatchUpdateEnabled {
+		addNewRecord(BatchUpdateTypeChannelPeriodUsedQuota, id, quota)
+		return
+	}
+	updateChannelPeriodUsedQuota(id, quota)
+}
+
+func updateChannelPeriodUsedQuota(id int, quota int) {
+	err := DB.Model(&Channel{}).Where("id = ?", id).Update("period_used_quota", gorm.Expr("period_used_quota + ?", quota)).Error
+	if err != nil {
+		common.SysLog(fmt.Sprintf("failed to update channel period used quota: channel_id=%d, delta_quota=%d, error=%v", id, quota, err))
+	}
+}
+
+// IK9W58: 判断渠道配额是否超限（使用内存缓存，最多延迟 60s）
+func ChannelIsQuotaExceeded(ch *Channel) bool {
+	if ch == nil {
+		return false
+	}
+	// 周期限额检查
+	if ch.PeriodQuotaLimit > 0 && ch.PeriodUsedQuota >= ch.PeriodQuotaLimit {
+		return true
+	}
+	// 累计硬上限检查（复用 UsedQuota 字段）
+	if ch.HardQuotaLimit > 0 && ch.UsedQuota >= ch.HardQuotaLimit {
+		return true
+	}
+	return false
+}
+
+// IK9W58: 过滤配额超限的渠道列表
+func FilterChannelsByQuotaLimit(channelIds []int) []int {
+	if len(channelIds) == 0 {
+		return channelIds
+	}
+	filtered := make([]int, 0, len(channelIds))
+	for _, channelId := range channelIds {
+		channel, ok := channelsIDM[channelId]
+		if !ok {
+			// keep it so the downstream consistency error is raised as before
+			filtered = append(filtered, channelId)
+			continue
+		}
+		if !ChannelIsQuotaExceeded(channel) {
+			filtered = append(filtered, channelId)
+		}
+	}
+	return filtered
 }
 
 func DeleteChannelByStatus(status int64) (int64, error) {

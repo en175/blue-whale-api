@@ -16,6 +16,7 @@ const (
 	BatchUpdateTypeTokenQuota
 	BatchUpdateTypeUsedQuota
 	BatchUpdateTypeChannelUsedQuota
+	BatchUpdateTypeChannelPeriodUsedQuota // IK9W58: 周期已用额度
 	BatchUpdateTypeRequestCount
 	BatchUpdateTypeCount // if you add a new type, you need to add a new map and a new lock
 )
@@ -88,6 +89,8 @@ func batchUpdate() {
 				}
 			case BatchUpdateTypeChannelUsedQuota:
 				updateChannelUsedQuota(key, value)
+			case BatchUpdateTypeChannelPeriodUsedQuota:
+				updateChannelPeriodUsedQuota(key, value)
 			}
 		}
 	}

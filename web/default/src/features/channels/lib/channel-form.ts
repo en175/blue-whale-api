@@ -209,6 +209,10 @@ export const channelFormSchema = z
     upstream_model_update_check_enabled: z.boolean().optional(),
     upstream_model_update_auto_sync_enabled: z.boolean().optional(),
     upstream_model_update_ignored_models: z.string().optional(),
+    // IK9W58: Quota limit fields
+    period_quota_limit: z.number().optional(),
+    period_hours: z.number().optional(),
+    hard_quota_limit: z.number().optional(),
   })
   .superRefine((data, ctx) => {
     if ([3, 8, 36, 45].includes(data.type) && !data.base_url?.trim()) {
@@ -349,6 +353,10 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   upstream_model_update_auto_sync_enabled: false,
   upstream_model_update_ignored_models: '',
   advanced_custom: '',
+  // IK9W58: Quota limits
+  period_quota_limit: 0,
+  period_hours: 24,
+  hard_quota_limit: 0,
 }
 
 // ============================================================================
@@ -484,6 +492,10 @@ export function transformChannelToFormDefaults(
     upstream_model_update_auto_sync_enabled: upstreamModelUpdateAutoSyncEnabled,
     upstream_model_update_ignored_models: upstreamModelUpdateIgnoredModels,
     advanced_custom: advancedCustom,
+    // IK9W58: Quota limits
+    period_quota_limit: channel.period_quota_limit || 0,
+    period_hours: channel.period_hours || 24,
+    hard_quota_limit: channel.hard_quota_limit || 0,
   }
 }
 
@@ -664,6 +676,10 @@ export function transformFormDataToCreatePayload(formData: ChannelFormValues): {
     header_override: formData.header_override || null,
     settings: buildSettingsJSON(formData),
     other: formData.other || '',
+    // IK9W58: Quota limits
+    period_quota_limit: formData.period_quota_limit ?? 0,
+    period_hours: formData.period_hours ?? 24,
+    hard_quota_limit: formData.hard_quota_limit ?? 0,
   }
 
   // Clean up empty strings to null for optional fields
@@ -711,6 +727,10 @@ export function transformFormDataToUpdatePayload(
     header_override: formData.header_override || null,
     settings: buildSettingsJSON(formData),
     other: formData.other || '',
+    // IK9W58: Quota limits
+    period_quota_limit: formData.period_quota_limit ?? 0,
+    period_hours: formData.period_hours ?? 24,
+    hard_quota_limit: formData.hard_quota_limit ?? 0,
   }
 
   // Only include key if it was changed (not empty)

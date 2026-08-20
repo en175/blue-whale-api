@@ -133,6 +133,17 @@ func GetRandomSatisfiedChannel(group string, model string, retry int, requestPat
 		return nil, nil
 	}
 
+	if len(channels) == 0 {
+		return nil, nil
+	}
+
+	// IK9W58: 过滤配额超限的渠道
+	channels = FilterChannelsByQuotaLimit(channels)
+
+	if len(channels) == 0 {
+		return nil, nil
+	}
+
 	if len(channels) == 1 {
 		if channel, ok := channelsIDM[channels[0]]; ok {
 			return channel, nil
@@ -235,6 +246,7 @@ func filterChannelsByRequestPathAndModel(channels []int, requestPath string, mod
 	}
 	return filtered
 }
+
 
 func CacheGetChannel(id int) (*Channel, error) {
 	if !common.MemoryCacheEnabled {
