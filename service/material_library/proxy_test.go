@@ -1,10 +1,12 @@
 package material_library
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -21,25 +23,26 @@ func setConfig(t *testing.T, raw string) {
 	require.NoError(t, config.UpdateConfigFromMap(registered, map[string]string{"config": raw}))
 }
 
-func TestDirector_mapsActionToArkAndInjectsCredential(t *testing.T) {
+func TestTokenhubProvider_mapsActionToArkAndInjectsCredential(t *testing.T) {
 	// base_url 显式置空，避免与其他测试的配置串扰（配置系统 JSON 合并不重置缺省字段）。
 	setConfig(t, `{"enabled":true,"ak":"pak_x","sk":"psk_y","base_url":""}`)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/material/ListAssetGroups", nil)
-	director(req)
+	req, err := tokenhubProvider{}.newRequest(context.Background(), "ListAssetGroups", nil, nil)
+	require.NoError(t, err)
 
 	assert.Equal(t, "/ark", req.URL.Path)
 	assert.Equal(t, "https://ai-tokenhub.ai", req.URL.Scheme+"://"+req.URL.Host)
-	assert.Equal(t, "ai-tokenhub.ai", req.Host)
 	assert.Equal(t, "Action=ListAssetGroups&Version=2024-01-01", req.URL.RawQuery)
 	assert.Equal(t, "Bearer pak_x:psk_y", req.Header.Get("Authorization"))
 }
 
-func TestDirector_usesConfiguredBaseURLAndKeepsClientQuery(t *testing.T) {
+func TestTokenhubProvider_usesConfiguredBaseURLAndKeepsClientQuery(t *testing.T) {
 	setConfig(t, `{"enabled":true,"ak":"pak_x","sk":"psk_y","base_url":"https://upstream.example.com"}`)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/material/CreateAssetGroup?trace=abc", nil)
-	director(req)
+	q := url.Values{}
+	q.Set("trace", "abc")
+	req, err := tokenhubProvider{}.newRequest(context.Background(), "CreateAssetGroup", q, nil)
+	require.NoError(t, err)
 
 	assert.Equal(t, "https://upstream.example.com", req.URL.Scheme+"://"+req.URL.Host)
 	assert.Equal(t, "/ark", req.URL.Path)
