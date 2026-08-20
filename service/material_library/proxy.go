@@ -5,20 +5,16 @@ import (
 	"context"
 	"io"
 	"net/http"
-	"net/http/httputil"
-	"net/url"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/setting/material_setting"
 
 	"github.com/gin-gonic/gin"
 )
 
-// mountPrefix 是网关侧挂载点，代理把它映射成上游 ARK 兼容接口的 Action。
-// 客户端路径 /api/material/{Action} 即上游 /ark 的 Action 操作名。
+// mountPrefix 是网关侧挂载点，客户端路径 /api/material/{Action} 即上游 Action 操作名。
 const mountPrefix = "/api/material"
 
 // arkVersion 是上游 ARK 兼容接口的固定版本参数。
@@ -34,53 +30,76 @@ const (
 	ctxGroupID
 )
 
-// Proxy 构造指向 ai-tokenhub 素材库（火山 ARK 兼容接口）的透明反向代理：
-// 仅把路径段映射为 Action 并注入凭证头，其余（query / body / 响应）原样透传，
-// 上游状态码与错误信封直接回传。ReverseProxy 无请求间状态，可作包级单例；
-// 凭证在 Director 请求期实时读取。响应观察层静默记录"用户↔素材组"归属。
-func Proxy() *httputil.ReverseProxy {
-	return proxy
+// Proxy 返回 /api/material/{Action} 的处理器：把路径段映射为 Action，经当前 provider 执行，
+// 上游状态码/头/体原样回写（含错误信封）。不再用 ReverseProxy——火山签名无法透传，
+// 改由 provider 统一分发；客户端看到的 API 面（Action 契约 + 上游错误格式）不变。
+// 响应观察层静默记录"用户↔素材组"归属。
+func Proxy() http.Handler {
+	return http.HandlerFunc(proxyHandler)
 }
 
-var proxy = &httputil.ReverseProxy{
-	Director:       director,
-	ModifyResponse: observeResponse,
-	ErrorHandler:   errorHandler,
-	FlushInterval:  -1,
-}
-
-// director 在转发前改写目标：/api/material/{Action} -> {base_url}/ark?Action={Action}&Version=...，
-// 并注入 AK/SK 凭证头。租户隐含在凭证中，接口内不传租户 ID。
-func director(req *http.Request) {
-	cfg := material_setting.GetConfig()
-
-	action := strings.TrimPrefix(req.URL.Path, mountPrefix)
-	action = strings.TrimPrefix(action, "/")
-
-	base, err := url.Parse(cfg.BaseURL)
-	if err != nil {
-		// base_url 非法：让 ReverseProxy 拨号失败走 ErrorHandler，返回 502。
-		req.URL.Host = ""
-		req.URL.Scheme = ""
+func proxyHandler(w http.ResponseWriter, r *http.Request) {
+	action := actionFromPath(r.URL.Path)
+	if action == "" {
+		http.Error(w, "missing action", http.StatusBadRequest)
 		return
 	}
-	req.URL.Scheme = base.Scheme
-	req.URL.Host = base.Host
-	req.Host = base.Host
-	req.URL.Path = "/ark"
-
-	query := req.URL.Query()
-	query.Set("Action", action)
-	query.Set("Version", arkVersion)
-	req.URL.RawQuery = query.Encode()
-
-	req.Header.Set("Authorization", "Bearer "+cfg.AK+":"+cfg.SK)
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		logger.LogError(r.Context(), "material library read request body failed: "+err.Error())
+		http.Error(w, "material library read request body failed", http.StatusBadRequest)
+		return
+	}
+	resp, err := currentProvider().DoAction(r.Context(), action, r.URL.Query(), body)
+	if err != nil {
+		// 不把 Go 内部错误细节返回给客户端，细节进带 trace_id 的后端日志。
+		logger.LogError(r.Context(), "material library upstream error: "+err.Error())
+		http.Error(w, "material library upstream error", http.StatusBadGateway)
+		return
+	}
+	observeOwnership(r.Context(), resp)
+	for k, vs := range resp.Header {
+		for _, v := range vs {
+			w.Header().Add(k, v)
+		}
+	}
+	w.WriteHeader(resp.StatusCode)
+	_, _ = w.Write(resp.Body)
 }
 
-func errorHandler(w http.ResponseWriter, r *http.Request, err error) {
-	// 不把 Go 内部错误细节返回给客户端，细节进带 trace_id 的后端日志。
-	logger.LogError(r.Context(), "material library upstream error: "+err.Error())
-	http.Error(w, "material library upstream error", http.StatusBadGateway)
+// observeOwnership 观察上游响应：仅在创建/删除素材组且成功时更新归属表。
+// 只有标记了记录操作的请求才携带记录信息（RecordContext 已提取）。
+func observeOwnership(ctx context.Context, resp *Response) {
+	userID, _ := ctx.Value(ctxUserID).(int)
+	groupType, isCreate := ctx.Value(ctxGroupType).(string)
+	groupID, isDelete := ctx.Value(ctxGroupID).(string)
+	if userID <= 0 || (!isCreate && !isDelete) {
+		return
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return
+	}
+
+	if isCreate {
+		// ARK 信封：素材组 id 在 Result.Id（火山格式 group-...）。
+		var out struct {
+			Result struct {
+				Id string `json:"Id"`
+			} `json:"Result"`
+		}
+		if err := common.Unmarshal(resp.Body, &out); err != nil || out.Result.Id == "" {
+			return
+		}
+		name, _ := ctx.Value(ctxGroupName).(string)
+		if err := model.AddUserMaterialGroup(userID, out.Result.Id, name, groupType); err != nil {
+			logger.LogError(ctx, "material library record group failed: "+err.Error())
+		}
+		return
+	}
+
+	if err := model.DeleteUserMaterialGroup(groupID); err != nil {
+		logger.LogError(ctx, "material library delete group record failed: "+err.Error())
+	}
 }
 
 // actionFromPath 从 /api/material/{Action} 中取出 Action 操作名。
@@ -88,8 +107,8 @@ func actionFromPath(path string) string {
 	return strings.TrimPrefix(strings.TrimPrefix(path, mountPrefix), "/")
 }
 
-// RecordContext 从登录请求中提取归属记录所需信息并写入 context，供 observeResponse 使用。
-// 需要读请求体（建组名、删组 id）时读取后原样装回，不影响代理转发；其余路径直接透传。
+// RecordContext 从登录请求中提取归属记录所需信息并写入 context，供 observeOwnership 使用。
+// 需要读请求体（建组名、删组 id）时读取后原样装回，不影响分发；其余路径直接透传。
 func RecordContext(c *gin.Context) context.Context {
 	ctx := c.Request.Context()
 	userID := c.GetInt("id")
@@ -111,52 +130,7 @@ func RecordContext(c *gin.Context) context.Context {
 	return ctx
 }
 
-// observeResponse 观察上游响应：仅在创建/删除素材组且成功时更新归属表。
-// 只有标记了记录操作的请求才读取响应体（读取后原样装回，不改动任何字段）。
-func observeResponse(resp *http.Response) error {
-	reqCtx := resp.Request.Context()
-	userID, _ := reqCtx.Value(ctxUserID).(int)
-	groupType, isCreate := reqCtx.Value(ctxGroupType).(string)
-	groupID, isDelete := reqCtx.Value(ctxGroupID).(string)
-	if userID <= 0 || (!isCreate && !isDelete) {
-		return nil
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
-	resp.Body = io.NopCloser(bytes.NewReader(body))
-	resp.ContentLength = int64(len(body))
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil
-	}
-
-	if isCreate {
-		// ARK 信封：素材组 id 在 Result.Id（火山格式 group-...）。
-		var out struct {
-			Result struct {
-				Id string `json:"Id"`
-			} `json:"Result"`
-		}
-		if err := common.Unmarshal(body, &out); err != nil || out.Result.Id == "" {
-			return nil
-		}
-		name, _ := reqCtx.Value(ctxGroupName).(string)
-		if err := model.AddUserMaterialGroup(userID, out.Result.Id, name, groupType); err != nil {
-			logger.LogError(reqCtx, "material library record group failed: "+err.Error())
-		}
-		return nil
-	}
-
-	if err := model.DeleteUserMaterialGroup(groupID); err != nil {
-		logger.LogError(reqCtx, "material library delete group record failed: "+err.Error())
-	}
-	return nil
-}
-
-// readJSONBodyFields 读取请求体 JSON 的指定字段，并把 body 原样装回供代理转发（只读一次）。
+// readJSONBodyFields 读取请求体 JSON 的指定字段，并把 body 原样装回供分发（只读一次）。
 func readJSONBodyFields(c *gin.Context, fields ...string) map[string]string {
 	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {

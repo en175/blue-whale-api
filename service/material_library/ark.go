@@ -1,16 +1,10 @@
 package material_library
 
 import (
-	"bytes"
 	"context"
-	"io"
-	"net/http"
-	"net/url"
 	"strconv"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/service"
-	"github.com/QuantumNous/new-api/setting/material_setting"
 )
 
 // ArkAsset 上游素材对象（管理界面表格用到的字段）。
@@ -46,44 +40,20 @@ func (e *ArkError) Error() string {
 	return e.Code + ": " + e.Message
 }
 
-// doArkAction 直连上游 ARK 兼容接口，凭证与 URL 构造与代理（director）完全一致。
-// 返回 2xx 响应体；非 2xx 时返回解析出的 ArkError。
+// doArkAction 经当前 provider 执行上游 Action：返回 2xx 响应体，非 2xx 返回解析出的 ArkError。
+// 代理与管理端直连共用同一 provider 分发，保证鉴权/地址映射一致。
 func doArkAction(ctx context.Context, action string, body []byte) ([]byte, error) {
-	cfg := material_setting.GetConfig()
-	base, err := url.Parse(cfg.BaseURL)
-	if err != nil {
-		return nil, err
-	}
-	target := *base
-	target.Path = "/ark"
-	query := target.Query()
-	query.Set("Action", action)
-	query.Set("Version", arkVersion)
-	target.RawQuery = query.Encode()
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target.String(), bytes.NewReader(body))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+cfg.AK+":"+cfg.SK)
-
-	resp, err := service.GetHttpClient().Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	data, err := io.ReadAll(resp.Body)
+	resp, err := currentProvider().DoAction(ctx, action, nil, body)
 	if err != nil {
 		return nil, err
 	}
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		return data, nil
+		return resp.Body, nil
 	}
 	var envelope struct {
 		ResponseError *ArkError `json:"ResponseError"`
 	}
-	if err := common.Unmarshal(data, &envelope); err != nil || envelope.ResponseError == nil {
+	if err := common.Unmarshal(resp.Body, &envelope); err != nil || envelope.ResponseError == nil {
 		return nil, &ArkError{Code: "HTTP" + strconv.Itoa(resp.StatusCode), Message: "upstream error"}
 	}
 	return nil, envelope.ResponseError
