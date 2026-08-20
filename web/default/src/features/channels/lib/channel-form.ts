@@ -18,6 +18,8 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { z } from 'zod'
 
+import { parseQuotaFromDollars, quotaUnitsToDollars } from '@/lib/format'
+
 import {
   CHANNEL_STATUS,
   ERROR_MESSAGES,
@@ -493,9 +495,10 @@ export function transformChannelToFormDefaults(
     upstream_model_update_ignored_models: upstreamModelUpdateIgnoredModels,
     advanced_custom: advancedCustom,
     // IK9W58: Quota limits
-    period_quota_limit: channel.period_quota_limit || 0,
+    // IKA01B: 限额字段表单内存金额，quota → 金额回显
+    period_quota_limit: quotaUnitsToDollars(channel.period_quota_limit || 0),
     period_hours: channel.period_hours || 24,
-    hard_quota_limit: channel.hard_quota_limit || 0,
+    hard_quota_limit: quotaUnitsToDollars(channel.hard_quota_limit || 0),
   }
 }
 
@@ -677,9 +680,10 @@ export function transformFormDataToCreatePayload(formData: ChannelFormValues): {
     settings: buildSettingsJSON(formData),
     other: formData.other || '',
     // IK9W58: Quota limits
-    period_quota_limit: formData.period_quota_limit ?? 0,
+    // IKA01B: 限额字段表单内存金额，金额 → quota 提交
+    period_quota_limit: parseQuotaFromDollars(formData.period_quota_limit || 0),
     period_hours: formData.period_hours ?? 24,
-    hard_quota_limit: formData.hard_quota_limit ?? 0,
+    hard_quota_limit: parseQuotaFromDollars(formData.hard_quota_limit || 0),
   }
 
   // Clean up empty strings to null for optional fields
@@ -728,9 +732,10 @@ export function transformFormDataToUpdatePayload(
     settings: buildSettingsJSON(formData),
     other: formData.other || '',
     // IK9W58: Quota limits
-    period_quota_limit: formData.period_quota_limit ?? 0,
+    // IKA01B: 限额字段表单内存金额，金额 → quota 提交
+    period_quota_limit: parseQuotaFromDollars(formData.period_quota_limit || 0),
     period_hours: formData.period_hours ?? 24,
-    hard_quota_limit: formData.hard_quota_limit ?? 0,
+    hard_quota_limit: parseQuotaFromDollars(formData.hard_quota_limit || 0),
   }
 
   // Only include key if it was changed (not empty)
