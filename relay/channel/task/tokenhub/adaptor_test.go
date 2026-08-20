@@ -1,6 +1,7 @@
 package tokenhub
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/QuantumNous/new-api/model"
@@ -77,4 +78,23 @@ func TestParseTaskResult(t *testing.T) {
 			assert.Equal(t, tt.wantReason, r.Reason)
 		})
 	}
+}
+
+// TestExtractTaskUsage 从 resultSummary.usage 提取真实 token。
+func TestExtractTaskUsage(t *testing.T) {
+	task := &model.Task{
+		Data: json.RawMessage(`{"id":"019ffef2-ac64-7693-8e7d-e727c39795f9","status":"succeeded","resultSummary":{"content":{"video_url":"https://x.mp4"},"duration":"5","resolution":"720p","upstreamStatus":"succeeded","usage":{"completion_tokens":108900,"total_tokens":108900}}}`),
+	}
+	usage := (&TaskAdaptor{}).ExtractTaskUsage(task)
+	require.NotNil(t, usage)
+	assert.Equal(t, 108900, usage.CompletionTokens)
+	assert.Equal(t, 108900, usage.TotalTokens)
+}
+
+// TestExtractTaskUsage_NoTokens 无 usage / 解析失败 → nil。
+func TestExtractTaskUsage_NoTokens(t *testing.T) {
+	empty := &model.Task{Data: json.RawMessage(`{"id":"x","status":"processing"}`)}
+	assert.Nil(t, (&TaskAdaptor{}).ExtractTaskUsage(empty))
+	bad := &model.Task{Data: json.RawMessage(`not-json`)}
+	assert.Nil(t, (&TaskAdaptor{}).ExtractTaskUsage(bad))
 }
