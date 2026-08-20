@@ -50,6 +50,16 @@ type TaskDto struct {
 	Properties any             `json:"properties"`
 	Username   string          `json:"username,omitempty"`
 	Data       json.RawMessage `json:"data"`
+	// Usage 任务真实消耗 token（仅支持返回 token 的上游填充）
+	Usage *TaskUsage `json:"usage,omitempty"`
+}
+
+// TaskUsage 任务真实消耗统计（仅支持返回 token 的上游填充）。
+// prompt_tokens 视频上游基本不返回，保留但不填充。
+type TaskUsage struct {
+	PromptTokens     int `json:"prompt_tokens,omitempty"`
+	CompletionTokens int `json:"completion_tokens,omitempty"`
+	TotalTokens      int `json:"total_tokens,omitempty"`
 }
 
 type FetchReq struct {
