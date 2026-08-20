@@ -109,25 +109,18 @@ func (a *Adaptor) ConvertAudioRequest(c *gin.Context, info *relaycommon.RelayInf
 	return bytes.NewReader(jsonData), nil
 }
 
-// volcImageContentItem / volcImageURL / volcImageGenerationRequest：豆包 ARK
-// images/generations JSON 请求结构（图生图也走同一 generations 端点）。
-type volcImageContentItem struct {
-	Type     string        `json:"type,omitempty"`
-	ImageURL *volcImageURL `json:"image_url,omitempty"`
-}
-
-type volcImageURL struct {
-	URL string `json:"url,omitempty"`
-}
-
+// volcImageGenerationRequest：豆包 ARK images/generations JSON 请求结构。
+// 图生图（/v1/images/edits）也走同一 generations 端点，参考图用顶层 image 字段
+// （base64 data URI 或公网 URL）——联调实测（IK9ZQM）ARK 仅消费顶层 image，
+// content 数组会被静默忽略。
 type volcImageGenerationRequest struct {
-	Model          string                 `json:"model"`
-	Prompt         string                 `json:"prompt"`
-	Size           string                 `json:"size,omitempty"`
-	N              *uint                  `json:"n,omitempty"`
-	ResponseFormat string                 `json:"response_format,omitempty"`
-	Watermark      *bool                  `json:"watermark,omitempty"`
-	Content        []volcImageContentItem `json:"content,omitempty"`
+	Model          string `json:"model"`
+	Prompt         string `json:"prompt"`
+	Size           string `json:"size,omitempty"`
+	N              *uint  `json:"n,omitempty"`
+	ResponseFormat string `json:"response_format,omitempty"`
+	Watermark      *bool  `json:"watermark,omitempty"`
+	Image          string `json:"image,omitempty"`
 }
 
 func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.ImageRequest) (any, error) {
@@ -143,7 +136,7 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInf
 
 // convertImageEditRequest 把 OpenAI /v1/images/edits 图生图请求转换为豆包 ARK
 // images/generations JSON（图生图走同一 generations 端点，官方不支持表单请求）：
-// multipart 图片文件 → content[].image_url 的 base64 data URI；文本 image URL 字段直接透传。
+// multipart 参考图 → 顶层 image 的 base64 data URI；文本 image URL 字段直接透传。
 // 参考火山方舟 Seedream 文档：https://www.volcengine.com/docs/82379/1824121
 func (a *Adaptor) convertImageEditRequest(c *gin.Context, request dto.ImageRequest) (any, error) {
 	req := volcImageGenerationRequest{
@@ -165,8 +158,10 @@ func (a *Adaptor) convertImageEditRequest(c *gin.Context, request dto.ImageReque
 		c.Request.MultipartForm = form
 		c.Request.PostForm = url.Values(form.Value)
 	}
+	// Seedream 图生图仅支持单张参考图（顶层 image 字段），多图取第一张。
 	if mf != nil && mf.File != nil {
-		for _, fileHeader := range imageEditFiles(mf.File) {
+		if imageFiles := imageEditFiles(mf.File); len(imageFiles) > 0 {
+			fileHeader := imageFiles[0]
 			file, err := fileHeader.Open()
 			if err != nil {
 				return nil, fmt.Errorf("failed to open image file: %w", err)
@@ -176,33 +171,26 @@ func (a *Adaptor) convertImageEditRequest(c *gin.Context, request dto.ImageReque
 			if readErr != nil {
 				return nil, fmt.Errorf("failed to read image file: %w", readErr)
 			}
-			req.Content = append(req.Content, volcImageContentItem{
-				Type: "image_url",
-				ImageURL: &volcImageURL{
-					URL: "data:" + detectImageMimeType(fileHeader.Filename) + ";base64," + base64.StdEncoding.EncodeToString(data),
-				},
-			})
+			req.Image = "data:" + detectImageMimeType(fileHeader.Filename) + ";base64," + base64.StdEncoding.EncodeToString(data)
 		}
 	}
 
 	// 无 multipart 文件时兜底：客户端以文本 image 字段传公网 URL 的情况
-	if len(req.Content) == 0 {
+	if req.Image == "" {
 		var imageURL string
 		if len(request.Image) > 0 && common.Unmarshal(request.Image, &imageURL) == nil && imageURL != "" {
-			req.Content = append(req.Content, volcImageContentItem{
-				Type:     "image_url",
-				ImageURL: &volcImageURL{URL: imageURL},
-			})
+			req.Image = imageURL
 		}
 	}
 
-	if len(req.Content) == 0 {
+	if req.Image == "" {
 		return nil, errors.New("image is required")
 	}
 	return &req, nil
 }
 
 // imageEditFiles 从 multipart 表单收集图生图参考图片文件（兼容 image / image[] / image[ 前缀）。
+// Seedream 仅支持单张参考图（顶层 image 字段），调用方取首张。
 func imageEditFiles(files map[string][]*multipart.FileHeader) []*multipart.FileHeader {
 	if imageFiles, ok := files["image"]; ok && len(imageFiles) > 0 {
 		return imageFiles

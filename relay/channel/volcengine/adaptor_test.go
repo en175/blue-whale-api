@@ -48,13 +48,13 @@ func convertEdit(c *gin.Context, request dto.ImageRequest) (any, error) {
 	return (&Adaptor{}).ConvertImageRequest(c, info, request)
 }
 
-// TestConvertImageEditRequestMultipart 验证 IK9ZQM：multipart 图生图图片文件必须
-// 转换为 ARK images/generations JSON 的 content[].image_url base64 data URI，
-// 而不是像修复前那样在出站 JSON 中丢失。
+// TestConvertImageEditRequestMultipart 验证 IK9ZQM：multipart 图生图参考图必须转换为
+// ARK images/generations JSON 的顶层 image 字段 base64 data URI（联调实测 content 数组
+// 不被 ARK 消费），而不是像修复前那样在出站 JSON 中丢失。
 func TestConvertImageEditRequestMultipart(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	t.Run("single image file becomes base64 data URI in content", func(t *testing.T) {
+	t.Run("single image file becomes top-level image data URI", func(t *testing.T) {
 		c := newEditContext(t, map[string][][]byte{
 			"image": {[]byte("fake image")},
 		}, map[string]string{"model": "doubao-seedream-4-0-250828", "prompt": "edit this"})
@@ -68,14 +68,10 @@ func TestConvertImageEditRequestMultipart(t *testing.T) {
 		require.NoError(t, err)
 		volcReq, ok := converted.(*volcImageGenerationRequest)
 		require.True(t, ok, "converted request should be volcImageGenerationRequest")
-		require.Len(t, volcReq.Content, 1)
-		assert.Equal(t, "image_url", volcReq.Content[0].Type)
-		require.NotNil(t, volcReq.Content[0].ImageURL)
 
 		prefix := "data:image/png;base64,"
-		url := volcReq.Content[0].ImageURL.URL
-		assert.True(t, bytes.HasPrefix([]byte(url), []byte(prefix)), "url should be data URI: %s", url)
-		decoded, err := base64.StdEncoding.DecodeString(url[len(prefix):])
+		assert.True(t, bytes.HasPrefix([]byte(volcReq.Image), []byte(prefix)), "image should be data URI: %s", volcReq.Image)
+		decoded, err := base64.StdEncoding.DecodeString(volcReq.Image[len(prefix):])
 		require.NoError(t, err)
 		assert.Equal(t, []byte("fake image"), decoded)
 
@@ -84,20 +80,16 @@ func TestConvertImageEditRequestMultipart(t *testing.T) {
 		assert.Equal(t, "edit this", volcReq.Prompt)
 		assert.Equal(t, "2048x2048", volcReq.Size)
 
-		// 出站 JSON 契约：content[].image_url.url 携带 data URI
+		// 出站 JSON 契约：顶层 image 字段携带 data URI，且无 content 数组
 		jsonData, err := common.Marshal(volcReq)
 		require.NoError(t, err)
 		var out map[string]any
 		require.NoError(t, common.Unmarshal(jsonData, &out))
-		content, ok := out["content"].([]any)
-		require.True(t, ok)
-		first, ok := content[0].(map[string]any)
-		require.True(t, ok)
-		imageURL := first["image_url"].(map[string]any)
-		assert.Equal(t, prefix, imageURL["url"].(string)[:len(prefix)])
+		assert.Equal(t, prefix, out["image"].(string)[:len(prefix)])
+		assert.NotContains(t, string(jsonData), `"content"`, "ARK 不消费 content 数组，不应出现在出站 JSON")
 	})
 
-	t.Run("multiple image[] files keep order and count", func(t *testing.T) {
+	t.Run("multiple image[] files keep first image only", func(t *testing.T) {
 		c := newEditContext(t, map[string][][]byte{
 			"image[]": {[]byte("one"), []byte("two")},
 		}, map[string]string{"model": "doubao-seedream-4-0-250828", "prompt": "combine"})
@@ -110,14 +102,10 @@ func TestConvertImageEditRequestMultipart(t *testing.T) {
 		require.NoError(t, err)
 		volcReq, ok := converted.(*volcImageGenerationRequest)
 		require.True(t, ok)
-		require.Len(t, volcReq.Content, 2)
 
-		want := [][]byte{[]byte("one"), []byte("two")}
-		for i, item := range volcReq.Content {
-			decoded, err := base64.StdEncoding.DecodeString(item.ImageURL.URL[len("data:image/png;base64,"):])
-			require.NoError(t, err)
-			assert.Equal(t, want[i], decoded, "content[%d] 应保持文件顺序", i)
-		}
+		decoded, err := base64.StdEncoding.DecodeString(volcReq.Image[len("data:image/png;base64,"):])
+		require.NoError(t, err)
+		assert.Equal(t, []byte("one"), decoded, "Seedream 仅支持单张参考图，应取第一张")
 	})
 
 	t.Run("text image URL field falls back to direct URL", func(t *testing.T) {
@@ -132,8 +120,7 @@ func TestConvertImageEditRequestMultipart(t *testing.T) {
 		require.NoError(t, err)
 		volcReq, ok := converted.(*volcImageGenerationRequest)
 		require.True(t, ok)
-		require.Len(t, volcReq.Content, 1)
-		assert.Equal(t, "https://cdn.test/ref.png", volcReq.Content[0].ImageURL.URL)
+		assert.Equal(t, "https://cdn.test/ref.png", volcReq.Image)
 	})
 
 	t.Run("missing image errors", func(t *testing.T) {
