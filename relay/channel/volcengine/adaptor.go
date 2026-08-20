@@ -2,14 +2,18 @@ package volcengine
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
+	"net/url"
 	"path/filepath"
 	"strings"
 
+	"github.com/QuantumNous/new-api/common"
 	channelconstant "github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/relay/channel"
@@ -105,115 +109,114 @@ func (a *Adaptor) ConvertAudioRequest(c *gin.Context, info *relaycommon.RelayInf
 	return bytes.NewReader(jsonData), nil
 }
 
+// volcImageContentItem / volcImageURL / volcImageGenerationRequest：豆包 ARK
+// images/generations JSON 请求结构（图生图也走同一 generations 端点）。
+type volcImageContentItem struct {
+	Type     string        `json:"type,omitempty"`
+	ImageURL *volcImageURL `json:"image_url,omitempty"`
+}
+
+type volcImageURL struct {
+	URL string `json:"url,omitempty"`
+}
+
+type volcImageGenerationRequest struct {
+	Model          string                 `json:"model"`
+	Prompt         string                 `json:"prompt"`
+	Size           string                 `json:"size,omitempty"`
+	N              *uint                  `json:"n,omitempty"`
+	ResponseFormat string                 `json:"response_format,omitempty"`
+	Watermark      *bool                  `json:"watermark,omitempty"`
+	Content        []volcImageContentItem `json:"content,omitempty"`
+}
+
 func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.ImageRequest) (any, error) {
 	switch info.RelayMode {
 	case constant.RelayModeImagesGenerations:
 		return request, nil
-	// 根据官方文档,并没有发现豆包生图支持表单请求:https://www.volcengine.com/docs/82379/1824121
-	//case constant.RelayModeImagesEdits:
-	//
-	//	var requestBody bytes.Buffer
-	//	writer := multipart.NewWriter(&requestBody)
-	//
-	//	writer.WriteField("model", request.Model)
-	//
-	//	formData := c.Request.PostForm
-	//	for key, values := range formData {
-	//		if key == "model" {
-	//			continue
-	//		}
-	//		for _, value := range values {
-	//			writer.WriteField(key, value)
-	//		}
-	//	}
-	//
-	//	if err := c.Request.ParseMultipartForm(32 << 20); err != nil {
-	//		return nil, errors.New("failed to parse multipart form")
-	//	}
-	//
-	//	if c.Request.MultipartForm != nil && c.Request.MultipartForm.File != nil {
-	//		var imageFiles []*multipart.FileHeader
-	//		var exists bool
-	//
-	//		if imageFiles, exists = c.Request.MultipartForm.File["image"]; !exists || len(imageFiles) == 0 {
-	//			if imageFiles, exists = c.Request.MultipartForm.File["image[]"]; !exists || len(imageFiles) == 0 {
-	//				foundArrayImages := false
-	//				for fieldName, files := range c.Request.MultipartForm.File {
-	//					if strings.HasPrefix(fieldName, "image[") && len(files) > 0 {
-	//						foundArrayImages = true
-	//						for _, file := range files {
-	//							imageFiles = append(imageFiles, file)
-	//						}
-	//					}
-	//				}
-	//
-	//				if !foundArrayImages && (len(imageFiles) == 0) {
-	//					return nil, errors.New("image is required")
-	//				}
-	//			}
-	//		}
-	//
-	//		for i, fileHeader := range imageFiles {
-	//			file, err := fileHeader.Open()
-	//			if err != nil {
-	//				return nil, fmt.Errorf("failed to open image file %d: %w", i, err)
-	//			}
-	//			defer file.Close()
-	//
-	//			fieldName := "image"
-	//			if len(imageFiles) > 1 {
-	//				fieldName = "image[]"
-	//			}
-	//
-	//			mimeType := detectImageMimeType(fileHeader.Filename)
-	//
-	//			h := make(textproto.MIMEHeader)
-	//			h.Set("Content-Disposition", fmt.Sprintf(`form-data; name="%s"; filename="%s"`, fieldName, fileHeader.Filename))
-	//			h.Set("Content-Type", mimeType)
-	//
-	//			part, err := writer.CreatePart(h)
-	//			if err != nil {
-	//				return nil, fmt.Errorf("create form part failed for image %d: %w", i, err)
-	//			}
-	//
-	//			if _, err := io.Copy(part, file); err != nil {
-	//				return nil, fmt.Errorf("copy file failed for image %d: %w", i, err)
-	//			}
-	//		}
-	//
-	//		if maskFiles, exists := c.Request.MultipartForm.File["mask"]; exists && len(maskFiles) > 0 {
-	//			maskFile, err := maskFiles[0].Open()
-	//			if err != nil {
-	//				return nil, errors.New("failed to open mask file")
-	//			}
-	//			defer maskFile.Close()
-	//
-	//			mimeType := detectImageMimeType(maskFiles[0].Filename)
-	//
-	//			h := make(textproto.MIMEHeader)
-	//			h.Set("Content-Disposition", fmt.Sprintf(`form-data; name="mask"; filename="%s"`, maskFiles[0].Filename))
-	//			h.Set("Content-Type", mimeType)
-	//
-	//			maskPart, err := writer.CreatePart(h)
-	//			if err != nil {
-	//				return nil, errors.New("create form file failed for mask")
-	//			}
-	//
-	//			if _, err := io.Copy(maskPart, maskFile); err != nil {
-	//				return nil, errors.New("copy mask file failed")
-	//			}
-	//		}
-	//	} else {
-	//		return nil, errors.New("no multipart form data found")
-	//	}
-	//
-	//	writer.Close()
-	//	c.Request.Header.Set("Content-Type", writer.FormDataContentType())
-	//	return bytes.NewReader(requestBody.Bytes()), nil
-
+	case constant.RelayModeImagesEdits:
+		return a.convertImageEditRequest(c, request)
 	default:
 		return request, nil
 	}
+}
+
+// convertImageEditRequest 把 OpenAI /v1/images/edits 图生图请求转换为豆包 ARK
+// images/generations JSON（图生图走同一 generations 端点，官方不支持表单请求）：
+// multipart 图片文件 → content[].image_url 的 base64 data URI；文本 image URL 字段直接透传。
+// 参考火山方舟 Seedream 文档：https://www.volcengine.com/docs/82379/1824121
+func (a *Adaptor) convertImageEditRequest(c *gin.Context, request dto.ImageRequest) (any, error) {
+	req := volcImageGenerationRequest{
+		Model:          request.Model,
+		Prompt:         request.Prompt,
+		Size:           request.Size,
+		N:              request.N,
+		ResponseFormat: request.ResponseFormat,
+		Watermark:      request.Watermark,
+	}
+
+	mf := c.Request.MultipartForm
+	if mf == nil {
+		form, err := common.ParseMultipartFormReusable(c)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse multipart form: %w", err)
+		}
+		mf = form
+		c.Request.MultipartForm = form
+		c.Request.PostForm = url.Values(form.Value)
+	}
+	if mf != nil && mf.File != nil {
+		for _, fileHeader := range imageEditFiles(mf.File) {
+			file, err := fileHeader.Open()
+			if err != nil {
+				return nil, fmt.Errorf("failed to open image file: %w", err)
+			}
+			data, readErr := io.ReadAll(file)
+			file.Close()
+			if readErr != nil {
+				return nil, fmt.Errorf("failed to read image file: %w", readErr)
+			}
+			req.Content = append(req.Content, volcImageContentItem{
+				Type: "image_url",
+				ImageURL: &volcImageURL{
+					URL: "data:" + detectImageMimeType(fileHeader.Filename) + ";base64," + base64.StdEncoding.EncodeToString(data),
+				},
+			})
+		}
+	}
+
+	// 无 multipart 文件时兜底：客户端以文本 image 字段传公网 URL 的情况
+	if len(req.Content) == 0 {
+		var imageURL string
+		if len(request.Image) > 0 && common.Unmarshal(request.Image, &imageURL) == nil && imageURL != "" {
+			req.Content = append(req.Content, volcImageContentItem{
+				Type:     "image_url",
+				ImageURL: &volcImageURL{URL: imageURL},
+			})
+		}
+	}
+
+	if len(req.Content) == 0 {
+		return nil, errors.New("image is required")
+	}
+	return &req, nil
+}
+
+// imageEditFiles 从 multipart 表单收集图生图参考图片文件（兼容 image / image[] / image[ 前缀）。
+func imageEditFiles(files map[string][]*multipart.FileHeader) []*multipart.FileHeader {
+	if imageFiles, ok := files["image"]; ok && len(imageFiles) > 0 {
+		return imageFiles
+	}
+	if imageFiles, ok := files["image[]"]; ok && len(imageFiles) > 0 {
+		return imageFiles
+	}
+	var imageFiles []*multipart.FileHeader
+	for fieldName, fieldFiles := range files {
+		if strings.HasPrefix(fieldName, "image[") && len(fieldFiles) > 0 {
+			imageFiles = append(imageFiles, fieldFiles...)
+		}
+	}
+	return imageFiles
 }
 
 func detectImageMimeType(filename string) string {
@@ -267,8 +270,6 @@ func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
 		//豆包的图生图也走generations接口: https://www.volcengine.com/docs/82379/1824121
 		case constant.RelayModeImagesGenerations, constant.RelayModeImagesEdits:
 			return fmt.Sprintf("%s/api/v3/images/generations", baseUrl), nil
-		//case constant.RelayModeImagesEdits:
-		//	return fmt.Sprintf("%s/api/v3/images/edits", baseUrl), nil
 		case constant.RelayModeRerank:
 			return fmt.Sprintf("%s/api/v3/rerank", baseUrl), nil
 		case constant.RelayModeResponses:
