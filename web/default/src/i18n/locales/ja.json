@@ -5273,6 +5273,10 @@
     "General Config": "一般設定",
     "Saving": "保存中",
     "No configs": "設定がありません",
-    "Load failed": "読み込み失敗"
+    "Load failed": "読み込み失敗",
+    "Real Person Certification": "実在人物認証",
+    "Start Certification": "認証を開始",
+    "Certification H5 link expires soon, please scan promptly": "リンクの有効期限が短いため、早めにスキャンしてください",
+    "Sending": "送信中..."
   }
 }

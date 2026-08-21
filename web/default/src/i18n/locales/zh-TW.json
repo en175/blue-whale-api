@@ -5273,6 +5273,10 @@
     "General Config": "通用配置",
     "Saving": "保存中",
     "No configs": "暫無配置",
-    "Load failed": "載入失敗"
+    "Load failed": "載入失敗",
+    "Real Person Certification": "真人素材認證",
+    "Start Certification": "開始認證",
+    "Certification H5 link expires soon, please scan promptly": "認證連結有效期短,請盡快掃碼",
+    "Sending": "提交中..."
   }
 }

@@ -5273,6 +5273,10 @@
     "General Config": "Configuration générale",
     "Saving": "Enregistrement",
     "No configs": "Aucune configuration",
-    "Load failed": "Échec du chargement"
+    "Load failed": "Échec du chargement",
+    "Real Person Certification": "Certification de personne réelle",
+    "Start Certification": "Démarrer la certification",
+    "Certification H5 link expires soon, please scan promptly": "Le lien expire rapidement, scannez rapidement",
+    "Sending": "Envoi..."
   }
 }

@@ -18,6 +18,10 @@ func TestConfig_IsReady(t *testing.T) {
 		{"未启用", Config{AK: "pak_a", SK: "psk_b"}, false},
 		{"缺 AK", Config{Enabled: true, SK: "psk_b"}, false},
 		{"缺 SK", Config{Enabled: true, AK: "pak_a"}, false},
+		{"volcengine 凭证齐全且启用", Config{Enabled: true, Provider: ProviderVolcengine, VolcengineAccessKey: "ak", VolcengineSecretKey: "sk"}, true},
+		{"volcengine 缺 AccessKey", Config{Enabled: true, Provider: ProviderVolcengine, VolcengineSecretKey: "sk"}, false},
+		{"volcengine 缺 SecretKey", Config{Enabled: true, Provider: ProviderVolcengine, VolcengineAccessKey: "ak"}, false},
+		{"volcengine 未启用", Config{Provider: ProviderVolcengine, VolcengineAccessKey: "ak", VolcengineSecretKey: "sk"}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -32,6 +36,14 @@ func TestGetConfig_defaultsBaseURL(t *testing.T) {
 
 	materialLibrary.Config = Config{Enabled: true, BaseURL: "https://custom.example.com"}
 	assert.Equal(t, "https://custom.example.com", GetConfig().BaseURL)
+}
+
+func TestGetConfig_defaultsProviderAndVolcengineDefaults(t *testing.T) {
+	materialLibrary.Config = Config{Enabled: true, AK: "pak_a", SK: "psk_b"}
+	cfg := GetConfig()
+	assert.Equal(t, ProviderTokenhub, cfg.Provider)
+	assert.Equal(t, DefaultVolcengineBaseURL, cfg.VolcengineBaseURL)
+	assert.Equal(t, DefaultVolcengineRegion, cfg.VolcengineRegion)
 }
 
 // TestMaterialLibraryConfig_dbKeyIsSingleJSON 验证配置经全局配置系统收敛为单一

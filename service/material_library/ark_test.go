@@ -35,7 +35,7 @@ func TestListAssets_parsesResult(t *testing.T) {
 
 	setConfig(t, fmt.Sprintf(`{"enabled":true,"ak":"pak_x","sk":"psk_y","base_url":%q}`, upstream.URL))
 
-	result, err := ListAssets(context.Background(), []string{"group-1"}, 1, 10, "")
+	result, err := ListAssets(context.Background(), []string{"group-1"}, "", 1, 10, "")
 	require.NoError(t, err)
 	require.Len(t, result.Items, 1)
 	assert.Equal(t, "asset-1", result.Items[0].Id)
@@ -58,7 +58,7 @@ func TestListAssets_returnsArkError(t *testing.T) {
 
 	setConfig(t, fmt.Sprintf(`{"enabled":true,"ak":"pak_x","sk":"psk_y","base_url":%q}`, upstream.URL))
 
-	_, err := ListAssets(context.Background(), []string{"group-1"}, 1, 10, "")
+	_, err := ListAssets(context.Background(), []string{"group-1"}, "", 1, 10, "")
 	require.Error(t, err)
 	var arkErr *ArkError
 	require.ErrorAs(t, err, &arkErr)
@@ -76,7 +76,7 @@ func TestListAssets_emptyResult(t *testing.T) {
 
 	setConfig(t, fmt.Sprintf(`{"enabled":true,"ak":"pak_x","sk":"psk_y","base_url":%q}`, upstream.URL))
 
-	result, err := ListAssets(context.Background(), []string{"group-1"}, 1, 10, "")
+	result, err := ListAssets(context.Background(), []string{"group-1"}, "", 1, 10, "")
 	require.NoError(t, err)
 	assert.Empty(t, result.Items)
 	assert.Equal(t, 0, result.TotalCount)
@@ -95,7 +95,7 @@ func TestListAssets_forwardsNameFilter(t *testing.T) {
 
 	setConfig(t, fmt.Sprintf(`{"enabled":true,"ak":"pak_x","sk":"psk_y","base_url":%q}`, upstream.URL))
 
-	_, err := ListAssets(context.Background(), []string{"group-1"}, 1, 10, "search-term")
+	_, err := ListAssets(context.Background(), []string{"group-1"}, "", 1, 10, "search-term")
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"Filter":{"GroupIds":["group-1"],"Name":"search-term"},"PageNumber":1,"PageSize":10}`, gotBody)
 }
@@ -171,4 +171,23 @@ func TestArkWriteActions(t *testing.T) {
 		require.ErrorAs(t, err, &arkErr)
 		assert.Equal(t, "Forbidden", arkErr.Code)
 	})
+}
+
+// TestDoArkAction_parsesVolcengineErrorEnvelope 验证火山管控面错误信封（ResponseMetadata.Error）
+// 能被正确解析，而非吞成 "HTTPxxx: upstream error"（tokenhub 用顶层 ResponseError，两者都要兼容）。
+func TestDoArkAction_parsesVolcengineErrorEnvelope(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"ResponseMetadata":{"Error":{"Code":"SubscriptionRequired","Message":"requires an active subscription"}}}`))
+	}))
+	defer upstream.Close()
+	setConfig(t, fmt.Sprintf(`{"enabled":true,"ak":"pak_x","sk":"psk_y","base_url":%q}`, upstream.URL))
+
+	_, err := ListAssets(context.Background(), []string{"g"}, "", 1, 10, "")
+	require.Error(t, err)
+	var arkErr *ArkError
+	require.ErrorAs(t, err, &arkErr)
+	assert.Equal(t, "SubscriptionRequired", arkErr.Code)
+	assert.Equal(t, "requires an active subscription", arkErr.Message)
 }

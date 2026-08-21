@@ -1,15 +1,12 @@
 package material_library
 
 import (
-	"bytes"
 	"context"
-	"io"
-	"net/http"
-	"net/url"
+	"errors"
 	"strconv"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/material_setting"
 )
 
@@ -46,53 +43,52 @@ func (e *ArkError) Error() string {
 	return e.Code + ": " + e.Message
 }
 
-// doArkAction 直连上游 ARK 兼容接口，凭证与 URL 构造与代理（director）完全一致。
-// 返回 2xx 响应体；非 2xx 时返回解析出的 ArkError。
+// doArkAction 经当前配置的 provider 执行上游 Action：返回 2xx 响应体，非 2xx 返回解析出的 ArkError。
+// 代理与管理端直连共用同一 provider 分发，保证鉴权/地址映射一致。
 func doArkAction(ctx context.Context, action string, body []byte) ([]byte, error) {
-	cfg := material_setting.GetConfig()
-	base, err := url.Parse(cfg.BaseURL)
-	if err != nil {
-		return nil, err
-	}
-	target := *base
-	target.Path = "/ark"
-	query := target.Query()
-	query.Set("Action", action)
-	query.Set("Version", arkVersion)
-	target.RawQuery = query.Encode()
+	return doArkActionFor(ctx, material_setting.GetConfig().Provider, action, body)
+}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target.String(), bytes.NewReader(body))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+cfg.AK+":"+cfg.SK)
-
-	resp, err := service.GetHttpClient().Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	data, err := io.ReadAll(resp.Body)
+// doArkActionFor 与 doArkAction 等价，但显式指定 provider（回调轮询用会话记录的 provider，
+// 不受全局配置切换影响）。
+func doArkActionFor(ctx context.Context, providerName, action string, body []byte) ([]byte, error) {
+	resp, err := providerByName(providerName).DoAction(ctx, action, nil, body)
 	if err != nil {
 		return nil, err
 	}
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		return data, nil
+		return resp.Body, nil
 	}
+	return nil, arkErrorFrom(resp)
+}
+
+// arkErrorFrom 解析上游错误信封：tokenhub 用顶层 ResponseError，火山管控面用 ResponseMetadata.Error。
+func arkErrorFrom(resp *Response) *ArkError {
 	var envelope struct {
 		ResponseError *ArkError `json:"ResponseError"`
+		ResponseMetadata struct {
+			Error *ArkError `json:"Error"`
+		} `json:"ResponseMetadata"`
 	}
-	if err := common.Unmarshal(data, &envelope); err != nil || envelope.ResponseError == nil {
-		return nil, &ArkError{Code: "HTTP" + strconv.Itoa(resp.StatusCode), Message: "upstream error"}
+	if err := common.Unmarshal(resp.Body, &envelope); err == nil {
+		if envelope.ResponseError != nil {
+			return envelope.ResponseError
+		}
+		if envelope.ResponseMetadata.Error != nil {
+			return envelope.ResponseMetadata.Error
+		}
 	}
-	return nil, envelope.ResponseError
+	return &ArkError{Code: "HTTP" + strconv.Itoa(resp.StatusCode), Message: "upstream error"}
 }
 
 // ListAssets 按素材组 id 列表查询上游素材，供管理界面右侧表格使用。
-// name 非空时透传给上游做名称模糊匹配。
-func ListAssets(ctx context.Context, groupIDs []string, page, pageSize int, name string) (*ListAssetsResult, error) {
+// groupType 非空时透传给上游 Filter.GroupType（火山管控面必填；tokenhub 兼容忽略），
+// name 非空时透传做名称模糊匹配。
+func ListAssets(ctx context.Context, groupIDs []string, groupType string, page, pageSize int, name string) (*ListAssetsResult, error) {
 	filter := map[string]any{"GroupIds": groupIDs}
+	if groupType != "" {
+		filter["GroupType"] = groupType
+	}
 	if name != "" {
 		filter["Name"] = name
 	}
@@ -193,4 +189,80 @@ func DeleteAsset(ctx context.Context, assetID string) error {
 	}
 	_, err = doArkAction(ctx, "DeleteAsset", body)
 	return err
+}
+
+// CreateVisualValidateSession 管理端直连：发起真人素材认证会话（上游 CreateVisualValidateSession），
+// 返回 H5Link（给待验证者）与 BytedToken（会话标识，回调反查用）。
+func CreateVisualValidateSession(ctx context.Context, callbackURL, projectName string) (bytedToken, h5Link string, err error) {
+	body := map[string]any{"CallbackURL": callbackURL}
+	if projectName != "" {
+		body["ProjectName"] = projectName
+	}
+	payload, err := common.Marshal(body)
+	if err != nil {
+		return "", "", err
+	}
+	data, err := doArkAction(ctx, "CreateVisualValidateSession", payload)
+	if err != nil {
+		return "", "", err
+	}
+	var out struct {
+		Result struct {
+			BytedToken string `json:"BytedToken"`
+			H5Link     string `json:"H5Link"`
+		} `json:"Result"`
+	}
+	if err := common.Unmarshal(data, &out); err != nil {
+		return "", "", err
+	}
+	return out.Result.BytedToken, out.Result.H5Link, nil
+}
+
+// GetVisualValidateResult 用 BytedToken 查询真人认证结果（按会话记录的 provider 调用，
+// 不受全局配置切换影响），返回真人素材组 id。H5 认证未完成时上游返回 ValidatePending（非 2xx）。
+func GetVisualValidateResult(ctx context.Context, provider, bytedToken string) (string, error) {
+	body, err := common.Marshal(map[string]any{"BytedToken": bytedToken})
+	if err != nil {
+		return "", err
+	}
+	data, err := doArkActionFor(ctx, provider, "GetVisualValidateResult", body)
+	if err != nil {
+		return "", err
+	}
+	var out struct {
+		Result struct {
+			GroupId string `json:"GroupId"`
+		} `json:"Result"`
+	}
+	if err := common.Unmarshal(data, &out); err != nil {
+		return "", err
+	}
+	return out.Result.GroupId, nil
+}
+
+// WaitVisualValidateGroupId 轮询 GetVisualValidateResult 直到拿到 GroupId 或超时。
+// 上游 ValidatePending（认证未完成）时按 interval 重试；其余错误直接返回。
+// 返回后的 GroupId 非空即真人素材组已就绪。
+func WaitVisualValidateGroupId(ctx context.Context, provider, bytedToken string, timeout, interval time.Duration) (string, error) {
+	deadline := time.Now().Add(timeout)
+	for {
+		groupId, err := GetVisualValidateResult(ctx, provider, bytedToken)
+		if err == nil && groupId != "" {
+			return groupId, nil
+		}
+		var arkErr *ArkError
+		if errors.As(err, &arkErr) && arkErr.Code == "ValidatePending" {
+			// 认证未完成，继续等（token 有效期内）
+		} else if err != nil {
+			return "", err
+		}
+		if time.Now().After(deadline) {
+			return "", errors.New("visual validate timeout")
+		}
+		select {
+		case <-time.After(interval):
+		case <-ctx.Done():
+			return "", ctx.Err()
+		}
+	}
 }

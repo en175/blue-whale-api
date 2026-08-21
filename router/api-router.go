@@ -243,6 +243,15 @@ func SetApiRouter(router *gin.Engine) {
 			materialConsoleRoute.POST("/groups/:id/assets", controller.CreateMaterialAsset)
 			materialConsoleRoute.PUT("/groups/:id/assets/:assetId", controller.UpdateMaterialAsset)
 			materialConsoleRoute.DELETE("/groups/:id/assets/:assetId", controller.DeleteMaterialAsset)
+			materialConsoleRoute.POST("/visual-sessions", controller.CreateVisualValidateSession)
+		}
+
+		// 真人素材 H5 活体认证回调：浏览器跳回，无登录态，靠 bytedToken 反查会话。
+		// 放 /v1 独立组，避免与 /api/material/* 代理路由冲突。
+		materialVisualCallbackRoute := router.Group("/v1/material")
+		{
+			materialVisualCallbackRoute.GET("/h5-callback", controller.MaterialVisualValidateCallback)
+			materialVisualCallbackRoute.POST("/h5-callback", controller.MaterialVisualValidateCallback)
 		}
 
 		optionRoute := apiRouter.Group("/option")

@@ -27,12 +27,13 @@ func RequireMaterialLibraryEnabled() gin.HandlerFunc {
 }
 
 // userOwnsMaterialGroup 校验当前用户是否有权操作该素材组（数据隔离）：
-// admin 放行；普通用户必须拥有该组的归属记录，否则拒绝。
+// admin 放行；普通用户必须拥有该组在当前 provider 下的归属记录，否则拒绝。
 func userOwnsMaterialGroup(c *gin.Context, groupID string) bool {
 	if c.GetInt("role") >= common.RoleAdminUser {
 		return true
 	}
-	owned, err := model.UserMaterialGroupExists(c.GetInt("id"), groupID)
+	provider := material_setting.GetConfig().Provider
+	owned, err := model.UserMaterialGroupExists(c.GetInt("id"), provider, groupID)
 	if err != nil {
 		logger.LogError(c.Request.Context(), "check material group ownership failed: "+err.Error())
 		return false
@@ -56,7 +57,8 @@ func GetMaterialGroups(c *gin.Context) {
 		queryUserID = 0 // admin 不过滤用户
 	}
 
-	groups, err := model.GetMaterialGroups(queryUserID, c.Query("type"))
+	// 仅展示当前 provider 下的归属（切换上游后旧组不显示，互不干扰）。
+	groups, err := model.GetMaterialGroups(queryUserID, material_setting.GetConfig().Provider, c.Query("type"))
 	if err != nil {
 		logger.LogError(c.Request.Context(), "query material groups failed: "+err.Error())
 		common.ApiErrorMsg(c, "query material groups failed")
@@ -87,7 +89,7 @@ func CreateMaterialGroup(c *gin.Context) {
 		common.ApiErrorMsg(c, "create material group failed: "+err.Error())
 		return
 	}
-	if err := model.AddUserMaterialGroup(c.GetInt("id"), groupID, req.Name, req.GroupType); err != nil {
+	if err := model.AddUserMaterialGroup(c.GetInt("id"), material_setting.GetConfig().Provider, groupID, req.Name, req.GroupType); err != nil {
 		logger.LogError(c.Request.Context(), "record material group failed: "+err.Error())
 	}
 	common.ApiSuccess(c, gin.H{"id": groupID})
@@ -106,7 +108,7 @@ func DeleteMaterialGroup(c *gin.Context) {
 		common.ApiErrorMsg(c, "delete material group failed: "+err.Error())
 		return
 	}
-	if err := model.DeleteUserMaterialGroup(groupID); err != nil {
+	if err := model.DeleteUserMaterialGroup(material_setting.GetConfig().Provider, groupID); err != nil {
 		logger.LogError(c.Request.Context(), "clear material group record failed: "+err.Error())
 	}
 	common.ApiSuccess(c, nil)
@@ -208,11 +210,51 @@ func ListMaterialGroupAssets(c *gin.Context) {
 		pageSize = v
 	}
 
-	result, err := materiallib.ListAssets(c.Request.Context(), []string{groupID}, page, pageSize, c.Query("name"))
+	// 组类型从归属表取，透传给上游 Filter.GroupType（火山管控面 ListAssets 必填）。
+	provider := material_setting.GetConfig().Provider
+	result, err := materiallib.ListAssets(c.Request.Context(), []string{groupID}, model.GetMaterialGroupType(provider, groupID), page, pageSize, c.Query("name"))
 	if err != nil {
 		logger.LogError(c.Request.Context(), "list material assets failed: "+err.Error())
 		common.ApiErrorMsg(c, "list material assets failed: "+err.Error())
 		return
 	}
 	common.ApiSuccess(c, result)
+}
+
+// CreateVisualValidateSession 管理界面：发起真人素材认证会话（上游直连，内置凭证注入）。
+// 回调地址优先取配置 material_library.config 的 callback_url，未配置时回退调用方传入。
+// 成功后在本地记录会话（含用户起的组名，供回调反查）。走 UserAuth 管理端点，无需 API key。
+func CreateVisualValidateSession(c *gin.Context) {
+	var req struct {
+		Name        string `json:"name"`
+		CallbackURL string `json:"callback_url"`
+		ProjectName string `json:"project_name"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.ApiErrorMsg(c, "invalid request body")
+		return
+	}
+	if req.Name == "" {
+		common.ApiErrorMsg(c, "name is required")
+		return
+	}
+	callbackURL := material_setting.GetConfig().CallbackURL
+	if callbackURL == "" {
+		callbackURL = req.CallbackURL // 调用方（前端 origin）兜底
+	}
+	if callbackURL == "" {
+		common.ApiErrorMsg(c, "callback_url is required (configure material_library.config callback_url)")
+		return
+	}
+	bytedToken, h5Link, err := materiallib.CreateVisualValidateSession(c.Request.Context(), callbackURL, req.ProjectName)
+	if err != nil {
+		logger.LogError(c.Request.Context(), "create visual validate session failed: "+err.Error())
+		common.ApiErrorMsg(c, "create visual validate session failed: "+err.Error())
+		return
+	}
+	provider := material_setting.GetConfig().Provider
+	if err := model.AddVisualValidateSession(c.GetInt("id"), provider, req.Name, bytedToken, h5Link, callbackURL, req.ProjectName); err != nil {
+		logger.LogError(c.Request.Context(), "record visual validate session failed: "+err.Error())
+	}
+	common.ApiSuccess(c, gin.H{"h5_link": h5Link, "byted_token": bytedToken})
 }

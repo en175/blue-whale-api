@@ -307,8 +307,13 @@ func migrateDB() error {
 		&RechargeTier{},
 		&ApiDocModel{},
 		&UserMaterialGroup{},
+		&UserMaterialVisualSession{},
 	)
 	if err != nil {
+		return err
+	}
+	// 素材组唯一约束升级后清理历史单列索引（AutoMigrate 只加不删）。
+	if err := ensureMaterialGroupProviderIndex(); err != nil {
 		return err
 	}
 	if common.UsingMainDatabase(common.DatabaseTypeSQLite) {
