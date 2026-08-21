@@ -375,9 +375,10 @@ func observeOwnership(ctx context.Context, resp *Response) {
 		}
 		projectName, _ := ctx.Value(ctxProjectName).(string)
 		customCallback, _ := ctx.Value(ctxCustomCallback).(string)
-		// 代理路径无组名（认证后回调才拿 GroupId），name 留空；管理端点直连时由 controller 传入。
+		name, _ := ctx.Value(ctxGroupName).(string)
+		// 组名取请求体 Name（调用方可选传入，上游忽略但不报错），认证后用作归属组名；无则留空。
 		// callbackURL 是发给上游的网关回调；customCallback 是客户自定义原回调（认证后 302 到它）。
-		if err := model.AddVisualValidateSession(userID, material_setting.GetConfig().Provider, "", bytedToken, h5Link, callbackURL, projectName, customCallback); err != nil {
+		if err := model.AddVisualValidateSession(userID, material_setting.GetConfig().Provider, name, bytedToken, h5Link, callbackURL, projectName, customCallback); err != nil {
 			logger.LogError(ctx, "material library record visual session failed: "+err.Error())
 		}
 		return
@@ -428,8 +429,10 @@ func RecordContext(c *gin.Context) context.Context {
 		ctx = context.WithValue(ctx, ctxGroupType, fields["GroupType"])
 		ctx = context.WithValue(ctx, ctxGroupName, fields["Name"])
 	case "CreateVisualValidateSession":
-		// 真人认证会话：记录发起时的回调地址与项目，供响应侧写会话表。
-		fields := readJSONBodyFields(c, "CallbackURL", "ProjectName")
+		// 真人认证会话：记录发起时的组名/回调地址与项目，供响应侧写会话表。
+		// Name 由调用方可选传入（上游忽略但不报错），认证后用作归属组名。
+		fields := readJSONBodyFields(c, "Name", "CallbackURL", "ProjectName")
+		ctx = context.WithValue(ctx, ctxGroupName, fields["Name"])
 		ctx = context.WithValue(ctx, ctxCallbackURL, fields["CallbackURL"])
 		ctx = context.WithValue(ctx, ctxProjectName, fields["ProjectName"])
 	case "DeleteAssetGroup":

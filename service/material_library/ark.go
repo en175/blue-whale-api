@@ -193,10 +193,14 @@ func DeleteAsset(ctx context.Context, assetID string) error {
 
 // CreateVisualValidateSession 管理端直连：发起真人素材认证会话（上游 CreateVisualValidateSession），
 // 返回 H5Link（给待验证者）与 BytedToken（会话标识，回调反查用）。
-func CreateVisualValidateSession(ctx context.Context, callbackURL, projectName string) (bytedToken, h5Link string, err error) {
+// name 仅 tokenhub 渠道传给上游（支持组名，接受额外字段）；火山契约无该字段，不传。
+func CreateVisualValidateSession(ctx context.Context, name, callbackURL, projectName string) (bytedToken, h5Link string, err error) {
 	body := map[string]any{"CallbackURL": callbackURL}
 	if projectName != "" {
 		body["ProjectName"] = projectName
+	}
+	if name != "" && material_setting.GetConfig().Provider == material_setting.ProviderTokenhub {
+		body["Name"] = name
 	}
 	payload, err := common.Marshal(body)
 	if err != nil {
@@ -222,6 +226,10 @@ func CreateVisualValidateSession(ctx context.Context, callbackURL, projectName s
 	}
 	if err := common.Unmarshal(data, &direct); err != nil {
 		return "", "", err
+	}
+	if direct.BytedToken == "" {
+		// 两种格式都没拿到 token：显式报错，避免 controller 记录空 byted_token 会话。
+		return "", "", errors.New("missing BytedToken in CreateVisualValidateSession response")
 	}
 	return direct.BytedToken, direct.H5Link, nil
 }

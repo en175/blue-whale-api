@@ -222,17 +222,43 @@ func TestGetVisualValidateResult_emptyGroupId(t *testing.T) {
 }
 
 // TestCreateVisualValidateSession_tokenhubDirectFormat 验证管理端直连封装的 CreateVisualValidateSession
-// 兼容 tokenhub 直接格式响应（顶层 BytedToken/H5Link，无信封），避免 h5_link/byted_token 解析为空。
+// 兼容 tokenhub 直接格式响应（顶层 BytedToken/H5Link，无信封），且 tokenhub 渠道把 Name 传给上游。
 func TestCreateVisualValidateSession_tokenhubDirectFormat(t *testing.T) {
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	var gotBody string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		gotBody = string(b)
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"BytedToken":"bt-th","H5Link":"https://h5.th/1"}`))
 	}))
 	defer upstream.Close()
 	setConfig(t, fmt.Sprintf(`{"enabled":true,"ak":"pak_x","sk":"psk_y","base_url":%q}`, upstream.URL))
 
-	bytedToken, h5Link, err := CreateVisualValidateSession(context.Background(), "https://gw.example/cb", "default")
+	bytedToken, h5Link, err := CreateVisualValidateSession(context.Background(), "真人组1", "https://gw.example/cb", "default")
 	require.NoError(t, err)
 	assert.Equal(t, "bt-th", bytedToken)
 	assert.Equal(t, "https://h5.th/1", h5Link)
+	// tokenhub 渠道：Name 传给上游
+	assert.Contains(t, gotBody, `"Name":"真人组1"`)
+}
+
+// TestCreateVisualValidateSession_volcengineOmitsName 验证火山渠道不传 Name（契约无该字段，避免 UnsupportedField）。
+func TestCreateVisualValidateSession_volcengineOmitsName(t *testing.T) {
+	var gotBody string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		gotBody = string(b)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ResponseMetadata":{},"Result":{"BytedToken":"bt-vc","H5Link":"https://h5.vc/1"}}`))
+	}))
+	defer upstream.Close()
+	setConfig(t, fmt.Sprintf(`{"enabled":true,"ak":"pak_x","sk":"psk_y","base_url":%q,"provider":"volcengine","volcengine_access_key":"ak","volcengine_secret_key":"sk","volcengine_base_url":%q}`, upstream.URL, upstream.URL))
+	// 配置系统 JSON 合并不重置缺省字段，显式恢复 tokenhub，避免 provider 状态串扰后续测试。
+	defer setConfig(t, `{"enabled":true,"provider":"tokenhub","ak":"pak_x","sk":"psk_y","base_url":""}`)
+
+	bytedToken, _, err := CreateVisualValidateSession(context.Background(), "真人组1", "https://gw.example/cb", "default")
+	require.NoError(t, err)
+	assert.Equal(t, "bt-vc", bytedToken)
+	// 火山渠道：不传 Name
+	assert.NotContains(t, gotBody, `"Name"`)
 }
