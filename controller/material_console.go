@@ -253,7 +253,7 @@ func CreateVisualValidateSession(c *gin.Context) {
 		return
 	}
 	provider := material_setting.GetConfig().Provider
-	if err := model.AddVisualValidateSession(c.GetInt("id"), provider, req.Name, bytedToken, h5Link, callbackURL, req.ProjectName); err != nil {
+	if err := model.AddVisualValidateSession(c.GetInt("id"), provider, req.Name, bytedToken, h5Link, callbackURL, req.ProjectName, ""); err != nil {
 		logger.LogError(c.Request.Context(), "record visual validate session failed: "+err.Error())
 	}
 	common.ApiSuccess(c, gin.H{"h5_link": h5Link, "byted_token": bytedToken})

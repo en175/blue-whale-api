@@ -11,7 +11,7 @@ import (
 func TestVisualSessionCRUD(t *testing.T) {
 	require.NoError(t, DB.AutoMigrate(&UserMaterialVisualSession{}))
 
-	require.NoError(t, AddVisualValidateSession(42, "volcengine", "真人组1", "token-1", "https://h5/1", "https://gw/cb", "default"))
+	require.NoError(t, AddVisualValidateSession(42, "volcengine", "真人组1", "token-1", "https://h5/1", "https://gw/cb", "default", ""))
 
 	s, err := GetVisualValidateSessionByToken("token-1")
 	require.NoError(t, err)

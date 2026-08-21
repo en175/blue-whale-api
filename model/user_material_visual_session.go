@@ -20,18 +20,19 @@ const (
 // byted_token 是上游会话标识（回调 query 携带），h5_link 是发给待验证者的页面，
 // callback_url 是发起会话时填的回调地址（H5 完成后浏览器跳回）。
 type UserMaterialVisualSession struct {
-	Id          int    `json:"id" gorm:"primaryKey;autoIncrement"`
-	UserId      int    `json:"user_id" gorm:"index;not null"`
-	Provider    string `json:"provider" gorm:"type:varchar(32);not null"` // tokenhub/volcengine
-	Name        string `json:"name" gorm:"type:varchar(255)"`              // 用户起的真人组名，认证完成后用作归属组名
-	BytedToken  string `json:"byted_token" gorm:"type:varchar(255);uniqueIndex;not null"`
-	H5Link      string `json:"h5_link" gorm:"type:varchar(1024)"`
-	CallbackURL string `json:"callback_url" gorm:"type:varchar(1024)"`
-	ProjectName string `json:"project_name" gorm:"type:varchar(64)"`
-	GroupId     string `json:"group_id" gorm:"type:varchar(128)"`
-	Status      string `json:"status" gorm:"type:varchar(16);not null;default:'processing'"`
-	CreatedAt   int64  `json:"created_at" gorm:"bigint"`
-	UpdatedAt   int64  `json:"updated_at" gorm:"bigint"`
+	Id             int    `json:"id" gorm:"primaryKey;autoIncrement"`
+	UserId         int    `json:"user_id" gorm:"index;not null"`
+	Provider       string `json:"provider" gorm:"type:varchar(32);not null"` // tokenhub/volcengine
+	Name           string `json:"name" gorm:"type:varchar(255)"`             // 用户起的真人组名，认证完成后用作归属组名
+	BytedToken     string `json:"byted_token" gorm:"type:varchar(255);uniqueIndex;not null"`
+	H5Link         string `json:"h5_link" gorm:"type:varchar(1024)"`
+	CallbackURL    string `json:"callback_url" gorm:"type:varchar(1024)"`    // 发给上游的回调地址（网关自身）
+	CustomCallback string `json:"custom_callback" gorm:"type:varchar(1024)"` // 客户传入的原回调地址（对外 API，认证后 302 到它；管理端为空）
+	ProjectName    string `json:"project_name" gorm:"type:varchar(64)"`
+	GroupId        string `json:"group_id" gorm:"type:varchar(128)"`
+	Status         string `json:"status" gorm:"type:varchar(16);not null;default:'processing'"`
+	CreatedAt      int64  `json:"created_at" gorm:"bigint"`
+	UpdatedAt      int64  `json:"updated_at" gorm:"bigint"`
 }
 
 func (UserMaterialVisualSession) TableName() string {
@@ -40,19 +41,22 @@ func (UserMaterialVisualSession) TableName() string {
 
 // AddVisualValidateSession 记录用户发起的真人认证会话（观察层在 CreateVisualValidateSession
 // 成功后调用）。name 是用户起的真人组名（认证完成后用作归属组名），无则传空串。
-func AddVisualValidateSession(userId int, provider, name, bytedToken, h5Link, callbackURL, projectName string) error {
+// callbackURL 是发给上游的回调地址（网关自身）；customCallback 是客户传入的原回调地址
+// （对外 API 场景，认证后 302 到它），无则传空串。
+func AddVisualValidateSession(userId int, provider, name, bytedToken, h5Link, callbackURL, projectName, customCallback string) error {
 	now := time.Now().Unix()
 	return DB.Create(&UserMaterialVisualSession{
-		UserId:      userId,
-		Provider:    provider,
-		Name:        name,
-		BytedToken:  bytedToken,
-		H5Link:      h5Link,
-		CallbackURL: callbackURL,
-		ProjectName: projectName,
-		Status:      VisualSessionProcessing,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		UserId:         userId,
+		Provider:       provider,
+		Name:           name,
+		BytedToken:     bytedToken,
+		H5Link:         h5Link,
+		CallbackURL:    callbackURL,
+		CustomCallback: customCallback,
+		ProjectName:    projectName,
+		Status:         VisualSessionProcessing,
+		CreatedAt:      now,
+		UpdatedAt:      now,
 	}).Error
 }
 
