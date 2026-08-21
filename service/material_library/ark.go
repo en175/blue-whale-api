@@ -206,16 +206,24 @@ func CreateVisualValidateSession(ctx context.Context, callbackURL, projectName s
 	if err != nil {
 		return "", "", err
 	}
-	var out struct {
+	var enveloped struct {
 		Result struct {
 			BytedToken string `json:"BytedToken"`
 			H5Link     string `json:"H5Link"`
 		} `json:"Result"`
 	}
-	if err := common.Unmarshal(data, &out); err != nil {
+	if common.Unmarshal(data, &enveloped) == nil && enveloped.Result.BytedToken != "" {
+		return enveloped.Result.BytedToken, enveloped.Result.H5Link, nil
+	}
+	// tokenhub 成功响应不包信封，直接返回顶层 BytedToken/H5Link。
+	var direct struct {
+		BytedToken string `json:"BytedToken"`
+		H5Link     string `json:"H5Link"`
+	}
+	if err := common.Unmarshal(data, &direct); err != nil {
 		return "", "", err
 	}
-	return out.Result.BytedToken, out.Result.H5Link, nil
+	return direct.BytedToken, direct.H5Link, nil
 }
 
 // GetVisualValidateResult 用 BytedToken 查询真人认证结果（按会话记录的 provider 调用，

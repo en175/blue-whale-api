@@ -220,3 +220,19 @@ func TestGetVisualValidateResult_emptyGroupId(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "", gid)
 }
+
+// TestCreateVisualValidateSession_tokenhubDirectFormat 验证管理端直连封装的 CreateVisualValidateSession
+// 兼容 tokenhub 直接格式响应（顶层 BytedToken/H5Link，无信封），避免 h5_link/byted_token 解析为空。
+func TestCreateVisualValidateSession_tokenhubDirectFormat(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"BytedToken":"bt-th","H5Link":"https://h5.th/1"}`))
+	}))
+	defer upstream.Close()
+	setConfig(t, fmt.Sprintf(`{"enabled":true,"ak":"pak_x","sk":"psk_y","base_url":%q}`, upstream.URL))
+
+	bytedToken, h5Link, err := CreateVisualValidateSession(context.Background(), "https://gw.example/cb", "default")
+	require.NoError(t, err)
+	assert.Equal(t, "bt-th", bytedToken)
+	assert.Equal(t, "https://h5.th/1", h5Link)
+}
