@@ -5273,6 +5273,10 @@
     "General Config": "Общие настройки",
     "Saving": "Сохранение",
     "No configs": "Нет конфигураций",
-    "Load failed": "Ошибка загрузки"
+    "Load failed": "Ошибка загрузки",
+    "Real Person Certification": "Подтверждение реального человека",
+    "Start Certification": "Начать подтверждение",
+    "Certification H5 link expires soon, please scan promptly": "Ссылка быстро истекает, отсканируйте скорее",
+    "Sending": "Отправка..."
   }
 }

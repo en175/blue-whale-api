@@ -29,6 +29,8 @@ const (
 	ctxGroupName
 	ctxGroupType
 	ctxGroupID
+	ctxCallbackURL
+	ctxProjectName
 )
 
 // Proxy 返回 /api/material/{Action} 的处理器：把路径段映射为 Action，经当前 provider 执行，
@@ -74,10 +76,30 @@ func observeOwnership(ctx context.Context, resp *Response) {
 	userID, _ := ctx.Value(ctxUserID).(int)
 	groupType, isCreate := ctx.Value(ctxGroupType).(string)
 	groupID, isDelete := ctx.Value(ctxGroupID).(string)
-	if userID <= 0 || (!isCreate && !isDelete) {
+	callbackURL, isVisual := ctx.Value(ctxCallbackURL).(string)
+	if userID <= 0 || (!isCreate && !isDelete && !isVisual) {
 		return
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return
+	}
+
+	if isVisual {
+		// 真人认证会话：响应 Result.BytedToken/H5Link 写会话表（回调反查用户 + 排查链路）。
+		var out struct {
+			Result struct {
+				BytedToken string `json:"BytedToken"`
+				H5Link     string `json:"H5Link"`
+			} `json:"Result"`
+		}
+		if err := common.Unmarshal(resp.Body, &out); err != nil || out.Result.BytedToken == "" {
+			return
+		}
+		projectName, _ := ctx.Value(ctxProjectName).(string)
+		// 代理路径无组名（认证后回调才拿 GroupId），name 留空；管理端点直连时由 controller 传入。
+		if err := model.AddVisualValidateSession(userID, material_setting.GetConfig().Provider, "", out.Result.BytedToken, out.Result.H5Link, callbackURL, projectName); err != nil {
+			logger.LogError(ctx, "material library record visual session failed: "+err.Error())
+		}
 		return
 	}
 
@@ -125,6 +147,11 @@ func RecordContext(c *gin.Context) context.Context {
 		fields := readJSONBodyFields(c, "GroupType", "Name")
 		ctx = context.WithValue(ctx, ctxGroupType, fields["GroupType"])
 		ctx = context.WithValue(ctx, ctxGroupName, fields["Name"])
+	case "CreateVisualValidateSession":
+		// 真人认证会话：记录发起时的回调地址与项目，供响应侧写会话表。
+		fields := readJSONBodyFields(c, "CallbackURL", "ProjectName")
+		ctx = context.WithValue(ctx, ctxCallbackURL, fields["CallbackURL"])
+		ctx = context.WithValue(ctx, ctxProjectName, fields["ProjectName"])
 	case "DeleteAssetGroup":
 		ctx = context.WithValue(ctx, ctxGroupID, readJSONBodyField(c, "Id"))
 	}

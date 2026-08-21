@@ -37,6 +37,9 @@ type Config struct {
 	VolcengineSecretKey string `json:"volcengine_secret_key,omitempty"`
 	VolcengineRegion    string `json:"volcengine_region,omitempty"`
 	VolcengineBaseURL   string `json:"volcengine_base_url,omitempty"`
+	// 真人认证 H5 回调地址（完整 URL，含 /v1/material/h5-callback 路径）。
+	// 管理员配置网关公网地址；未配置时回退到调用方传入的地址。
+	CallbackURL string `json:"callback_url,omitempty"`
 }
 
 // MaterialLibrary 是注册到全局配置系统的模块载体。外层包一层，使 configToMap 把

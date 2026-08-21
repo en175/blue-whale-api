@@ -5357,6 +5357,10 @@
     "General Config": "General Config",
     "Saving": "Saving",
     "No configs": "No configs",
-    "Load failed": "Load failed"
+    "Load failed": "Load failed",
+    "Real Person Certification": "Real Person Certification",
+    "Start Certification": "Start Certification",
+    "Certification H5 link expires soon, please scan promptly": "The certification link expires quickly, please scan promptly",
+    "Sending": "Sending..."
   }
 }

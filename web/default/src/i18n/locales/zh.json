@@ -5357,6 +5357,10 @@
     "General Config": "通用配置",
     "Saving": "保存中",
     "No configs": "暂无配置",
-    "Load failed": "加载失败"
+    "Load failed": "加载失败",
+    "Real Person Certification": "真人素材认证",
+    "Start Certification": "开始认证",
+    "Certification H5 link expires soon, please scan promptly": "认证链接有效期短,请尽快扫码",
+    "Sending": "提交中..."
   }
 }

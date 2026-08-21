@@ -29,7 +29,13 @@ type Response struct {
 
 // currentProvider 按配置返回当前素材库上游（tokenhub / volcengine）。
 func currentProvider() Provider {
-	if material_setting.GetConfig().Provider == material_setting.ProviderVolcengine {
+	return providerByName(material_setting.GetConfig().Provider)
+}
+
+// providerByName 按名称返回 Provider 实现。回调轮询等场景使用会话记录的 provider，
+// 避免全局配置切换后轮询走错上游。
+func providerByName(name string) Provider {
+	if name == material_setting.ProviderVolcengine {
 		return volcengineProvider{}
 	}
 	return tokenhubProvider{}

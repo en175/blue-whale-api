@@ -307,6 +307,7 @@ func migrateDB() error {
 		&RechargeTier{},
 		&ApiDocModel{},
 		&UserMaterialGroup{},
+		&UserMaterialVisualSession{},
 	)
 	if err != nil {
 		return err

@@ -220,3 +220,41 @@ func ListMaterialGroupAssets(c *gin.Context) {
 	}
 	common.ApiSuccess(c, result)
 }
+
+// CreateVisualValidateSession 管理界面：发起真人素材认证会话（上游直连，内置凭证注入）。
+// 回调地址优先取配置 material_library.config 的 callback_url，未配置时回退调用方传入。
+// 成功后在本地记录会话（含用户起的组名，供回调反查）。走 UserAuth 管理端点，无需 API key。
+func CreateVisualValidateSession(c *gin.Context) {
+	var req struct {
+		Name        string `json:"name"`
+		CallbackURL string `json:"callback_url"`
+		ProjectName string `json:"project_name"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.ApiErrorMsg(c, "invalid request body")
+		return
+	}
+	if req.Name == "" {
+		common.ApiErrorMsg(c, "name is required")
+		return
+	}
+	callbackURL := material_setting.GetConfig().CallbackURL
+	if callbackURL == "" {
+		callbackURL = req.CallbackURL // 调用方（前端 origin）兜底
+	}
+	if callbackURL == "" {
+		common.ApiErrorMsg(c, "callback_url is required (configure material_library.config callback_url)")
+		return
+	}
+	bytedToken, h5Link, err := materiallib.CreateVisualValidateSession(c.Request.Context(), callbackURL, req.ProjectName)
+	if err != nil {
+		logger.LogError(c.Request.Context(), "create visual validate session failed: "+err.Error())
+		common.ApiErrorMsg(c, "create visual validate session failed: "+err.Error())
+		return
+	}
+	provider := material_setting.GetConfig().Provider
+	if err := model.AddVisualValidateSession(c.GetInt("id"), provider, req.Name, bytedToken, h5Link, callbackURL, req.ProjectName); err != nil {
+		logger.LogError(c.Request.Context(), "record visual validate session failed: "+err.Error())
+	}
+	common.ApiSuccess(c, gin.H{"h5_link": h5Link, "byted_token": bytedToken})
+}

@@ -16,12 +16,12 @@ import (
 	"gorm.io/gorm"
 )
 
-// openMaterialRecordDB 为记录层测试准备隔离的归属表。
+// openMaterialRecordDB 为记录层测试准备隔离的归属表与会话表。
 func openMaterialRecordDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.UserMaterialGroup{}))
+	require.NoError(t, db.AutoMigrate(&model.UserMaterialGroup{}, &model.UserMaterialVisualSession{}))
 	return db
 }
 
@@ -115,4 +115,29 @@ func TestProxy_removesGroupAssociationOnDelete(t *testing.T) {
 	groups, err := model.GetUserMaterialGroups(42)
 	require.NoError(t, err)
 	assert.Len(t, groups, 0)
+}
+
+// TestProxy_recordsVisualValidateSession 端到端验证：CreateVisualValidateSession 成功后，
+// 会话表记录 BytedToken/H5Link/CallbackURL 及用户，供认证回调反查。
+func TestProxy_recordsVisualValidateSession(t *testing.T) {
+	model.DB = openMaterialRecordDB(t)
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ResponseMetadata":{},"Result":{"BytedToken":"bt-1","H5Link":"https://h5.example/1"}}`))
+	}))
+	defer upstream.Close()
+	setConfig(t, fmt.Sprintf(`{"enabled":true,"ak":"pak_x","sk":"psk_y","base_url":%q}`, upstream.URL))
+
+	c := newRecordContext(t, "/api/material/CreateVisualValidateSession", `{"CallbackURL":"https://gw.example/cb","ProjectName":"default"}`)
+	Proxy().ServeHTTP(httptest.NewRecorder(), c.Request)
+
+	s, err := model.GetVisualValidateSessionByToken("bt-1")
+	require.NoError(t, err)
+	assert.Equal(t, 42, s.UserId)
+	assert.Equal(t, "tokenhub", s.Provider)
+	assert.Equal(t, "https://h5.example/1", s.H5Link)
+	assert.Equal(t, "https://gw.example/cb", s.CallbackURL)
+	assert.Equal(t, model.VisualSessionProcessing, s.Status)
 }

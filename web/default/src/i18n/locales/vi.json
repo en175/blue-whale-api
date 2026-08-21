@@ -5273,6 +5273,10 @@
     "General Config": "Cấu hình chung",
     "Saving": "Đang lưu",
     "No configs": "Không có cấu hình",
-    "Load failed": "Tải thất bại"
+    "Load failed": "Tải thất bại",
+    "Real Person Certification": "Xác thực người thật",
+    "Start Certification": "Bắt đầu xác thực",
+    "Certification H5 link expires soon, please scan promptly": "Liên kết hết hạn nhanh, hãy quét sớm",
+    "Sending": "Đang gửi..."
   }
 }

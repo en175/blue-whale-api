@@ -30,6 +30,25 @@ export async function createMaterialGroup(data: {
   return res.data?.data
 }
 
+/**
+ * 发起真人素材认证会话（UserAuth 管理端点，服务端内置凭证直连上游）。
+ * 回调指向本网关 /v1/material/h5-callback（H5 认证完成后浏览器跳回，网关后台轮询拿 GroupId）。
+ * name 为用户起的真人组名，认证完成后用作归属组名。
+ */
+export async function createVisualValidateSession(
+  name: string
+): Promise<{
+  h5_link: string
+  byted_token: string
+}> {
+  const res = await api.post('/api/materials/visual-sessions', {
+    name,
+    callback_url: `${window.location.origin}/v1/material/h5-callback`,
+    project_name: 'default',
+  })
+  return res.data?.data ?? {}
+}
+
 /** 删除素材组（上游 DeleteAssetGroup），同步清理本地归属。 */
 export async function deleteMaterialGroup(
   groupId: string
