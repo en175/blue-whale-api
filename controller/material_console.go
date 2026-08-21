@@ -246,7 +246,7 @@ func CreateVisualValidateSession(c *gin.Context) {
 		common.ApiErrorMsg(c, "callback_url is required (configure material_library.config callback_url)")
 		return
 	}
-	bytedToken, h5Link, err := materiallib.CreateVisualValidateSession(c.Request.Context(), callbackURL, req.ProjectName)
+	bytedToken, h5Link, err := materiallib.CreateVisualValidateSession(c.Request.Context(), req.Name, callbackURL, req.ProjectName)
 	if err != nil {
 		logger.LogError(c.Request.Context(), "create visual validate session failed: "+err.Error())
 		common.ApiErrorMsg(c, "create visual validate session failed: "+err.Error())

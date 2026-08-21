@@ -333,3 +333,23 @@ func TestProxy_getVisualValidateResult_noSessionFailsClosed(t *testing.T) {
 	require.NoError(t, common.Unmarshal(rec.Body.Bytes(), &direct))
 	assert.Equal(t, "", direct.GroupId)
 }
+
+// TestProxy_recordsVisualValidateSessionName 验证对外 API 代理路径带 Name 时，会话表记录该组名
+// （上游忽略 Name 但不报错，本地存作认证后归属组名）。
+func TestProxy_recordsVisualValidateSessionName(t *testing.T) {
+	model.DB = openMaterialRecordDB(t)
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"BytedToken":"bt-n","H5Link":"https://h5.example/n"}`))
+	}))
+	defer upstream.Close()
+	setConfig(t, fmt.Sprintf(`{"enabled":true,"ak":"pak_x","sk":"psk_y","base_url":%q,"callback_url":"https://gw.example/cb"}`, upstream.URL))
+
+	c := newRecordContext(t, "/api/material/CreateVisualValidateSession", `{"Name":"我的真人组","CallbackURL":"https://gw.example/cb","ProjectName":"default"}`)
+	Proxy().ServeHTTP(httptest.NewRecorder(), c.Request)
+
+	s, err := model.GetVisualValidateSessionByToken("bt-n")
+	require.NoError(t, err)
+	assert.Equal(t, "我的真人组", s.Name)
+}
