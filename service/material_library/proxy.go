@@ -3,6 +3,7 @@ package material_library
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"strconv"
@@ -58,8 +59,10 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	// 对外真人会话：客户自定义回调 → 替换为网关回调（存原值，认证后 302 到客户），
 	// 保证网关能拿到认证结果记录归属。管理端（无自定义回调）不替换。
+	var customCallback string
 	if action == "CreateVisualValidateSession" {
-		rewritten, customCallback := rewriteVisualCallbackBody(r, body)
+		var rewritten []byte
+		rewritten, customCallback = rewriteVisualCallbackBody(r, body)
 		body = rewritten
 		if customCallback != "" {
 			ctx := r.Context()
@@ -74,6 +77,12 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 		handleLocalAssetGroups(w, r, body)
 		return
 	}
+	// 对外查询真人认证结果：先查本地会话（group_id 已结算则直接返回），
+	// 未结算则查上游并回填数据库（会话 group_id + 归属），兼容两个上游返回格式。
+	if action == "GetVisualValidateResult" {
+		handleGetVisualValidateResult(w, r, body)
+		return
+	}
 	resp, err := currentProvider().DoAction(r.Context(), action, r.URL.Query(), body)
 	if err != nil {
 		// 不把 Go 内部错误细节返回给客户端，细节进带 trace_id 的后端日志。
@@ -82,6 +91,10 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	observeOwnership(r.Context(), resp)
+	// 对外真人会话：响应 Result.CallbackURL 替换回客户原值（客户应看到自己传的回调，而非网关内置）。
+	if customCallback != "" {
+		resp.Body = restoreClientCallback(resp.Body, customCallback)
+	}
 	for k, vs := range resp.Header {
 		for _, v := range vs {
 			w.Header().Add(k, v)
@@ -113,6 +126,32 @@ func rewriteVisualCallbackBody(r *http.Request, body []byte) ([]byte, string) {
 		return body, ""
 	}
 	return rewritten, clientCB
+}
+
+// restoreClientCallback 把响应里的 CallbackURL 替换为客户原回调（客户应看到自己传的值，
+// 而非网关内置的回调地址）。兼容火山信封（Result.CallbackURL）与 tokenhub 直接（顶层 CallbackURL）；
+// 无 CallbackURL 或解析失败时原样返回。
+func restoreClientCallback(body []byte, callbackURL string) []byte {
+	var m map[string]any
+	if err := common.Unmarshal(body, &m); err != nil {
+		return body
+	}
+	if result, ok := m["Result"].(map[string]any); ok {
+		if _, has := result["CallbackURL"]; has {
+			result["CallbackURL"] = callbackURL
+			m["Result"] = result
+			if rewritten, err := common.Marshal(m); err == nil {
+				return rewritten
+			}
+		}
+	}
+	if _, ok := m["CallbackURL"]; ok {
+		m["CallbackURL"] = callbackURL
+		if rewritten, err := common.Marshal(m); err == nil {
+			return rewritten
+		}
+	}
+	return body
 }
 
 // gatewayCallbackURL 网关真人认证回调地址：优先配置 callback_url，未配置拼请求 host。
@@ -209,6 +248,93 @@ func handleLocalAssetGroups(w http.ResponseWriter, r *http.Request, body []byte)
 	_, _ = w.Write(data)
 }
 
+// handleGetVisualValidateResult 对外 GetVisualValidateResult 的缓存化实现：
+// 先查本地会话（group_id 已结算则直接返回，避免重复查上游）；
+// 未结算则按会话（或当前）provider 查上游，拿到 GroupId 后回填会话与归属（幂等）。
+// 返回格式按 provider：火山信封 / tokenhub 直接，与上游透传一致。
+func handleGetVisualValidateResult(w http.ResponseWriter, r *http.Request, body []byte) {
+	var req struct {
+		BytedToken string `json:"BytedToken"`
+	}
+	_ = common.Unmarshal(body, &req)
+	if req.BytedToken == "" {
+		http.Error(w, "missing BytedToken", http.StatusBadRequest)
+		return
+	}
+
+	provider := material_setting.GetConfig().Provider
+	session, _ := model.GetVisualValidateSessionByToken(req.BytedToken)
+	if session == nil {
+		// 会话不存在（非本网关创建的 token）：fail-closed，不查上游，避免泄露其他实例/上游的结果。
+		writeVisualValidateResult(w, provider, "")
+		return
+	}
+	// 跨租户隔离：会话必须属于当前 API key 用户，否则视为未完成（不泄露 group_id、不查上游）。
+	userID, _ := r.Context().Value(ctxUserID).(int)
+	if session.UserId != userID {
+		writeVisualValidateResult(w, provider, "")
+		return
+	}
+	provider = session.Provider
+	// 本地已结算：直接返回，不查上游。
+	if session.GroupId != "" && session.Status == model.VisualSessionActive {
+		writeVisualValidateResult(w, provider, session.GroupId)
+		return
+	}
+
+	// 查上游（会话的 provider）。
+	groupId, err := GetVisualValidateResult(r.Context(), provider, req.BytedToken, session.ProjectName)
+	if err != nil {
+		var arkErr *ArkError
+		if errors.As(err, &arkErr) && arkErr.Code == "ValidatePending" {
+			// 认证未完成：返回 200 + 空 GroupId（与 tokenhub 200+空契约一致），客户端继续轮询。
+			writeVisualValidateResult(w, provider, "")
+			return
+		}
+		logger.LogError(r.Context(), "query upstream visual validate result failed: "+err.Error())
+		http.Error(w, "query visual validate result failed", http.StatusBadGateway)
+		return
+	}
+
+	// 回填数据库：会话 group_id/status + 归属（幂等，用会话的 user/name/provider）。
+	if groupId != "" && session != nil {
+		_ = model.CompleteVisualValidateSession(req.BytedToken, groupId, model.VisualSessionActive)
+		if err := model.AddUserMaterialGroup(session.UserId, session.Provider, groupId, session.Name, "LivenessFace"); err != nil {
+			logger.LogError(r.Context(), "record liveness material group failed: "+err.Error())
+		}
+	}
+	writeVisualValidateResult(w, provider, groupId)
+}
+
+// writeVisualValidateResult 按 provider 格式写查询结果：火山信封 / tokenhub 直接。
+func writeVisualValidateResult(w http.ResponseWriter, provider, groupId string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(buildVisualValidateResult(provider, groupId))
+}
+
+// buildVisualValidateResult 构造与上游一致的结果格式：
+// 火山带 ResponseMetadata/Result 信封；tokenhub 直接返回 {"GroupId": "..."}。
+func buildVisualValidateResult(provider, groupId string) []byte {
+	if provider == material_setting.ProviderVolcengine {
+		data, err := common.Marshal(map[string]any{
+			"ResponseMetadata": map[string]any{
+				"RequestId": "req_local_" + groupId,
+				"Action":    "GetVisualValidateResult",
+				"Version":   arkVersion,
+				"Service":   "ark",
+				"Region":    material_setting.GetConfig().VolcengineRegion,
+			},
+			"Result": map[string]any{"GroupId": groupId},
+		})
+		if err == nil {
+			return data
+		}
+	}
+	data, _ := common.Marshal(map[string]any{"GroupId": groupId})
+	return data
+}
+
 // observeOwnership 观察上游响应：仅在创建/删除素材组且成功时更新归属表。
 // 只有标记了记录操作的请求才携带记录信息（RecordContext 已提取）。
 func observeOwnership(ctx context.Context, resp *Response) {
@@ -224,21 +350,34 @@ func observeOwnership(ctx context.Context, resp *Response) {
 	}
 
 	if isVisual {
-		// 真人认证会话：响应 Result.BytedToken/H5Link 写会话表（回调反查用户 + 排查链路）。
-		var out struct {
+		// 真人认证会话：响应 BytedToken/H5Link 写会话表（回调反查用户 + 排查链路）。
+		// 兼容两种响应格式：火山信封（Result.BytedToken）与 tokenhub 直接（顶层 BytedToken）。
+		var bytedToken, h5Link string
+		var enveloped struct {
 			Result struct {
 				BytedToken string `json:"BytedToken"`
 				H5Link     string `json:"H5Link"`
 			} `json:"Result"`
 		}
-		if err := common.Unmarshal(resp.Body, &out); err != nil || out.Result.BytedToken == "" {
+		if common.Unmarshal(resp.Body, &enveloped) == nil && enveloped.Result.BytedToken != "" {
+			bytedToken, h5Link = enveloped.Result.BytedToken, enveloped.Result.H5Link
+		} else {
+			var direct struct {
+				BytedToken string `json:"BytedToken"`
+				H5Link     string `json:"H5Link"`
+			}
+			if common.Unmarshal(resp.Body, &direct) == nil {
+				bytedToken, h5Link = direct.BytedToken, direct.H5Link
+			}
+		}
+		if bytedToken == "" {
 			return
 		}
 		projectName, _ := ctx.Value(ctxProjectName).(string)
 		customCallback, _ := ctx.Value(ctxCustomCallback).(string)
 		// 代理路径无组名（认证后回调才拿 GroupId），name 留空；管理端点直连时由 controller 传入。
 		// callbackURL 是发给上游的网关回调；customCallback 是客户自定义原回调（认证后 302 到它）。
-		if err := model.AddVisualValidateSession(userID, material_setting.GetConfig().Provider, "", out.Result.BytedToken, out.Result.H5Link, callbackURL, projectName, customCallback); err != nil {
+		if err := model.AddVisualValidateSession(userID, material_setting.GetConfig().Provider, "", bytedToken, h5Link, callbackURL, projectName, customCallback); err != nil {
 			logger.LogError(ctx, "material library record visual session failed: "+err.Error())
 		}
 		return

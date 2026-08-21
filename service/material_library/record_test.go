@@ -145,7 +145,7 @@ func TestProxy_recordsVisualValidateSession(t *testing.T) {
 
 // TestProxy_rewritesClientCallbackToGateway 端到端验证对外 API 的回调中转：
 // 客户传自己的 CallbackURL → 发给上游的是网关回调（会话表 callback_url），
-// 客户原回调存入 custom_callback（认证后 302 到它）。
+// 客户原回调存入 custom_callback（认证后 302 到它）；响应 Result.CallbackURL 替换回客户原值。
 func TestProxy_rewritesClientCallbackToGateway(t *testing.T) {
 	model.DB = openMaterialRecordDB(t)
 
@@ -154,16 +154,22 @@ func TestProxy_rewritesClientCallbackToGateway(t *testing.T) {
 		b, _ := io.ReadAll(r.Body)
 		gotBody = string(b)
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"ResponseMetadata":{},"Result":{"BytedToken":"bt-rw","H5Link":"https://h5.example/rw"}}`))
+		// 火山会 echo 请求里的 CallbackURL（网关回调）
+		_, _ = w.Write([]byte(`{"ResponseMetadata":{},"Result":{"BytedToken":"bt-rw","H5Link":"https://h5.example/rw","CallbackURL":"https://gw.example.com/v1/material/h5-callback"}}`))
 	}))
 	defer upstream.Close()
 	setConfig(t, fmt.Sprintf(`{"enabled":true,"ak":"pak_x","sk":"psk_y","base_url":%q,"callback_url":"https://gw.example.com/v1/material/h5-callback"}`, upstream.URL))
 
 	c := newRecordContext(t, "/api/material/CreateVisualValidateSession", `{"CallbackURL":"https://client.example.com/cb","ProjectName":"default"}`)
-	Proxy().ServeHTTP(httptest.NewRecorder(), c.Request)
+	rec := httptest.NewRecorder()
+	Proxy().ServeHTTP(rec, c.Request)
 
 	// 上游收到的是网关回调
 	assert.Contains(t, gotBody, `"CallbackURL":"https://gw.example.com/v1/material/h5-callback"`)
+
+	// 响应给客户的是其原回调（替换回），而非网关内置
+	assert.Contains(t, rec.Body.String(), `"CallbackURL":"https://client.example.com/cb"`)
+	assert.NotContains(t, rec.Body.String(), `"CallbackURL":"https://gw.example.com/v1/material/h5-callback"`)
 
 	s, err := model.GetVisualValidateSessionByToken("bt-rw")
 	require.NoError(t, err)
@@ -200,4 +206,130 @@ func TestProxy_listAssetGroupsLocalIsolation(t *testing.T) {
 	assert.Equal(t, "g-user42", out.Result.Items[0].Id)
 	assert.Equal(t, "组A", out.Result.Items[0].Name)
 	assert.Equal(t, "AIGC", out.Result.Items[0].GroupType)
+}
+
+// TestProxy_getVisualValidateResult_localCacheHit 验证对外查询认证结果：本地会话已结算
+// （group_id 非空且 active）时直接返回，不查上游。
+func TestProxy_getVisualValidateResult_localCacheHit(t *testing.T) {
+	model.DB = openMaterialRecordDB(t)
+	require.NoError(t, model.AddVisualValidateSession(42, "volcengine", "真人组1", "bt-cache", "https://h5/1", "https://gw/cb", "default", ""))
+	require.NoError(t, model.CompleteVisualValidateSession("bt-cache", "group-cached", model.VisualSessionActive))
+	setConfig(t, `{"enabled":true,"ak":"pak_x","sk":"psk_y","base_url":"","provider":"volcengine"}`)
+
+	c := newRecordContext(t, "/api/material/GetVisualValidateResult", `{"BytedToken":"bt-cache"}`)
+	rec := httptest.NewRecorder()
+	Proxy().ServeHTTP(rec, c.Request)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	// 火山信封格式
+	var out struct {
+		Result struct {
+			GroupId string `json:"GroupId"`
+		} `json:"Result"`
+	}
+	require.NoError(t, common.Unmarshal(rec.Body.Bytes(), &out))
+	assert.Equal(t, "group-cached", out.Result.GroupId)
+}
+
+// TestProxy_getVisualValidateResult_backfillsSession 验证对外查询认证结果：本地未结算时
+// 查上游拿到 GroupId → 回填会话（active + group_id）并记录归属（幂等）。
+func TestProxy_getVisualValidateResult_backfillsSession(t *testing.T) {
+	model.DB = openMaterialRecordDB(t)
+	require.NoError(t, model.AddVisualValidateSession(42, "tokenhub", "真人组1", "bt-q", "https://h5/1", "https://gw/cb", "default", ""))
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"GroupId":"group-backfill"}`)) // tokenhub 直接格式
+	}))
+	defer upstream.Close()
+	setConfig(t, fmt.Sprintf(`{"enabled":true,"ak":"pak_x","sk":"psk_y","base_url":%q,"provider":"tokenhub"}`, upstream.URL))
+
+	c := newRecordContext(t, "/api/material/GetVisualValidateResult", `{"BytedToken":"bt-q"}`)
+	rec := httptest.NewRecorder()
+	Proxy().ServeHTTP(rec, c.Request)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var direct struct {
+		GroupId string `json:"GroupId"`
+	}
+	require.NoError(t, common.Unmarshal(rec.Body.Bytes(), &direct))
+	assert.Equal(t, "group-backfill", direct.GroupId)
+
+	// 回填：会话 active + 归属记录
+	s, err := model.GetVisualValidateSessionByToken("bt-q")
+	require.NoError(t, err)
+	assert.Equal(t, model.VisualSessionActive, s.Status)
+	assert.Equal(t, "group-backfill", s.GroupId)
+	groups, err := model.GetMaterialGroups(0, "tokenhub", "LivenessFace")
+	require.NoError(t, err)
+	require.Len(t, groups, 1)
+	assert.Equal(t, "group-backfill", groups[0].SeedanceAssetGroupId)
+}
+
+// TestProxy_getVisualValidateResult_userIsolation 验证对外查询认证结果跨租户隔离：
+// 会话属于其他用户（user 7）时，当前用户（user 42）查询视为未完成（返回空 GroupId），不泄露。
+func TestProxy_getVisualValidateResult_userIsolation(t *testing.T) {
+	model.DB = openMaterialRecordDB(t)
+	require.NoError(t, model.AddVisualValidateSession(7, "volcengine", "真人组1", "bt-iso", "https://h5/1", "https://gw/cb", "default", ""))
+	require.NoError(t, model.CompleteVisualValidateSession("bt-iso", "group-iso", model.VisualSessionActive))
+	setConfig(t, `{"enabled":true,"ak":"pak_x","sk":"psk_y","base_url":"","provider":"volcengine"}`)
+
+	c := newRecordContext(t, "/api/material/GetVisualValidateResult", `{"BytedToken":"bt-iso"}`)
+	rec := httptest.NewRecorder()
+	Proxy().ServeHTTP(rec, c.Request)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var out struct {
+		Result struct {
+			GroupId string `json:"GroupId"`
+		} `json:"Result"`
+	}
+	require.NoError(t, common.Unmarshal(rec.Body.Bytes(), &out))
+	assert.Equal(t, "", out.Result.GroupId) // 不泄露他人组
+}
+
+// TestProxy_getVisualValidateResult_validatePending 验证火山认证未完成（ValidatePending）时
+// 对外查询返回 200 + 空 GroupId（与 tokenhub 200+空契约一致），而非 502，客户端继续轮询。
+func TestProxy_getVisualValidateResult_validatePending(t *testing.T) {
+	model.DB = openMaterialRecordDB(t)
+	require.NoError(t, model.AddVisualValidateSession(42, "volcengine", "真人组1", "bt-pending", "https://h5/1", "https://gw/cb", "default", ""))
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"ResponseMetadata":{"Error":{"Code":"ValidatePending","Message":"not yet"}}}`))
+	}))
+	defer upstream.Close()
+	setConfig(t, fmt.Sprintf(`{"enabled":true,"ak":"pak_x","sk":"psk_y","base_url":%q,"provider":"volcengine","volcengine_access_key":"ak","volcengine_secret_key":"sk","volcengine_base_url":%q}`, upstream.URL, upstream.URL))
+
+	c := newRecordContext(t, "/api/material/GetVisualValidateResult", `{"BytedToken":"bt-pending"}`)
+	rec := httptest.NewRecorder()
+	Proxy().ServeHTTP(rec, c.Request)
+
+	require.Equal(t, http.StatusOK, rec.Code) // 200 而非 502
+	var out struct {
+		Result struct {
+			GroupId string `json:"GroupId"`
+		} `json:"Result"`
+	}
+	require.NoError(t, common.Unmarshal(rec.Body.Bytes(), &out))
+	assert.Equal(t, "", out.Result.GroupId)
+}
+
+// TestProxy_getVisualValidateResult_noSessionFailsClosed 验证会话不存在的 token fail-closed：
+// 不查上游（隔离缺口），返回空 GroupId。
+func TestProxy_getVisualValidateResult_noSessionFailsClosed(t *testing.T) {
+	model.DB = openMaterialRecordDB(t)
+	setConfig(t, `{"enabled":true,"ak":"pak_x","sk":"psk_y","base_url":"","provider":"tokenhub"}`)
+
+	c := newRecordContext(t, "/api/material/GetVisualValidateResult", `{"BytedToken":"ghost-token"}`)
+	rec := httptest.NewRecorder()
+	Proxy().ServeHTTP(rec, c.Request)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var direct struct {
+		GroupId string `json:"GroupId"`
+	}
+	require.NoError(t, common.Unmarshal(rec.Body.Bytes(), &direct))
+	assert.Equal(t, "", direct.GroupId)
 }

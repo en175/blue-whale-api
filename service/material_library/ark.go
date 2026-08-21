@@ -219,34 +219,47 @@ func CreateVisualValidateSession(ctx context.Context, callbackURL, projectName s
 }
 
 // GetVisualValidateResult 用 BytedToken 查询真人认证结果（按会话记录的 provider 调用，
-// 不受全局配置切换影响），返回真人素材组 id。H5 认证未完成时上游返回 ValidatePending（非 2xx）。
-func GetVisualValidateResult(ctx context.Context, provider, bytedToken string) (string, error) {
-	body, err := common.Marshal(map[string]any{"BytedToken": bytedToken})
+// 不受全局配置切换影响），返回真人素材组 id。H5 认证未完成时 GroupId 为空串（调用方继续轮询）。
+// projectName 需与创建会话时一致（火山契约：设了 ProjectName 则查询必须传相同值，区分大小写），空则省略。
+// 兼容两种响应格式：火山带 ResponseMetadata/Result 信封（GroupId 在 Result 内），
+// tokenhub 直接返回 {"GroupId": "..."}（无信封）。
+func GetVisualValidateResult(ctx context.Context, provider, bytedToken, projectName string) (string, error) {
+	body := map[string]any{"BytedToken": bytedToken}
+	if projectName != "" {
+		body["ProjectName"] = projectName
+	}
+	payload, err := common.Marshal(body)
 	if err != nil {
 		return "", err
 	}
-	data, err := doArkActionFor(ctx, provider, "GetVisualValidateResult", body)
+	data, err := doArkActionFor(ctx, provider, "GetVisualValidateResult", payload)
 	if err != nil {
 		return "", err
 	}
-	var out struct {
+	var enveloped struct {
 		Result struct {
 			GroupId string `json:"GroupId"`
 		} `json:"Result"`
 	}
-	if err := common.Unmarshal(data, &out); err != nil {
-		return "", err
+	if common.Unmarshal(data, &enveloped) == nil && enveloped.Result.GroupId != "" {
+		return enveloped.Result.GroupId, nil
 	}
-	return out.Result.GroupId, nil
+	var direct struct {
+		GroupId string `json:"GroupId"`
+	}
+	if common.Unmarshal(data, &direct) == nil {
+		return direct.GroupId, nil
+	}
+	return "", nil // 认证未完成（两种格式下 GroupId 均为空）
 }
 
 // WaitVisualValidateGroupId 轮询 GetVisualValidateResult 直到拿到 GroupId 或超时。
-// 上游 ValidatePending（认证未完成）时按 interval 重试；其余错误直接返回。
+// 上游 ValidatePending（认证未完成）或返回空 GroupId（组尚未就绪）时按 interval 重试；其余错误直接返回。
 // 返回后的 GroupId 非空即真人素材组已就绪。
-func WaitVisualValidateGroupId(ctx context.Context, provider, bytedToken string, timeout, interval time.Duration) (string, error) {
+func WaitVisualValidateGroupId(ctx context.Context, provider, bytedToken, projectName string, timeout, interval time.Duration) (string, error) {
 	deadline := time.Now().Add(timeout)
 	for {
-		groupId, err := GetVisualValidateResult(ctx, provider, bytedToken)
+		groupId, err := GetVisualValidateResult(ctx, provider, bytedToken, projectName)
 		if err == nil && groupId != "" {
 			return groupId, nil
 		}
@@ -256,6 +269,7 @@ func WaitVisualValidateGroupId(ctx context.Context, provider, bytedToken string,
 		} else if err != nil {
 			return "", err
 		}
+		// err==nil && groupId==""（200 但组未就绪）也继续等，直到超时。
 		if time.Now().After(deadline) {
 			return "", errors.New("visual validate timeout")
 		}
