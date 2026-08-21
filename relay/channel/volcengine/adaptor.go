@@ -31,6 +31,9 @@ import (
 const (
 	contextKeyTTSRequest     = "volcengine_tts_request"
 	contextKeyResponseFormat = "response_format"
+	// maxImageEditImages：Seedream 多参考图上限（官方 4.0 单次复合编辑最多 10 张，
+	// 见 IKA5R5 调研）。联调时与 ARK 实测确认数组接受度与上限口径（image vs images）。
+	maxImageEditImages = 10
 )
 
 type Adaptor struct {
@@ -113,14 +116,16 @@ func (a *Adaptor) ConvertAudioRequest(c *gin.Context, info *relaycommon.RelayInf
 // 图生图（/v1/images/edits）也走同一 generations 端点，参考图用顶层 image 字段
 // （base64 data URI 或公网 URL）——联调实测（IK9ZQM）ARK 仅消费顶层 image，
 // content 数组会被静默忽略。
+// Seedream 4.0/5.0 支持多参考图（image 数组，prompt 用"图1/图2"指代），Image 用
+// json.RawMessage 承载单图字符串 / 多图数组两种形态，保持已验证的单图 wire 格式不变。
 type volcImageGenerationRequest struct {
-	Model          string `json:"model"`
-	Prompt         string `json:"prompt"`
-	Size           string `json:"size,omitempty"`
-	N              *uint  `json:"n,omitempty"`
-	ResponseFormat string `json:"response_format,omitempty"`
-	Watermark      *bool  `json:"watermark,omitempty"`
-	Image          string `json:"image,omitempty"`
+	Model          string          `json:"model"`
+	Prompt         string          `json:"prompt"`
+	Size           string          `json:"size,omitempty"`
+	N              *uint           `json:"n,omitempty"`
+	ResponseFormat string          `json:"response_format,omitempty"`
+	Watermark      *bool           `json:"watermark,omitempty"`
+	Image          json.RawMessage `json:"image,omitempty"`
 }
 
 func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.ImageRequest) (any, error) {
@@ -136,7 +141,8 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInf
 
 // convertImageEditRequest 把 OpenAI /v1/images/edits 图生图请求转换为豆包 ARK
 // images/generations JSON（图生图走同一 generations 端点，官方不支持表单请求）：
-// multipart 参考图 → 顶层 image 的 base64 data URI；文本 image URL 字段直接透传。
+// multipart 参考图 → 顶层 image 的 base64 data URI；多图（image[]）→ image 数组
+// （Seedream 4.0/5.0 多参考图，prompt 以"图1/图2"指代）；文本 image URL 字段直接透传。
 // 参考火山方舟 Seedream 文档：https://www.volcengine.com/docs/82379/1824121
 func (a *Adaptor) convertImageEditRequest(c *gin.Context, request dto.ImageRequest) (any, error) {
 	req := volcImageGenerationRequest{
@@ -158,39 +164,99 @@ func (a *Adaptor) convertImageEditRequest(c *gin.Context, request dto.ImageReque
 		c.Request.MultipartForm = form
 		c.Request.PostForm = url.Values(form.Value)
 	}
-	// Seedream 图生图仅支持单张参考图（顶层 image 字段），多图取第一张。
+
+	// multipart 图片文件（image / image[] / image[ 前缀）→ base64 data URI：
+	// 单图保持已验证的字符串 wire 格式，多图输出数组（ARK 多参考图协议）。
 	if mf != nil && mf.File != nil {
 		if imageFiles := imageEditFiles(mf.File); len(imageFiles) > 0 {
-			fileHeader := imageFiles[0]
-			file, err := fileHeader.Open()
+			uris, err := imageFileDataURIs(imageFiles)
 			if err != nil {
-				return nil, fmt.Errorf("failed to open image file: %w", err)
+				return nil, err
 			}
-			data, readErr := io.ReadAll(file)
-			file.Close()
-			if readErr != nil {
-				return nil, fmt.Errorf("failed to read image file: %w", readErr)
+			req.Image, err = marshalImageField(uris)
+			if err != nil {
+				return nil, fmt.Errorf("failed to marshal image field: %w", err)
 			}
-			req.Image = "data:" + detectImageMimeType(fileHeader.Filename) + ";base64," + base64.StdEncoding.EncodeToString(data)
 		}
 	}
 
-	// 无 multipart 文件时兜底：客户端以文本 image 字段传公网 URL 的情况
-	if req.Image == "" {
-		var imageURL string
-		if len(request.Image) > 0 && common.Unmarshal(request.Image, &imageURL) == nil && imageURL != "" {
-			req.Image = imageURL
+	// 无 multipart 文件时兜底：客户端以文本 image 字段传公网 URL（单 URL 或 URL 数组）
+	if len(req.Image) == 0 && len(request.Image) > 0 {
+		imageURLs, ok := parseImageURLs(request.Image)
+		if !ok {
+			return nil, errors.New("image is required")
 		}
+		if len(imageURLs) > maxImageEditImages {
+			return nil, fmt.Errorf("too many reference images: got %d, max %d", len(imageURLs), maxImageEditImages)
+		}
+		imageJSON, err := marshalImageField(imageURLs)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal image field: %w", err)
+		}
+		req.Image = imageJSON
 	}
 
-	if req.Image == "" {
+	if len(req.Image) == 0 {
 		return nil, errors.New("image is required")
 	}
 	return &req, nil
 }
 
+// imageFileDataURIs 把图生图参考图片文件读为 base64 data URI 列表；超过 Seedream
+// 多参考图上限时拒绝（避免超量文件塞进出站 JSON）。
+func imageFileDataURIs(files []*multipart.FileHeader) ([]string, error) {
+	if len(files) > maxImageEditImages {
+		return nil, fmt.Errorf("too many reference images: got %d, max %d", len(files), maxImageEditImages)
+	}
+	uris := make([]string, 0, len(files))
+	for _, fileHeader := range files {
+		file, err := fileHeader.Open()
+		if err != nil {
+			return nil, fmt.Errorf("failed to open image file: %w", err)
+		}
+		data, readErr := io.ReadAll(file)
+		file.Close()
+		if readErr != nil {
+			return nil, fmt.Errorf("failed to read image file: %w", readErr)
+		}
+		uris = append(uris, "data:"+detectImageMimeType(fileHeader.Filename)+";base64,"+base64.StdEncoding.EncodeToString(data))
+	}
+	return uris, nil
+}
+
+// marshalImageField 按数量编码 ARK image 字段：单张为字符串、多张为数组，
+// 保持联调已验证的单图 wire 格式（image: "data:..."）不变。
+func marshalImageField(values []string) (json.RawMessage, error) {
+	var (
+		data []byte
+		err  error
+	)
+	if len(values) == 1 {
+		data, err = common.Marshal(values[0])
+	} else {
+		data, err = common.Marshal(values)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
+// parseImageURLs 解析文本 image 字段为参考图 URL 列表（兼容单 URL 字符串与 URL 数组）。
+func parseImageURLs(raw json.RawMessage) ([]string, bool) {
+	var single string
+	if common.Unmarshal(raw, &single) == nil && single != "" {
+		return []string{single}, true
+	}
+	var urls []string
+	if common.Unmarshal(raw, &urls) == nil && len(urls) > 0 {
+		return urls, true
+	}
+	return nil, false
+}
+
 // imageEditFiles 从 multipart 表单收集图生图参考图片文件（兼容 image / image[] / image[ 前缀）。
-// Seedream 仅支持单张参考图（顶层 image 字段），调用方取首张。
+// Seedream 4.0/5.0 支持多参考图，全部文件按序进入 image 数组。
 func imageEditFiles(files map[string][]*multipart.FileHeader) []*multipart.FileHeader {
 	if imageFiles, ok := files["image"]; ok && len(imageFiles) > 0 {
 		return imageFiles
