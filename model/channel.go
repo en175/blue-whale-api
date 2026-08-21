@@ -892,16 +892,30 @@ func updateChannelPeriodUsedQuota(id int, quota int) {
 }
 
 // IK9W58: 判断渠道配额是否超限。
-// 判定基于内存渠道快照（最多滞后 SYNC_FREQUENCY），并叠加尚未批量落库的
-// 实时增量，堵住批量落库（BATCH_UPDATE_INTERVAL）窗口内的继续放行。
+// 周期限额：优先读 Redis 实时计数（近实时、包含全部增量，含未批量落库部分），
+// 但仅在 Redis 计数不低于「内存快照 + 未落库增量」时才采用（正常态恒成立）；
+// Redis 未启用 / 读失败 / key 不存在 / 计数失步在低位时，回退内存渠道快照
+// （最多滞后 SYNC_FREQUENCY）叠加尚未批量落库的实时增量，堵住批量落库
+// （BATCH_UPDATE_INTERVAL）窗口内的继续放行。
+// 硬上限：维持内存渠道快照判定（复用 UsedQuota 字段）。
 func ChannelIsQuotaExceeded(ch *Channel) bool {
 	if ch == nil {
 		return false
 	}
 	// 周期限额检查
-	if ch.PeriodQuotaLimit > 0 && usedExceeds(ch.PeriodUsedQuota,
-		int64(pendingBatchDelta(BatchUpdateTypeChannelPeriodUsedQuota, ch.Id)), ch.PeriodQuotaLimit) {
-		return true
+	if ch.PeriodQuotaLimit > 0 {
+		periodUsed := int64(ch.PeriodUsedQuota)
+		pending := int64(pendingBatchDelta(BatchUpdateTypeChannelPeriodUsedQuota, ch.Id))
+		if redisUsed, err := GetChannelPeriodQuota(ch.Id, ch.PeriodResetTime); err == nil && redisUsed > 0 &&
+			redisUsed >= periodUsed && redisUsed-periodUsed >= pending {
+			// Redis 计数不低于内存估计（未失步）才采用；计数已含全部增量
+			// （含未批量落库部分），无需再叠加 pending
+			periodUsed = redisUsed
+			pending = 0
+		}
+		if usedExceeds(periodUsed, pending, ch.PeriodQuotaLimit) {
+			return true
+		}
 	}
 	// 累计硬上限检查（复用 UsedQuota 字段）
 	if ch.HardQuotaLimit > 0 && usedExceeds(ch.UsedQuota,
