@@ -191,3 +191,32 @@ func TestDoArkAction_parsesVolcengineErrorEnvelope(t *testing.T) {
 	assert.Equal(t, "SubscriptionRequired", arkErr.Code)
 	assert.Equal(t, "requires an active subscription", arkErr.Message)
 }
+
+// TestGetVisualValidateResult_tokenhubDirectFormat 验证 tokenhub 的 GetVisualValidateResult
+// 成功响应不包 ResponseMetadata/Result 信封（直接 {"GroupId": "..."}），与火山信封格式都要能解析。
+func TestGetVisualValidateResult_tokenhubDirectFormat(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"GroupId":"group-th-1"}`))
+	}))
+	defer upstream.Close()
+	setConfig(t, fmt.Sprintf(`{"enabled":true,"ak":"pak_x","sk":"psk_y","base_url":%q}`, upstream.URL))
+
+	gid, err := GetVisualValidateResult(context.Background(), "tokenhub", "bt-1", "")
+	require.NoError(t, err)
+	assert.Equal(t, "group-th-1", gid)
+}
+
+// TestGetVisualValidateResult_emptyGroupId 验证认证未完成时两种格式都返回空 GroupId（继续轮询）。
+func TestGetVisualValidateResult_emptyGroupId(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"GroupId":""}`))
+	}))
+	defer upstream.Close()
+	setConfig(t, fmt.Sprintf(`{"enabled":true,"ak":"pak_x","sk":"psk_y","base_url":%q}`, upstream.URL))
+
+	gid, err := GetVisualValidateResult(context.Background(), "tokenhub", "bt-1", "")
+	require.NoError(t, err)
+	assert.Equal(t, "", gid)
+}

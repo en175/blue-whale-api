@@ -100,7 +100,7 @@ func MaterialVisualValidateCallback(c *gin.Context) {
 // 并回填会话状态。返回是否成功。管理端同步调用；对外 API 场景由后台 goroutine 调用。
 // ctx 应携带 trace_id/request_id（后台用 context.WithoutCancel 派生）。
 func settleVisualValidate(ctx context.Context, provider, bytedToken string, session *model.UserMaterialVisualSession) bool {
-	groupId, err := materiallib.WaitVisualValidateGroupId(ctx, provider, bytedToken, 60*time.Second, 3*time.Second)
+	groupId, err := materiallib.WaitVisualValidateGroupId(ctx, provider, bytedToken, session.ProjectName, 60*time.Second, 3*time.Second)
 	if err != nil {
 		_ = model.CompleteVisualValidateSession(bytedToken, "", model.VisualSessionFailed)
 		logger.LogError(ctx, "get visual validate group id failed: "+err.Error())
