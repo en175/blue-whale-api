@@ -1,4 +1,4 @@
-package service
+package model
 
 import (
 	"context"
@@ -15,6 +15,10 @@ import (
 // periodKey 用于区分不同周期（避免周期重置后 key 冲突）
 
 const channelQuotaRedisPrefix = "channel:%d:period:%s"
+
+// channelPeriodQuotaReadTimeout 限定判定路径的 Redis 读耗时：选渠道热路径上
+// Redis 卡顿/失联时快速失败，回退内存判定（正常内网读为亚毫秒级）。
+const channelPeriodQuotaReadTimeout = 200 * time.Millisecond
 
 // getChannelPeriodKey 生成周期 key
 // 使用 PeriodResetTime 作为周期标识，确保周期重置后 key 不同
@@ -62,7 +66,10 @@ func GetChannelPeriodQuota(channelId int, periodResetTime int64) (int64, error) 
 	}
 
 	key := getChannelPeriodKey(channelId, periodResetTime)
-	ctx := context.Background()
+	// 判定路径在选渠道热路径上（channelSyncLock.RLock 内），须限时：
+	// Redis 卡顿/失联时快速失败回退内存判定，避免渠道选择被冻结。
+	ctx, cancel := context.WithTimeout(context.Background(), channelPeriodQuotaReadTimeout)
+	defer cancel()
 
 	val, err := common.RDB.Get(ctx, key).Int64()
 	if errors.Is(err, redis.Nil) {

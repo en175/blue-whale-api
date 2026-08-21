@@ -122,7 +122,7 @@ func resetDueChannelPeriodQuota(limit int) (int, error) {
 
 			// 删除旧周期的 Redis key（兜底，新周期 key 不同）
 			if common.RedisEnabled {
-				if err := ResetChannelPeriodQuota(locked.Id, locked.PeriodResetTime); err != nil {
+				if err := model.ResetChannelPeriodQuota(locked.Id, locked.PeriodResetTime); err != nil {
 					logger.LogWarn(context.Background(), fmt.Sprintf("failed to reset Redis key for channel %d: %v", locked.Id, err))
 				}
 			}

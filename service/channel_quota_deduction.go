@@ -37,7 +37,7 @@ func DeductChannelQuota(channelId int, quota int, groupRatio float64) {
 	if common.RedisEnabled {
 		if channel, err := model.CacheGetChannel(channelId); err == nil && channel != nil {
 			if channel.PeriodQuotaLimit > 0 && channel.PeriodHours > 0 {
-				if _, err := IncrChannelPeriodQuota(channelId, channel.PeriodResetTime, channel.PeriodHours, int64(originalQuota)); err != nil {
+				if _, err := model.IncrChannelPeriodQuota(channelId, channel.PeriodResetTime, channel.PeriodHours, int64(originalQuota)); err != nil {
 					common.SysLog("failed to incr channel period quota in Redis: " + err.Error())
 				}
 			}
