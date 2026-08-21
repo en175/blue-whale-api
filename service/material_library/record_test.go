@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
@@ -128,7 +129,7 @@ func TestProxy_recordsVisualValidateSession(t *testing.T) {
 		_, _ = w.Write([]byte(`{"ResponseMetadata":{},"Result":{"BytedToken":"bt-1","H5Link":"https://h5.example/1"}}`))
 	}))
 	defer upstream.Close()
-	setConfig(t, fmt.Sprintf(`{"enabled":true,"ak":"pak_x","sk":"psk_y","base_url":%q}`, upstream.URL))
+	setConfig(t, fmt.Sprintf(`{"enabled":true,"ak":"pak_x","sk":"psk_y","base_url":%q,"callback_url":"https://gw.example/cb"}`, upstream.URL))
 
 	c := newRecordContext(t, "/api/material/CreateVisualValidateSession", `{"CallbackURL":"https://gw.example/cb","ProjectName":"default"}`)
 	Proxy().ServeHTTP(httptest.NewRecorder(), c.Request)
@@ -140,4 +141,63 @@ func TestProxy_recordsVisualValidateSession(t *testing.T) {
 	assert.Equal(t, "https://h5.example/1", s.H5Link)
 	assert.Equal(t, "https://gw.example/cb", s.CallbackURL)
 	assert.Equal(t, model.VisualSessionProcessing, s.Status)
+}
+
+// TestProxy_rewritesClientCallbackToGateway 端到端验证对外 API 的回调中转：
+// 客户传自己的 CallbackURL → 发给上游的是网关回调（会话表 callback_url），
+// 客户原回调存入 custom_callback（认证后 302 到它）。
+func TestProxy_rewritesClientCallbackToGateway(t *testing.T) {
+	model.DB = openMaterialRecordDB(t)
+
+	var gotBody string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		gotBody = string(b)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ResponseMetadata":{},"Result":{"BytedToken":"bt-rw","H5Link":"https://h5.example/rw"}}`))
+	}))
+	defer upstream.Close()
+	setConfig(t, fmt.Sprintf(`{"enabled":true,"ak":"pak_x","sk":"psk_y","base_url":%q,"callback_url":"https://gw.example.com/v1/material/h5-callback"}`, upstream.URL))
+
+	c := newRecordContext(t, "/api/material/CreateVisualValidateSession", `{"CallbackURL":"https://client.example.com/cb","ProjectName":"default"}`)
+	Proxy().ServeHTTP(httptest.NewRecorder(), c.Request)
+
+	// 上游收到的是网关回调
+	assert.Contains(t, gotBody, `"CallbackURL":"https://gw.example.com/v1/material/h5-callback"`)
+
+	s, err := model.GetVisualValidateSessionByToken("bt-rw")
+	require.NoError(t, err)
+	assert.Equal(t, "https://client.example.com/cb", s.CustomCallback)
+	assert.Equal(t, "https://gw.example.com/v1/material/h5-callback", s.CallbackURL)
+}
+
+// TestProxy_listAssetGroupsLocalIsolation 验证对外 ListAssetGroups 查本地归属表并按用户隔离：
+// 只返回当前 API key 用户的组，不查上游、不越权看到其他用户的组。
+func TestProxy_listAssetGroupsLocalIsolation(t *testing.T) {
+	model.DB = openMaterialRecordDB(t)
+	require.NoError(t, model.AddUserMaterialGroup(42, "tokenhub", "g-user42", "组A", "AIGC"))
+	require.NoError(t, model.AddUserMaterialGroup(7, "tokenhub", "g-user7", "组B", "AIGC"))
+	setConfig(t, `{"enabled":true,"ak":"pak_x","sk":"psk_y","base_url":"","callback_url":"https://gw.example/cb"}`)
+
+	c := newRecordContext(t, "/api/material/ListAssetGroups", `{}`)
+	rec := httptest.NewRecorder()
+	Proxy().ServeHTTP(rec, c.Request)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var out struct {
+		Result struct {
+			TotalCount int `json:"TotalCount"`
+			Items []struct {
+				Id        string `json:"Id"`
+				Name      string `json:"Name"`
+				GroupType string `json:"GroupType"`
+			} `json:"Items"`
+		} `json:"Result"`
+	}
+	require.NoError(t, common.Unmarshal(rec.Body.Bytes(), &out))
+	assert.Equal(t, 1, out.Result.TotalCount)
+	require.Len(t, out.Result.Items, 1)
+	assert.Equal(t, "g-user42", out.Result.Items[0].Id)
+	assert.Equal(t, "组A", out.Result.Items[0].Name)
+	assert.Equal(t, "AIGC", out.Result.Items[0].GroupType)
 }

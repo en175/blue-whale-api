@@ -98,7 +98,7 @@ func TestProxy_forwardsUpstreamErrorVerbatim(t *testing.T) {
 	setConfig(t, fmt.Sprintf(`{"enabled":true,"ak":"pak_x","sk":"psk_y","base_url":%q}`, upstream.URL))
 
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/material/ListAssetGroups", strings.NewReader(`{}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/material/ListAssets", strings.NewReader(`{"Filter":{"GroupIds":["g"]},"PageNumber":1,"PageSize":10}`))
 	Proxy().ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusForbidden, rec.Code)

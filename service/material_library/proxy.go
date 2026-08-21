@@ -5,7 +5,9 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
@@ -31,6 +33,7 @@ const (
 	ctxGroupID
 	ctxCallbackURL
 	ctxProjectName
+	ctxCustomCallback
 )
 
 // Proxy 返回 /api/material/{Action} 的处理器：把路径段映射为 Action，经当前 provider 执行，
@@ -53,6 +56,24 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "material library read request body failed", http.StatusBadRequest)
 		return
 	}
+	// 对外真人会话：客户自定义回调 → 替换为网关回调（存原值，认证后 302 到客户），
+	// 保证网关能拿到认证结果记录归属。管理端（无自定义回调）不替换。
+	if action == "CreateVisualValidateSession" {
+		rewritten, customCallback := rewriteVisualCallbackBody(r, body)
+		body = rewritten
+		if customCallback != "" {
+			ctx := r.Context()
+			ctx = context.WithValue(ctx, ctxCustomCallback, customCallback)
+			ctx = context.WithValue(ctx, ctxCallbackURL, gatewayCallbackURL(r))
+			r = r.WithContext(ctx)
+		}
+	}
+	// 对外查询分组列表：查本地归属表（按 API key 用户隔离，避免越权看到他人组），
+	// 保持 ARK 信封格式返回，不查询上游。
+	if action == "ListAssetGroups" {
+		handleLocalAssetGroups(w, r, body)
+		return
+	}
 	resp, err := currentProvider().DoAction(r.Context(), action, r.URL.Query(), body)
 	if err != nil {
 		// 不把 Go 内部错误细节返回给客户端，细节进带 trace_id 的后端日志。
@@ -68,6 +89,124 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(resp.StatusCode)
 	_, _ = w.Write(resp.Body)
+}
+
+// rewriteVisualCallbackBody 对外真人会话的请求体改写：客户自定义 CallbackURL →
+// 替换为网关回调（保证网关拿到认证结果），返回改写后 body 与客户原回调。
+// 客户未传或传的已是网关回调时不改写（返回原 body、customCallback 空）。
+func rewriteVisualCallbackBody(r *http.Request, body []byte) ([]byte, string) {
+	var m map[string]any
+	if err := common.Unmarshal(body, &m); err != nil {
+		return body, ""
+	}
+	clientCB, _ := m["CallbackURL"].(string)
+	if clientCB == "" {
+		return body, ""
+	}
+	gatewayCB := gatewayCallbackURL(r)
+	if clientCB == gatewayCB {
+		return body, ""
+	}
+	m["CallbackURL"] = gatewayCB
+	rewritten, err := common.Marshal(m)
+	if err != nil {
+		return body, ""
+	}
+	return rewritten, clientCB
+}
+
+// gatewayCallbackURL 网关真人认证回调地址：优先配置 callback_url，未配置拼请求 host。
+func gatewayCallbackURL(r *http.Request) string {
+	if cb := material_setting.GetConfig().CallbackURL; cb != "" {
+		return cb
+	}
+	scheme := "http"
+	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+		scheme = "https"
+	}
+	return scheme + "://" + r.Host + "/v1/material/h5-callback"
+}
+
+// AssetGroupItem 对外 ListAssetGroups 本地查询的组条目（ARK 信封 Items 字段）。
+type AssetGroupItem struct {
+	Id         string `json:"Id"`
+	Name       string `json:"Name"`
+	GroupType  string `json:"GroupType"`
+	CreateTime string `json:"CreateTime"`
+	UpdateTime string `json:"UpdateTime"`
+}
+
+// ListAssetGroupsResult 对外 ListAssetGroups 本地查询的 Result 信封。
+type ListAssetGroupsResult struct {
+	TotalCount int              `json:"TotalCount"`
+	Items      []AssetGroupItem `json:"Items"`
+	PageNumber int              `json:"PageNumber"`
+	PageSize   int              `json:"PageSize"`
+}
+
+// handleLocalAssetGroups 对外 ListAssetGroups 的本地实现：查当前用户（API key 所属）在当前
+// provider 下的归属组，按 Filter.GroupType 过滤 + 分页，包装成 ARK 信封返回。
+// 不查询上游——素材凭证共享，透传会越权看到其他租户的组。
+func handleLocalAssetGroups(w http.ResponseWriter, r *http.Request, body []byte) {
+	var req struct {
+		Filter struct {
+			GroupType string `json:"GroupType"`
+		} `json:"Filter"`
+		PageNumber int `json:"PageNumber"`
+		PageSize   int `json:"PageSize"`
+	}
+	_ = common.Unmarshal(body, &req) // 解析失败按默认分页返回
+	page, pageSize := 1, 20
+	if req.PageNumber >= 1 {
+		page = req.PageNumber
+	}
+	if req.PageSize >= 1 && req.PageSize <= 100 {
+		pageSize = req.PageSize
+	}
+	userID, _ := r.Context().Value(ctxUserID).(int)
+	groups, err := model.GetMaterialGroups(userID, material_setting.GetConfig().Provider, req.Filter.GroupType)
+	if err != nil {
+		logger.LogError(r.Context(), "list local asset groups failed: "+err.Error())
+		http.Error(w, "list asset groups failed", http.StatusInternalServerError)
+		return
+	}
+	total := len(groups)
+	start := (page - 1) * pageSize
+	if start > total {
+		start = total
+	}
+	end := start + pageSize
+	if end > total {
+		end = total
+	}
+	items := make([]AssetGroupItem, 0, end-start)
+	for _, g := range groups[start:end] {
+		items = append(items, AssetGroupItem{
+			Id:         g.SeedanceAssetGroupId,
+			Name:       g.Name,
+			GroupType:  g.GroupType,
+			CreateTime: time.Unix(g.CreatedAt, 0).UTC().Format(time.RFC3339),
+			UpdateTime: time.Unix(g.UpdatedAt, 0).UTC().Format(time.RFC3339),
+		})
+	}
+	envelope := map[string]any{
+		"ResponseMetadata": map[string]any{
+			"RequestId": "req_local_" + strconv.Itoa(userID) + "_" + strconv.Itoa(page),
+			"Action":    "ListAssetGroups",
+			"Version":   arkVersion,
+			"Service":   "ark",
+			"Region":    material_setting.GetConfig().VolcengineRegion,
+		},
+		"Result": ListAssetGroupsResult{TotalCount: total, Items: items, PageNumber: page, PageSize: pageSize},
+	}
+	data, err := common.Marshal(envelope)
+	if err != nil {
+		http.Error(w, "list asset groups failed", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(data)
 }
 
 // observeOwnership 观察上游响应：仅在创建/删除素材组且成功时更新归属表。
@@ -96,8 +235,10 @@ func observeOwnership(ctx context.Context, resp *Response) {
 			return
 		}
 		projectName, _ := ctx.Value(ctxProjectName).(string)
+		customCallback, _ := ctx.Value(ctxCustomCallback).(string)
 		// 代理路径无组名（认证后回调才拿 GroupId），name 留空；管理端点直连时由 controller 传入。
-		if err := model.AddVisualValidateSession(userID, material_setting.GetConfig().Provider, "", out.Result.BytedToken, out.Result.H5Link, callbackURL, projectName); err != nil {
+		// callbackURL 是发给上游的网关回调；customCallback 是客户自定义原回调（认证后 302 到它）。
+		if err := model.AddVisualValidateSession(userID, material_setting.GetConfig().Provider, "", out.Result.BytedToken, out.Result.H5Link, callbackURL, projectName, customCallback); err != nil {
 			logger.LogError(ctx, "material library record visual session failed: "+err.Error())
 		}
 		return
