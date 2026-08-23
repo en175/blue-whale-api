@@ -8,6 +8,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	materiallib "github.com/QuantumNous/new-api/service/material_library"
 	"github.com/QuantumNous/new-api/setting/material_setting"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 )
@@ -80,6 +81,10 @@ func CreateMaterialGroup(c *gin.Context) {
 	}
 	if req.Name == "" || req.GroupType == "" {
 		common.ApiErrorMsg(c, "name and group_type are required")
+		return
+	}
+	if utf8.RuneCountInString(req.Name) > 255 {
+		common.ApiErrorMsg(c, "name is too long")
 		return
 	}
 
@@ -236,6 +241,10 @@ func CreateVisualValidateSession(c *gin.Context) {
 	}
 	if req.Name == "" {
 		common.ApiErrorMsg(c, "name is required")
+		return
+	}
+	if utf8.RuneCountInString(req.Name) > 255 {
+		common.ApiErrorMsg(c, "name is too long")
 		return
 	}
 	callbackURL := material_setting.GetConfig().CallbackURL

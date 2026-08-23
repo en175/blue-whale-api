@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
@@ -82,6 +83,30 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	if action == "GetVisualValidateResult" {
 		handleGetVisualValidateResult(w, r, body)
 		return
+	}
+	// 对外组操作/素材写入：校验 API key 用户归属（防 IDOR，只能操作自己归属的组）。
+	switch action {
+	case "GetAssetGroup", "UpdateAssetGroup", "DeleteAssetGroup":
+		if !groupOwnedByCurrentUser(r, body) {
+			writeMaterialNotFound(w)
+			return
+		}
+	case "ListAssets":
+		if listAssetsGroupsEmpty(r, body) {
+			// 空 GroupIds 会列出共享账号下全部素材，属越权，直接拒绝。
+			writeMaterialBadRequest(w)
+			return
+		}
+		if !groupsOwnedByCurrentUser(r, body) {
+			writeMaterialNotFound(w)
+			return
+		}
+	case "CreateAsset":
+		// 上传素材：校验目标组归属（请求体 GroupId），防止向他人组注入素材。
+		if !createAssetGroupOwned(r, body) {
+			writeMaterialNotFound(w)
+			return
+		}
 	}
 	resp, err := currentProvider().DoAction(r.Context(), action, r.URL.Query(), body)
 	if err != nil {
@@ -335,6 +360,94 @@ func buildVisualValidateResult(provider, groupId string) []byte {
 	return data
 }
 
+// groupOwnedByCurrentUser 校验组操作（Get/Update/DeleteAssetGroup）请求体 Id 属于当前 API key 用户
+// （防 IDOR）。无 Id 时放行，交上游报 InvalidParameter。
+func groupOwnedByCurrentUser(r *http.Request, body []byte) bool {
+	var req struct {
+		Id string `json:"Id"`
+	}
+	_ = common.Unmarshal(body, &req)
+	if req.Id == "" {
+		return true
+	}
+	userID, _ := r.Context().Value(ctxUserID).(int)
+	owned, _ := model.UserMaterialGroupExists(userID, material_setting.GetConfig().Provider, req.Id)
+	return owned
+}
+
+// groupsOwnedByCurrentUser 校验 ListAssets 的 Filter.GroupIds 全部属于当前 API key 用户。
+func groupsOwnedByCurrentUser(r *http.Request, body []byte) bool {
+	var req struct {
+		Filter struct {
+			GroupIds []string `json:"GroupIds"`
+		} `json:"Filter"`
+	}
+	_ = common.Unmarshal(body, &req)
+	if len(req.Filter.GroupIds) == 0 {
+		return true
+	}
+	userID, _ := r.Context().Value(ctxUserID).(int)
+	provider := material_setting.GetConfig().Provider
+	for _, gid := range req.Filter.GroupIds {
+		owned, _ := model.UserMaterialGroupExists(userID, provider, gid)
+		if !owned {
+			return false
+		}
+	}
+	return true
+}
+
+// listAssetsGroupsEmpty 判断 ListAssets 的 Filter.GroupIds 是否为空（空则上游会列出全部素材，须拒绝）。
+func listAssetsGroupsEmpty(r *http.Request, body []byte) bool {
+	var req struct {
+		Filter struct {
+			GroupIds []string `json:"GroupIds"`
+		} `json:"Filter"`
+	}
+	_ = common.Unmarshal(body, &req)
+	return len(req.Filter.GroupIds) == 0
+}
+
+// createAssetGroupOwned 校验上传素材（CreateAsset）的目标组归属，防止向他人组注入素材。
+func createAssetGroupOwned(r *http.Request, body []byte) bool {
+	var req struct {
+		GroupId string `json:"GroupId"`
+	}
+	_ = common.Unmarshal(body, &req)
+	if req.GroupId == "" {
+		return true // 无目标组，交上游报 InvalidParameter
+	}
+	userID, _ := r.Context().Value(ctxUserID).(int)
+	owned, _ := model.UserMaterialGroupExists(userID, material_setting.GetConfig().Provider, req.GroupId)
+	return owned
+}
+
+// writeMaterialNotFound 返回上游风格 404 错误信封（不区分不存在/无权，避免探测）。
+func writeMaterialNotFound(w http.ResponseWriter) {
+	envelope := map[string]any{
+		"ResponseMetadata": map[string]any{
+			"Error": map[string]any{"Code": "NotFound", "Message": "resource not found"},
+		},
+	}
+	data, _ := common.Marshal(envelope)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusNotFound)
+	_, _ = w.Write(data)
+}
+
+// writeMaterialBadRequest 返回上游风格 400 错误信封（请求参数非法，如 ListAssets 空 GroupIds）。
+func writeMaterialBadRequest(w http.ResponseWriter) {
+	envelope := map[string]any{
+		"ResponseMetadata": map[string]any{
+			"Error": map[string]any{"Code": "InvalidParameter", "Message": "invalid parameter"},
+		},
+	}
+	data, _ := common.Marshal(envelope)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusBadRequest)
+	_, _ = w.Write(data)
+}
+
 // observeOwnership 观察上游响应：仅在创建/删除素材组且成功时更新归属表。
 // 只有标记了记录操作的请求才携带记录信息（RecordContext 已提取）。
 func observeOwnership(ctx context.Context, resp *Response) {
@@ -376,6 +489,9 @@ func observeOwnership(ctx context.Context, resp *Response) {
 		projectName, _ := ctx.Value(ctxProjectName).(string)
 		customCallback, _ := ctx.Value(ctxCustomCallback).(string)
 		name, _ := ctx.Value(ctxGroupName).(string)
+		if utf8.RuneCountInString(name) > 255 {
+			name = string([]rune(name)[:255]) // 按字符截断，避免切坏多字节 UTF-8 导致落库失败
+		}
 		// 组名取请求体 Name（调用方可选传入，上游忽略但不报错），认证后用作归属组名；无则留空。
 		// callbackURL 是发给上游的网关回调；customCallback 是客户自定义原回调（认证后 302 到它）。
 		if err := model.AddVisualValidateSession(userID, material_setting.GetConfig().Provider, name, bytedToken, h5Link, callbackURL, projectName, customCallback); err != nil {
@@ -395,6 +511,9 @@ func observeOwnership(ctx context.Context, resp *Response) {
 			return
 		}
 		name, _ := ctx.Value(ctxGroupName).(string)
+		if utf8.RuneCountInString(name) > 255 {
+			name = string([]rune(name)[:255]) // 按字符截断，避免切坏多字节 UTF-8 导致落库失败
+		}
 		if err := model.AddUserMaterialGroup(userID, material_setting.GetConfig().Provider, out.Result.Id, name, groupType); err != nil {
 			logger.LogError(ctx, "material library record group failed: "+err.Error())
 		}
