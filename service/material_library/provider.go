@@ -6,12 +6,17 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/material_setting"
 
 	"github.com/volcengine/volc-sdk-golang/base"
 )
+
+// materialUpstreamTimeout 素材上游调用超时。GetHttpClient 默认无超时（RelayTimeout=0），
+// 无效 URL 等上游挂起时由该超时兜底快速失败，避免客户端无限等待。
+const materialUpstreamTimeout = 30 * time.Second
 
 // Provider 抽象素材库上游：执行一个 Action，返回上游完整响应。
 // 各 provider 负责自己的地址映射与鉴权（tokenhub=Bearer，volcengine=SigV4 签名）。
@@ -46,6 +51,8 @@ func providerByName(name string) Provider {
 type tokenhubProvider struct{}
 
 func (tokenhubProvider) DoAction(ctx context.Context, action string, query url.Values, body []byte) (*Response, error) {
+	ctx, cancel := context.WithTimeout(ctx, materialUpstreamTimeout)
+	defer cancel()
 	req, err := tokenhubProvider{}.newRequest(ctx, action, query, body)
 	if err != nil {
 		return nil, err
@@ -96,6 +103,8 @@ func (tokenhubProvider) newRequest(ctx context.Context, action string, query url
 type volcengineProvider struct{}
 
 func (volcengineProvider) DoAction(ctx context.Context, action string, query url.Values, body []byte) (*Response, error) {
+	ctx, cancel := context.WithTimeout(ctx, materialUpstreamTimeout)
+	defer cancel()
 	req, err := volcengineProvider{}.newRequest(ctx, action, query, body)
 	if err != nil {
 		return nil, err

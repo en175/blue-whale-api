@@ -98,7 +98,8 @@ func TestProxy_forwardsUpstreamErrorVerbatim(t *testing.T) {
 	setConfig(t, fmt.Sprintf(`{"enabled":true,"ak":"pak_x","sk":"psk_y","base_url":%q}`, upstream.URL))
 
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/material/ListAssets", strings.NewReader(`{"Filter":{"GroupIds":["g"]},"PageNumber":1,"PageSize":10}`))
+	// 用 GetAsset（素材单操作，尚未做归属校验的透传 Action）验证上游错误信封原样透传
+	req := httptest.NewRequest(http.MethodPost, "/api/material/GetAsset", strings.NewReader(`{"Id":"asset-x"}`))
 	Proxy().ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusForbidden, rec.Code)

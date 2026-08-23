@@ -353,3 +353,55 @@ func TestProxy_recordsVisualValidateSessionName(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "我的真人组", s.Name)
 }
+
+// TestProxy_groupOperationOwnershipIsolation 验证对外组操作（Get/Update/DeleteAssetGroup）与
+// ListAssets 的归属校验（防 IDOR）：他人组返回 404（不查上游），本人组正常放行。
+func TestProxy_groupOperationOwnershipIsolation(t *testing.T) {
+	model.DB = openMaterialRecordDB(t)
+	require.NoError(t, model.AddUserMaterialGroup(7, "tokenhub", "group-other", "他人组", "AIGC"))
+	require.NoError(t, model.AddUserMaterialGroup(42, "tokenhub", "group-mine", "我的组", "AIGC"))
+	setConfig(t, `{"enabled":true,"ak":"pak_x","sk":"psk_y","base_url":"https://upstream.invalid"}`)
+
+	// 他人组 → 404（校验拦截，不触发上游）
+	c := newRecordContext(t, "/api/material/GetAssetGroup", `{"Id":"group-other"}`)
+	rec := httptest.NewRecorder()
+	Proxy().ServeHTTP(rec, c.Request)
+	require.Equal(t, http.StatusNotFound, rec.Code)
+
+	// 本人组 → 校验通过放行（上游不可达 → 502 而非 404，证明未拦截）
+	c2 := newRecordContext(t, "/api/material/GetAssetGroup", `{"Id":"group-mine"}`)
+	rec2 := httptest.NewRecorder()
+	Proxy().ServeHTTP(rec2, c2.Request)
+	assert.NotEqual(t, http.StatusNotFound, rec2.Code)
+
+	// DeleteAssetGroup 他人组 → 404
+	c3 := newRecordContext(t, "/api/material/DeleteAssetGroup", `{"Id":"group-other"}`)
+	rec3 := httptest.NewRecorder()
+	Proxy().ServeHTTP(rec3, c3.Request)
+	require.Equal(t, http.StatusNotFound, rec3.Code)
+
+	// ListAssets 含他人组 → 404
+	c4 := newRecordContext(t, "/api/material/ListAssets", `{"Filter":{"GroupIds":["group-other"]},"PageNumber":1,"PageSize":10}`)
+	rec4 := httptest.NewRecorder()
+	Proxy().ServeHTTP(rec4, c4.Request)
+	require.Equal(t, http.StatusNotFound, rec4.Code)
+}
+
+// TestProxy_assetWriteOwnership 验证 CreateAsset 目标组归属校验与 ListAssets 空 GroupIds 拒绝。
+func TestProxy_assetWriteOwnership(t *testing.T) {
+	model.DB = openMaterialRecordDB(t)
+	require.NoError(t, model.AddUserMaterialGroup(7, "tokenhub", "group-other", "他人组", "AIGC"))
+	setConfig(t, `{"enabled":true,"ak":"pak_x","sk":"psk_y","base_url":"https://upstream.invalid"}`)
+
+	// CreateAsset 到他人组 → 404
+	c := newRecordContext(t, "/api/material/CreateAsset", `{"GroupId":"group-other","URL":"https://x","Name":"a","AssetType":"Image"}`)
+	rec := httptest.NewRecorder()
+	Proxy().ServeHTTP(rec, c.Request)
+	require.Equal(t, http.StatusNotFound, rec.Code)
+
+	// ListAssets 空 GroupIds → 400
+	c2 := newRecordContext(t, "/api/material/ListAssets", `{"Filter":{},"PageNumber":1,"PageSize":10}`)
+	rec2 := httptest.NewRecorder()
+	Proxy().ServeHTTP(rec2, c2.Request)
+	require.Equal(t, http.StatusBadRequest, rec2.Code)
+}
