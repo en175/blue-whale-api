@@ -405,3 +405,47 @@ func TestProxy_assetWriteOwnership(t *testing.T) {
 	Proxy().ServeHTTP(rec2, c2.Request)
 	require.Equal(t, http.StatusBadRequest, rec2.Code)
 }
+
+// TestProxy_nameXSSRejected 验证建组/真人会话名称含 HTML 危险字符（<>）被拒绝（防存储型 XSS）。
+func TestProxy_nameXSSRejected(t *testing.T) {
+	model.DB = openMaterialRecordDB(t)
+	setConfig(t, `{"enabled":true,"ak":"pak_x","sk":"psk_y","base_url":"https://upstream.invalid"}`)
+
+	// 代理 CreateAssetGroup 含 <> → 400
+	c := newRecordContext(t, "/api/material/CreateAssetGroup", `{"Name":"<script>alert(1)</script>","GroupType":"AIGC"}`)
+	rec := httptest.NewRecorder()
+	Proxy().ServeHTTP(rec, c.Request)
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+
+	// 代理 CreateVisualValidateSession 含 <> → 400
+	c2 := newRecordContext(t, "/api/material/CreateVisualValidateSession", `{"Name":"<script>alert(1)</script>","CallbackURL":"https://gw.example/cb"}`)
+	rec2 := httptest.NewRecorder()
+	Proxy().ServeHTTP(rec2, c2.Request)
+	require.Equal(t, http.StatusBadRequest, rec2.Code)
+}
+
+// TestProxy_getVisualValidateResult_tokenhubInternalError 验证 tokenhub 未认证（上游 500 InternalError，
+// 有本地会话）→ 返回 200 + 空 GroupId 继续轮询（非 502）。
+func TestProxy_getVisualValidateResult_tokenhubInternalError(t *testing.T) {
+	model.DB = openMaterialRecordDB(t)
+	require.NoError(t, model.AddVisualValidateSession(42, "tokenhub", "真人组1", "bt-ie", "https://h5/1", "https://gw/cb", "default", ""))
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"ResponseError":{"Code":"InternalError","Message":"internal error"}}`))
+	}))
+	defer upstream.Close()
+	setConfig(t, fmt.Sprintf(`{"enabled":true,"ak":"pak_x","sk":"psk_y","base_url":%q}`, upstream.URL))
+
+	c := newRecordContext(t, "/api/material/GetVisualValidateResult", `{"BytedToken":"bt-ie"}`)
+	rec := httptest.NewRecorder()
+	Proxy().ServeHTTP(rec, c.Request)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var direct struct {
+		GroupId string `json:"GroupId"`
+	}
+	require.NoError(t, common.Unmarshal(rec.Body.Bytes(), &direct))
+	assert.Equal(t, "", direct.GroupId)
+}
