@@ -2,6 +2,7 @@ package controller
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
@@ -85,6 +86,10 @@ func CreateMaterialGroup(c *gin.Context) {
 	}
 	if utf8.RuneCountInString(req.Name) > 255 {
 		common.ApiErrorMsg(c, "name is too long")
+		return
+	}
+	if strings.ContainsAny(req.Name, "<>") {
+		common.ApiErrorMsg(c, "name contains invalid characters")
 		return
 	}
 
@@ -245,6 +250,10 @@ func CreateVisualValidateSession(c *gin.Context) {
 	}
 	if utf8.RuneCountInString(req.Name) > 255 {
 		common.ApiErrorMsg(c, "name is too long")
+		return
+	}
+	if strings.ContainsAny(req.Name, "<>") {
+		common.ApiErrorMsg(c, "name contains invalid characters")
 		return
 	}
 	callbackURL := material_setting.GetConfig().CallbackURL

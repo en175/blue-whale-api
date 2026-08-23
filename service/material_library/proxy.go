@@ -107,6 +107,12 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 			writeMaterialNotFound(w)
 			return
 		}
+	case "CreateAssetGroup", "CreateVisualValidateSession":
+		// 建组/真人会话：名称含 HTML 危险字符（<>）拒绝，防 XSS 存储。
+		if createAssetGroupNameInvalid(r, body) {
+			writeMaterialBadRequest(w)
+			return
+		}
 	}
 	resp, err := currentProvider().DoAction(r.Context(), action, r.URL.Query(), body)
 	if err != nil {
@@ -311,8 +317,11 @@ func handleGetVisualValidateResult(w http.ResponseWriter, r *http.Request, body 
 	groupId, err := GetVisualValidateResult(r.Context(), provider, req.BytedToken, session.ProjectName)
 	if err != nil {
 		var arkErr *ArkError
-		if errors.As(err, &arkErr) && arkErr.Code == "ValidatePending" {
-			// 认证未完成：返回 200 + 空 GroupId（与 tokenhub 200+空契约一致），客户端继续轮询。
+		// 认证未完成：返回 200 + 空 GroupId（与 tokenhub 200+空契约一致），客户端继续轮询。
+		// 火山返回 ValidatePending；tokenhub 对未认证/认证中返回 500 InternalError（有本地会话即视为未完成）。
+		// InternalError 仅限 tokenhub（有本地会话），避免掩盖火山真实内部故障。
+		if errors.As(err, &arkErr) && (arkErr.Code == "ValidatePending" ||
+			(arkErr.Code == "InternalError" && provider == material_setting.ProviderTokenhub)) {
 			writeVisualValidateResult(w, provider, "")
 			return
 		}
@@ -584,4 +593,13 @@ func readJSONBodyFields(c *gin.Context, fields ...string) map[string]string {
 // readJSONBodyField 读取请求体 JSON 的单个字段，body 原样装回。
 func readJSONBodyField(c *gin.Context, field string) string {
 	return readJSONBodyFields(c, field)[field]
+}
+
+// createAssetGroupNameInvalid 判断建组名称含 HTML 危险字符（< >），拒绝防 XSS 存储。
+func createAssetGroupNameInvalid(r *http.Request, body []byte) bool {
+	var req struct {
+		Name string `json:"Name"`
+	}
+	_ = common.Unmarshal(body, &req)
+	return strings.ContainsAny(req.Name, "<>")
 }
