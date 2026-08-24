@@ -43,7 +43,7 @@ ADR 0005 以透明反向代理接入 ai-tokenhub 素材库（火山 ARK 兼容�
 - 认证未完成：火山 ValidatePending/NotFound、tokenhub 500 InternalError（有本地会话且 InternalError 限定 tokenhub）→ 200 空
 
 ### 5. 输入安全与超时
-- **XSS 输入过滤**：组名/真人会话名含 `<`/`>` 拒绝（管理端 + 代理 CreateAssetGroup/CreateVisualValidateSession）；名称长度 rune 计数 ≤255 + 按字符截断（防切坏多字节 UTF-8）
+- **XSS 输入过滤**：组名/真人会话名含 `<`/`>` 拒绝（管理端 + 代理 CreateAssetGroup/CreateVisualValidateSession）；名称长度 rune 计数 ≤255，管理端与代理**一致拒绝**（不再落库截断）——双渠道在请求层拦截后，`user_material_groups` / 会话记录不会收到超长名，镜像表侧无需再截断（曾有的 255 rune 截断为不可达代码，已移除）。代理侧空名放行（Name 可选，上游忽略），管理端空名必填
 - **上游超时**：`GetHttpClient` 默认无超时（`RelayTimeout=0`），素材上游调用加 30s 超时兜底（无效 URL 快速失败）
 
 ## 理由
@@ -52,7 +52,7 @@ ADR 0005 以透明反向代理接入 ai-tokenhub 素材库（火山 ARK 兼容�
 - **统一格式**：下游只需解析一种格式；错误统一 `ResponseError`（tokenhub 契约）。透传契约牺牲（客户端不再见上游原样信封），换接口文档统一。
 - **归属隔离**：素材凭证共享（单租户），本地归属表是唯一租户隔离手段；fail-closed 不泄露资源是否存在。
 - **回调中转**：客户自有 CallbackURL 会绕开网关，替换为网关回调保证拿到认证结果 + 302 回客户（成功/失败都 302）。
-- **输入安全**：XSS 输出侧靠前端转义（React 默认），输入过滤为第一道防线；30s 超时防上游挂起。
+- **输入安全**：XSS 输出侧靠前端转义（React 默认），输入过滤为第一道防线；长度拒绝保证镜像表列宽安全（截断改为拒绝，行为可预期，不留死代码）；30s 超时防上游挂起。
 
 ## 影响
 

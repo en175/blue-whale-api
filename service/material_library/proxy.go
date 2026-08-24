@@ -476,9 +476,7 @@ func observeOwnership(ctx context.Context, resp *Response) {
 		projectName, _ := ctx.Value(ctxProjectName).(string)
 		customCallback, _ := ctx.Value(ctxCustomCallback).(string)
 		name, _ := ctx.Value(ctxGroupName).(string)
-		if utf8.RuneCountInString(name) > 255 {
-			name = string([]rune(name)[:255]) // 按字符截断，避免切坏多字节 UTF-8 导致落库失败
-		}
+		// 组名 ≤255 rune 由 createAssetGroupNameInvalid 在请求层保证（见 ADR 0007），此处不再截断。
 		// 组名取请求体 Name（调用方可选传入，上游忽略但不报错），认证后用作归属组名；无则留空。
 		// callbackURL 是发给上游的网关回调；customCallback 是客户自定义原回调（认证后 302 到它）。
 		if err := model.AddVisualValidateSession(userID, material_setting.GetConfig().Provider, name, bytedToken, h5Link, callbackURL, projectName, customCallback); err != nil {
@@ -498,9 +496,7 @@ func observeOwnership(ctx context.Context, resp *Response) {
 			return
 		}
 		name, _ := ctx.Value(ctxGroupName).(string)
-		if utf8.RuneCountInString(name) > 255 {
-			name = string([]rune(name)[:255]) // 按字符截断，避免切坏多字节 UTF-8 导致落库失败
-		}
+		// 组名 ≤255 rune 由 createAssetGroupNameInvalid 在请求层保证（见 ADR 0007），此处不再截断。
 		if err := model.AddUserMaterialGroup(userID, material_setting.GetConfig().Provider, out.Result.Id, name, groupType); err != nil {
 			logger.LogError(ctx, "material library record group failed: "+err.Error())
 		}
@@ -573,13 +569,14 @@ func readJSONBodyField(c *gin.Context, field string) string {
 	return readJSONBodyFields(c, field)[field]
 }
 
-// createAssetGroupNameInvalid 判断建组名称含 HTML 危险字符（< >），拒绝防 XSS 存储。
+// createAssetGroupNameInvalid 判断建组名称非法：含 HTML 危险字符（< >）或超过 255 rune，
+// 拒绝防 XSS 存储与镜像表列宽溢出。管理端已有一致校验（controller/material_console.go）。
 func createAssetGroupNameInvalid(r *http.Request, body []byte) bool {
 	var req struct {
 		Name string `json:"Name"`
 	}
 	_ = common.Unmarshal(body, &req)
-	return strings.ContainsAny(req.Name, "<>")
+	return strings.ContainsAny(req.Name, "<>") || utf8.RuneCountInString(req.Name) > 255
 }
 
 // normalizeUpstreamResponse 把上游响应统一成 tokenhub 直接格式（去掉火山 ResponseMetadata/Result 信封），

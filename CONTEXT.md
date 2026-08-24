@@ -79,3 +79,7 @@ _Avoid_: 文件、附件
 **素材状态**:
 Active（就绪）、Processing（处理中）、Failed（失败）。状态以上游为准，本地不镜像。
 _Avoid_: 状态码
+
+**组名校验（group name validation）**:
+对素材组名/真人会话名的输入约束：rune 计数 ≤ 255、不含 HTML 危险字符（`<` `>`），由代理 API（`CreateAssetGroup`/`CreateVisualValidateSession`）与管理端一致强制，超长/危险字符一律拒绝。代理侧空名放行（透传语义，上游忽略），管理端空名拒绝。
+_Avoid_: 名称规则、名字长度限制

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -161,4 +162,25 @@ func TestMaterialConsole_rejectsUnownedGroup(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code)
 	assert.Contains(t, w.Body.String(), "material group not found or not owned")
+}
+
+// TestMaterialConsole_rejectsOverlongGroupName 验证管理端建组名超过 255 rune 被拒
+// （与代理侧一致的组名校验：≤255 rune、不含 <>、管理端额外要求非空）。
+func TestMaterialConsole_rejectsOverlongGroupName(t *testing.T) {
+	openMaterialConsoleDB(t)
+
+	r := gin.New()
+	r.POST("/materials/groups", func(c *gin.Context) {
+		c.Set("role", common.RoleAdminUser)
+		c.Set("id", 1)
+		CreateMaterialGroup(c)
+	})
+
+	longName := strings.Repeat("中", 256)
+	body := fmt.Sprintf(`{"name":%q,"group_type":"AIGC"}`, longName)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/materials/groups", strings.NewReader(body)))
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), "name is too long")
 }
