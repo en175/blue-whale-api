@@ -2,7 +2,6 @@ package controller
 
 import (
 	"strconv"
-	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
@@ -104,7 +103,7 @@ func CreateMaterialGroup(c *gin.Context) {
 		common.ApiErrorMsg(c, "name is too long")
 		return
 	}
-	if strings.ContainsAny(req.Name, "<>") {
+	if materiallib.MaterialNameInvalid(req.Name) {
 		common.ApiErrorMsg(c, "name contains invalid characters")
 		return
 	}
@@ -161,6 +160,14 @@ func CreateMaterialAsset(c *gin.Context) {
 		common.ApiErrorMsg(c, "url, name and asset_type are required")
 		return
 	}
+	if utf8.RuneCountInString(req.Name) > 255 {
+		common.ApiErrorMsg(c, "name is too long")
+		return
+	}
+	if materiallib.MaterialNameInvalid(req.Name) {
+		common.ApiErrorMsg(c, "name contains invalid characters")
+		return
+	}
 
 	assetID, err := materiallib.CreateAsset(c.Request.Context(), groupID, req.URL, req.Name, req.AssetType)
 	if err != nil {
@@ -185,6 +192,14 @@ func UpdateMaterialAsset(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&req); err != nil || req.Name == "" {
 		common.ApiErrorMsg(c, "name is required")
+		return
+	}
+	if utf8.RuneCountInString(req.Name) > 255 {
+		common.ApiErrorMsg(c, "name is too long")
+		return
+	}
+	if materiallib.MaterialNameInvalid(req.Name) {
+		common.ApiErrorMsg(c, "name contains invalid characters")
 		return
 	}
 
@@ -268,7 +283,7 @@ func CreateVisualValidateSession(c *gin.Context) {
 		common.ApiErrorMsg(c, "name is too long")
 		return
 	}
-	if strings.ContainsAny(req.Name, "<>") {
+	if materiallib.MaterialNameInvalid(req.Name) {
 		common.ApiErrorMsg(c, "name contains invalid characters")
 		return
 	}

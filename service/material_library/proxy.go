@@ -87,9 +87,18 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	// 对外组操作/素材写入：校验 API key 用户归属（防 IDOR，只能操作自己归属的组）。
 	switch action {
-	case "GetAssetGroup", "UpdateAssetGroup", "DeleteAssetGroup":
+	case "GetAssetGroup", "DeleteAssetGroup":
 		if !groupOwnedByCurrentUser(r, body) {
 			writeMaterialNotFound(w)
+			return
+		}
+	case "UpdateAssetGroup":
+		if !groupOwnedByCurrentUser(r, body) {
+			writeMaterialNotFound(w)
+			return
+		}
+		if materialNameInvalid(body) {
+			writeMaterialBadRequest(w)
 			return
 		}
 	case "ListAssets":
@@ -108,9 +117,19 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 			writeMaterialNotFound(w)
 			return
 		}
+		if materialNameInvalid(body) {
+			writeMaterialBadRequest(w)
+			return
+		}
+	case "UpdateAsset":
+		if materialNameInvalid(body) {
+			writeMaterialBadRequest(w)
+			return
+		}
 	case "CreateAssetGroup", "CreateVisualValidateSession":
-		// 建组/真人会话：名称含 HTML 危险字符（<>）拒绝，防 XSS 存储。
-		if createAssetGroupNameInvalid(r, body) {
+		// 建组/真人会话：名称非法（超长/HTML 危险字符）拒绝，
+		// 防镜像表列宽溢出与 XSS 存储。
+		if materialNameInvalid(body) {
 			writeMaterialBadRequest(w)
 			return
 		}
@@ -490,7 +509,7 @@ func observeOwnership(ctx context.Context, resp *Response) {
 		projectName, _ := ctx.Value(ctxProjectName).(string)
 		customCallback, _ := ctx.Value(ctxCustomCallback).(string)
 		name, _ := ctx.Value(ctxGroupName).(string)
-		// 组名 ≤255 rune 由 createAssetGroupNameInvalid 在请求层保证（见 ADR 0007），此处不再截断。
+		// 组名 ≤255 rune 由 materialNameInvalid 在请求层保证（见 ADR 0007），此处不再截断。
 		// 组名取请求体 Name（调用方可选传入，上游忽略但不报错），认证后用作归属组名；无则留空。
 		// callbackURL 是发给上游的网关回调；customCallback 是客户自定义原回调（认证后 302 到它）。
 		if err := model.AddVisualValidateSession(userID, material_setting.GetConfig().Provider, name, bytedToken, h5Link, callbackURL, projectName, customCallback); err != nil {
@@ -510,7 +529,7 @@ func observeOwnership(ctx context.Context, resp *Response) {
 			return
 		}
 		name, _ := ctx.Value(ctxGroupName).(string)
-		// 组名 ≤255 rune 由 createAssetGroupNameInvalid 在请求层保证（见 ADR 0007），此处不再截断。
+		// 组名 ≤255 rune 由 materialNameInvalid 在请求层保证（见 ADR 0007），此处不再截断。
 		if err := model.AddUserMaterialGroup(userID, material_setting.GetConfig().Provider, out.Result.Id, name, groupType); err != nil {
 			logger.LogError(ctx, "material library record group failed: "+err.Error())
 		}
@@ -583,14 +602,21 @@ func readJSONBodyField(c *gin.Context, field string) string {
 	return readJSONBodyFields(c, field)[field]
 }
 
-// createAssetGroupNameInvalid 判断建组名称非法：含 HTML 危险字符（< >）或超过 255 rune，
-// 拒绝防 XSS 存储与镜像表列宽溢出。管理端已有一致校验（controller/material_console.go）。
-func createAssetGroupNameInvalid(r *http.Request, body []byte) bool {
+// MaterialNameInvalid 判断名称字段非法（对外代理与管理端共用）：
+//   - 超过 255 rune：防镜像表列宽溢出；超长透传上游 tokenhub 会 500（未优雅拒绝）
+//   - 含 HTML 危险字符 < >：防 XSS 存储
+// SQL 注入负载不在此校验：网关是透明代理，注入防御在上游后端，网关照常透传（错误统一归一化处理）。
+func MaterialNameInvalid(name string) bool {
+	return utf8.RuneCountInString(name) > 255 || strings.ContainsAny(name, "<>")
+}
+
+// materialNameInvalid 读取请求体 Name 字段并判非法，供对外代理在透传上游前拒绝。
+func materialNameInvalid(body []byte) bool {
 	var req struct {
 		Name string `json:"Name"`
 	}
 	_ = common.Unmarshal(body, &req)
-	return strings.ContainsAny(req.Name, "<>") || utf8.RuneCountInString(req.Name) > 255
+	return MaterialNameInvalid(req.Name)
 }
 
 // normalizeUpstreamResponse 把上游响应归一成与 tokenhub 一致的对外格式（火山渠道兼容 tokenhub）：

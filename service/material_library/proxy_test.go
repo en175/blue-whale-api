@@ -165,3 +165,29 @@ func TestNormalizeUpstreamResponse(t *testing.T) {
 		})
 	}
 }
+
+// TestMaterialNameInvalid 表驱动验证名称校验规则：超长（>255 rune）与 HTML 危险字符 < >
+// 判非法；正常中文/英文/数字名、255 边界、以及 SQL 注入负载（网关不拦、透传上游）放行。
+// 超长拒绝防镜像表列宽溢出（tokenhub 对超长名回 500）；SQL 注入防御在上游后端，网关不代劳。
+func TestMaterialNameInvalid(t *testing.T) {
+	cases := []struct {
+		label string
+		in    string
+		want  bool
+	}{
+		{"正常中文名", "我的素材组", false},
+		{"正常英文数字", "AssetGroup-2024", false},
+		{"255 边界放行", strings.Repeat("中", 255), false},
+		{"256 超长拒绝", strings.Repeat("中", 256), true},
+		{"HTML < 拒绝", "a<b", true},
+		{"HTML > 拒绝", "a>b", true},
+		{"SQL 负载放行", `Robert'); DROP TABLE user_material_groups;--`, false},
+		{"单引号放行", "O'Brien", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.label, func(t *testing.T) {
+			got := MaterialNameInvalid(tc.in)
+			assert.Equal(t, tc.want, got, "MaterialNameInvalid(%q) = %v, want %v", tc.in, got, tc.want)
+		})
+	}
+}

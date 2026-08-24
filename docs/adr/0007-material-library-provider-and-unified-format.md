@@ -45,7 +45,7 @@ ADR 0005 以透明反向代理接入 ai-tokenhub 素材库（火山 ARK 兼容�
 - 认证未完成：火山 ValidatePending/NotFound、tokenhub 500 InternalError（有本地会话且 InternalError 限定 tokenhub）→ 200 空
 
 ### 5. 输入安全与超时
-- **XSS 输入过滤**：组名/真人会话名含 `<`/`>` 拒绝（管理端 + 代理 CreateAssetGroup/CreateVisualValidateSession）；名称长度 rune 计数 ≤255，管理端与代理**一致拒绝**（不再落库截断）——双渠道在请求层拦截后，`user_material_groups` / 会话记录不会收到超长名，镜像表侧无需再截断（曾有的 255 rune 截断为不可达代码，已移除）。代理侧空名放行（Name 可选，上游忽略），管理端空名必填
+- **输入过滤**：名称统一经 `MaterialNameInvalid` 校验（管理端与代理一致拒绝），拒绝两类：①rune 计数 >255（防镜像表列宽溢出；超长透传上游 tokenhub 会 500 未优雅拒绝）；②HTML 危险字符 `<`/`>`（防 XSS 存储）。覆盖代理层全部 Name 动作（CreateAssetGroup/CreateVisualValidateSession/CreateAsset/UpdateAsset/UpdateAssetGroup）与管理端组/会话/素材处理器。SQL 注入负载不在网关拦截（网关是透明代理，注入防御在上游后端，网关照常透传、错误统一归一化）。`ListAssets` 的 `Filter.Name` 为查询过滤（非存储），暂不校验。代理侧空名放行（Name 可选，上游忽略），管理端空名必填
 - **上游超时**：`GetHttpClient` 默认无超时（`RelayTimeout=0`），素材上游调用加 30s 超时兜底（无效 URL 快速失败）
 
 ## 理由
