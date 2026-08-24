@@ -94,11 +94,20 @@ type responseTask struct {
 			CompletionTokens int `json:"completion_tokens"`
 			TotalTokens      int `json:"total_tokens"`
 		} `json:"usage"`
+		// Error 为状态结果信封内的错误对象（与 upstreamStatus/usage 同级），可能为 null 或缺省。
+		Error *struct {
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
 	} `json:"resultSummary"`
 	CreatedAt string `json:"createdAt"`
 	UpdatedAt string `json:"updatedAt"`
 	RequestID string `json:"requestId"`
-	Error     string `json:"error"`
+	// Error 为顶层错误对象 {code, message}，可能为 null 或缺省。
+	Error     *struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
 	ErrorCode int    `json:"errorCode"`
 	Message   string `json:"message"`
 }
@@ -109,6 +118,34 @@ func (r responseTask) effectiveStatus() string {
 		return r.ResultSummary.UpstreamStatus
 	}
 	return r.Status
+}
+
+// errorMessage 返回上游 error.message：先读 resultSummary 内（状态结果信封，与
+// upstreamStatus/usage 同级），再读顶层，两层都没有则回退到 fallback。
+func (r responseTask) errorMessage(fallback string) string {
+	if r.ResultSummary.Error != nil && r.ResultSummary.Error.Message != "" {
+		return r.ResultSummary.Error.Message
+	}
+	if r.Error != nil && r.Error.Message != "" {
+		return r.Error.Message
+	}
+	return fallback
+}
+
+// terminalFailureReason 返回上游终态（failed/cancelled/expired）对应的失败原因，
+// 非失败终态返回空串。ParseTaskResult 与 ConvertToOpenAIVideo 共用同一映射，避免回退串漂移。
+func (r responseTask) terminalFailureReason() string {
+	switch r.effectiveStatus() {
+	case "failed", "failure":
+		return r.errorMessage("upstream task failed")
+	case "cancelled":
+		// 用户无取消能力；cancelled 由上游主动发起（安全/审核/系统），归为失败终态。
+		return r.errorMessage("task cancelled by user")
+	case "expired":
+		// 排队过期未执行，归为失败终态。
+		return r.errorMessage("task expired")
+	}
+	return ""
 }
 
 // ============================
@@ -314,10 +351,11 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 		// 解析 usage 信息用于按倍率计费
 		taskResult.CompletionTokens = resTask.ResultSummary.Usage.CompletionTokens
 		taskResult.TotalTokens = resTask.ResultSummary.Usage.TotalTokens
-	case "failed", "failure":
+	case "failed", "failure", "cancelled", "expired":
+		// 终态统一归为失败：failed/cancelled/expired 对调用方而言都是「没出成结果」。
 		taskResult.Status = model.TaskStatusFailure
 		taskResult.Progress = "100%"
-		taskResult.Reason = "upstream task failed"
+		taskResult.Reason = resTask.terminalFailureReason()
 	default:
 		// Unknown status, treat as processing
 		taskResult.Status = model.TaskStatusInProgress
@@ -343,10 +381,9 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, erro
 	openAIVideo.CompletedAt = originTask.UpdatedAt
 	openAIVideo.Model = originTask.Properties.OriginModelName
 
-	if dResp.effectiveStatus() == "failed" {
-		openAIVideo.Error = &dto.OpenAIVideoError{
-			Message: "upstream task failed",
-		}
+	// 终态统一归为失败：error.message 与 ParseTaskResult 的 Reason 共用同一映射，保持一致。
+	if reason := dResp.terminalFailureReason(); reason != "" {
+		openAIVideo.Error = &dto.OpenAIVideoError{Message: reason}
 	}
 
 	return common.Marshal(openAIVideo)
