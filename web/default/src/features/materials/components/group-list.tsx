@@ -15,6 +15,14 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from '@/components/ui/pagination'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Search, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -28,30 +36,32 @@ interface MaterialGroupListProps {
   groupType: MaterialGroupType
   selectedGroupId: string
   onSelect: (groupId: string) => void
+  totalCount: number
+  page: number
+  pageSize: number
+  onPageChange: (page: number) => void
+  search: string
+  onSearchChange: (search: string) => void
 }
 
-/** 左侧素材组列表：数据来自父级（本地归属表查询），支持删除。 */
+/** 左侧素材组列表：数据来自父级（本地归属表分页查询，name 过滤已在服务端生效），支持删除与分页翻页。 */
 export function MaterialGroupList({
   groups,
   isLoading,
   groupType,
   selectedGroupId,
   onSelect,
+  totalCount,
+  page,
+  pageSize,
+  onPageChange,
+  search,
+  onSearchChange,
 }: MaterialGroupListProps) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
-  const [search, setSearch] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<MaterialGroup | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
-
-  const keyword = search.trim().toLowerCase()
-  const filteredGroups = keyword
-    ? groups.filter(
-        (group) =>
-          (group.name || '').toLowerCase().includes(keyword) ||
-          group.seedance_asset_group_id.toLowerCase().includes(keyword)
-      )
-    : groups
 
   const handleDelete = async () => {
     if (!deleteTarget) return
@@ -63,6 +73,7 @@ export function MaterialGroupList({
         onSelect('')
       }
       setDeleteTarget(null)
+      // 前缀失效：删除影响所有搜索/分页视图，不仅当前页。
       await queryClient.invalidateQueries({
         queryKey: ['material-groups', groupType],
       })
@@ -80,7 +91,7 @@ export function MaterialGroupList({
   if (!groups.length) {
     return (
       <div className='text-muted-foreground flex h-32 items-center justify-center rounded-lg border text-sm'>
-        {t('No material groups')}
+        {search ? t('No matching groups') : t('No material groups')}
       </div>
     )
   }
@@ -91,19 +102,14 @@ export function MaterialGroupList({
         <Search className='text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2' />
         <Input
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => onSearchChange(e.target.value)}
           placeholder={t('Filter by name...')}
           className='h-8 pl-8'
           aria-label={t('Filter by name...')}
         />
       </div>
-      {!filteredGroups.length ? (
-        <div className='text-muted-foreground flex h-32 items-center justify-center rounded-lg border text-sm'>
-          {t('No material groups')}
-        </div>
-      ) : (
-        <div className='space-y-1.5'>
-          {filteredGroups.map((group) => {
+      <div className='space-y-1.5'>
+        {groups.map((group) => {
           const groupId = group.seedance_asset_group_id
           const isSelected = selectedGroupId === groupId
           return (
@@ -139,7 +145,41 @@ export function MaterialGroupList({
             </div>
           )
         })}
-        </div>
+      </div>
+
+      {Math.ceil(totalCount / pageSize) > 1 && (
+        <Pagination className='mt-3'>
+          <PaginationContent>
+            <PaginationItem>
+              <PaginationPrevious
+                text={t('Previous')}
+                onClick={() => onPageChange(page - 1)}
+                className={page <= 1 ? 'pointer-events-none opacity-50' : ''}
+              />
+            </PaginationItem>
+            <PaginationItem>
+              <PaginationLink isActive>{page}</PaginationLink>
+            </PaginationItem>
+            {page < Math.ceil(totalCount / pageSize) && (
+              <PaginationItem>
+                <PaginationLink onClick={() => onPageChange(page + 1)}>
+                  {page + 1}
+                </PaginationLink>
+              </PaginationItem>
+            )}
+            <PaginationItem>
+              <PaginationNext
+                text={t('Next')}
+                onClick={() => onPageChange(page + 1)}
+                className={
+                  page >= Math.ceil(totalCount / pageSize)
+                    ? 'pointer-events-none opacity-50'
+                    : ''
+                }
+              />
+            </PaginationItem>
+          </PaginationContent>
+        </Pagination>
       )}
 
       <AlertDialog

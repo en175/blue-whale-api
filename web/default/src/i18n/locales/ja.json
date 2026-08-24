@@ -5257,6 +5257,7 @@
     "Real Person Materials": "リアル素材",
     "AIGC Materials": "AIGC素材",
     "No material groups": "素材グループがありません",
+    "No matching groups": "一致する素材グループがありません",
     "Select a material group to view assets": "素材グループを選択してください",
     "No assets": "素材がありません",
     "Created Time": "作成時間",

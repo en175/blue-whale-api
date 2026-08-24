@@ -10,14 +10,34 @@ import type {
 // 素材库管理界面 API（UserAuth，与 TokenAuth 的 /api/material/* 代理分开）
 // ============================================================================
 
-/** 查询当前用户有权限的素材组（本地归属表，普通用户隔离、admin 看全部）。 */
+/** 查询当前用户有权限的素材组（本地归属表，普通用户隔离、admin 看全部）。分页返回；name 按组名/组 id 模糊匹配。 */
 export async function getMaterialGroups(
-  groupType?: MaterialGroupType
-): Promise<MaterialGroup[]> {
+  groupType?: MaterialGroupType,
+  page = 1,
+  pageSize = 20,
+  name = ''
+): Promise<{
+  total_count: number
+  items: MaterialGroup[]
+  page_number: number
+  page_size: number
+}> {
   const res = await api.get('/api/materials/groups', {
-    params: groupType ? { type: groupType } : undefined,
+    params: {
+      ...(groupType ? { type: groupType } : {}),
+      p: page,
+      page_size: pageSize,
+      ...(name ? { name } : {}),
+    },
   })
-  return res.data?.data ?? []
+  return (
+    res.data?.data ?? {
+      total_count: 0,
+      items: [],
+      page_number: page,
+      page_size: pageSize,
+    }
+  )
 }
 
 /** 创建素材组（上游 CreateAssetGroup），成功后在本地记录归属。 */

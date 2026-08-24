@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -41,6 +42,16 @@ func openMaterialConsoleDB(t *testing.T) *gorm.DB {
 
 func performGetMaterialGroups(t *testing.T, role, userID int, groupType string) *httptest.ResponseRecorder {
 	t.Helper()
+	params := map[string]string{}
+	if groupType != "" {
+		params["type"] = groupType
+	}
+	return performGetMaterialGroupsParams(t, role, userID, params)
+}
+
+// performGetMaterialGroupsParams 带完整查询参数（p/page_size/type/name）的版本，空值键跳过。
+func performGetMaterialGroupsParams(t *testing.T, role, userID int, params map[string]string) *httptest.ResponseRecorder {
+	t.Helper()
 	r := gin.New()
 	// 模拟 UserAuth 注入的 role/id，再进入真实 handler。
 	r.GET("/materials/groups", func(c *gin.Context) {
@@ -49,12 +60,17 @@ func performGetMaterialGroups(t *testing.T, role, userID int, groupType string) 
 		GetMaterialGroups(c)
 	})
 
-	url := "/materials/groups"
-	if groupType != "" {
-		url += "?type=" + groupType
+	urlPath := "/materials/groups"
+	sep := "?"
+	for k, v := range params {
+		if v == "" {
+			continue
+		}
+		urlPath += sep + url.QueryEscape(k) + "=" + url.QueryEscape(v)
+		sep = "&"
 	}
 	w := httptest.NewRecorder()
-	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, url, nil))
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, urlPath, nil))
 	return w
 }
 
@@ -74,11 +90,13 @@ func TestGetMaterialGroups_isolation(t *testing.T) {
 		w := performGetMaterialGroups(t, common.RoleCommonUser, 2, "")
 		require.Equal(t, http.StatusOK, w.Code)
 		var resp struct {
-			Data []model.UserMaterialGroup `json:"data"`
+			Data struct {
+				Items []model.UserMaterialGroup `json:"items"`
+			} `json:"data"`
 		}
 		require.NoError(t, common.Unmarshal(w.Body.Bytes(), &resp))
-		require.Len(t, resp.Data, 2)
-		for _, g := range resp.Data {
+		require.Len(t, resp.Data.Items, 2)
+		for _, g := range resp.Data.Items {
 			assert.Equal(t, 2, g.UserId)
 		}
 	})
@@ -87,21 +105,95 @@ func TestGetMaterialGroups_isolation(t *testing.T) {
 		w := performGetMaterialGroups(t, common.RoleAdminUser, 1, "")
 		require.Equal(t, http.StatusOK, w.Code)
 		var resp struct {
-			Data []model.UserMaterialGroup `json:"data"`
+			Data struct {
+				Items []model.UserMaterialGroup `json:"items"`
+			} `json:"data"`
 		}
 		require.NoError(t, common.Unmarshal(w.Body.Bytes(), &resp))
-		require.Len(t, resp.Data, 3)
+		require.Len(t, resp.Data.Items, 3)
 	})
 
 	t.Run("按类型过滤", func(t *testing.T) {
 		w := performGetMaterialGroups(t, common.RoleAdminUser, 1, "LivenessFace")
 		require.Equal(t, http.StatusOK, w.Code)
 		var resp struct {
-			Data []model.UserMaterialGroup `json:"data"`
+			Data struct {
+				Items []model.UserMaterialGroup `json:"items"`
+			} `json:"data"`
 		}
 		require.NoError(t, common.Unmarshal(w.Body.Bytes(), &resp))
-		require.Len(t, resp.Data, 1)
-		assert.Equal(t, "LivenessFace", resp.Data[0].GroupType)
+		require.Len(t, resp.Data.Items, 1)
+		assert.Equal(t, "LivenessFace", resp.Data.Items[0].GroupType)
+	})
+}
+
+// TestGetMaterialGroups_pagination 覆盖分页返回与参数解析：
+// total_count/page_number/page_size 字段、默认值、page_size/page 上限钳制、name 过滤、越界页空 items。
+func TestGetMaterialGroups_pagination(t *testing.T) {
+	openMaterialConsoleDB(t)
+	for i := 1; i <= 5; i++ {
+		require.NoError(t, model.AddUserMaterialGroup(2, "tokenhub", fmt.Sprintf("pg_g%d", i), fmt.Sprintf("pg-name-%d", i), "AIGC"))
+	}
+	t.Cleanup(func() {
+		for i := 1; i <= 5; i++ {
+			_ = model.DeleteUserMaterialGroup("tokenhub", fmt.Sprintf("pg_g%d", i))
+		}
+	})
+
+	type respShape struct {
+		Data struct {
+			TotalCount int                       `json:"total_count"`
+			PageNumber int                       `json:"page_number"`
+			PageSize   int                       `json:"page_size"`
+			Items      []model.UserMaterialGroup `json:"items"`
+		} `json:"data"`
+	}
+	parse := func(w *httptest.ResponseRecorder) respShape {
+		t.Helper()
+		require.Equal(t, http.StatusOK, w.Code)
+		var resp respShape
+		require.NoError(t, common.Unmarshal(w.Body.Bytes(), &resp))
+		return resp
+	}
+
+	t.Run("默认分页", func(t *testing.T) {
+		resp := parse(performGetMaterialGroupsParams(t, common.RoleCommonUser, 2, nil))
+		assert.EqualValues(t, 5, resp.Data.TotalCount)
+		assert.EqualValues(t, 1, resp.Data.PageNumber)
+		assert.EqualValues(t, 20, resp.Data.PageSize)
+		assert.Len(t, resp.Data.Items, 5)
+	})
+
+	t.Run("翻页", func(t *testing.T) {
+		resp := parse(performGetMaterialGroupsParams(t, common.RoleCommonUser, 2, map[string]string{"p": "2", "page_size": "2"}))
+		assert.EqualValues(t, 5, resp.Data.TotalCount)
+		assert.EqualValues(t, 2, resp.Data.PageNumber)
+		assert.EqualValues(t, 2, resp.Data.PageSize)
+		assert.Len(t, resp.Data.Items, 2)
+	})
+
+	t.Run("page_size 超上限钳制到 100", func(t *testing.T) {
+		resp := parse(performGetMaterialGroupsParams(t, common.RoleCommonUser, 2, map[string]string{"page_size": "500"}))
+		assert.EqualValues(t, 100, resp.Data.PageSize)
+		assert.Len(t, resp.Data.Items, 5)
+	})
+
+	t.Run("page 超上限钳制到 100000", func(t *testing.T) {
+		resp := parse(performGetMaterialGroupsParams(t, common.RoleCommonUser, 2, map[string]string{"p": "999999", "page_size": "2"}))
+		assert.EqualValues(t, 100000, resp.Data.PageNumber)
+	})
+
+	t.Run("page 越界返回空 items 不报错", func(t *testing.T) {
+		resp := parse(performGetMaterialGroupsParams(t, common.RoleCommonUser, 2, map[string]string{"p": "99", "page_size": "2"}))
+		assert.EqualValues(t, 5, resp.Data.TotalCount)
+		assert.Len(t, resp.Data.Items, 0)
+	})
+
+	t.Run("name 过滤", func(t *testing.T) {
+		resp := parse(performGetMaterialGroupsParams(t, common.RoleCommonUser, 2, map[string]string{"name": "pg-name-3"}))
+		assert.EqualValues(t, 1, resp.Data.TotalCount)
+		require.Len(t, resp.Data.Items, 1)
+		assert.Equal(t, "pg_g3", resp.Data.Items[0].SeedanceAssetGroupId)
 	})
 }
 

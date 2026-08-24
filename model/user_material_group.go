@@ -2,6 +2,7 @@ package model
 
 import (
 	"errors"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -122,4 +123,32 @@ func ensureMaterialGroupProviderIndex() error {
 		}
 	}
 	return nil
+}
+
+// GetMaterialGroupsPaged 分页查询归属组（管理端组列表）：按用户/provider/类型过滤，
+// name 非空时按组名或组 id 模糊匹配（LIKE），返回总数与当前页。page 从 1 起，pageSize 由调用方限界。
+func GetMaterialGroupsPaged(userId int, provider, groupType, name string, page, pageSize int) (int64, []*UserMaterialGroup, error) {
+	query := DB.Model(&UserMaterialGroup{})
+	if userId > 0 {
+		query = query.Where("user_id = ?", userId)
+	}
+	if provider != "" {
+		query = query.Where("provider = ?", provider)
+	}
+	if groupType != "" {
+		query = query.Where("group_type = ?", groupType)
+	}
+	if name != "" {
+		// 转义 LIKE 通配符，避免用户输入 % _ 变成全量匹配。
+		escaped := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(name)
+		pattern := "%" + escaped + "%"
+		query = query.Where("(name LIKE ? ESCAPE '\\' OR seedance_asset_group_id LIKE ? ESCAPE '\\')", pattern, pattern)
+	}
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return 0, nil, err
+	}
+	var groups []*UserMaterialGroup
+	err := query.Order("id DESC").Limit(pageSize).Offset((page - 1) * pageSize).Find(&groups).Error
+	return total, groups, err
 }

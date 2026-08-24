@@ -50,7 +50,10 @@ func denyMaterialGroupAccess(c *gin.Context) {
 
 // GetMaterialGroups 管理界面：查询当前用户有权限的素材组。
 // 数据源为本地归属表（user_material_groups）：普通用户按 user_id 隔离，admin 看全部。
-// 查询参数 type=AIGC|LivenessFace 可选，用于 tab 切换过滤。
+// 查询参数 type=AIGC|LivenessFace 可选，用于 tab 切换过滤；name 按组名/组 id 模糊匹配；
+// p/page_size 分页（默认 1/20，page_size 上限 100，page 上限 maxMaterialGroupPage 防 offset 溢出）。
+const maxMaterialGroupPage = 100000
+
 func GetMaterialGroups(c *gin.Context) {
 	userID := c.GetInt("id")
 	role := c.GetInt("role")
@@ -59,14 +62,27 @@ func GetMaterialGroups(c *gin.Context) {
 		queryUserID = 0 // admin 不过滤用户
 	}
 
+	page, pageSize := 1, 20
+	if v, err := strconv.Atoi(c.Query("p")); err == nil && v >= 1 {
+		page = min(v, maxMaterialGroupPage) // 超上限钳到 100000，防 offset 溢出
+	}
+	if v, err := strconv.Atoi(c.Query("page_size")); err == nil && v >= 1 {
+		pageSize = min(v, 100)
+	}
+
 	// 仅展示当前 provider 下的归属（切换上游后旧组不显示，互不干扰）。
-	groups, err := model.GetMaterialGroups(queryUserID, material_setting.GetConfig().Provider, c.Query("type"))
+	total, groups, err := model.GetMaterialGroupsPaged(queryUserID, material_setting.GetConfig().Provider, c.Query("type"), c.Query("name"), page, pageSize)
 	if err != nil {
 		logger.LogError(c.Request.Context(), "query material groups failed: "+err.Error())
 		common.ApiErrorMsg(c, "query material groups failed")
 		return
 	}
-	common.ApiSuccess(c, groups)
+	common.ApiSuccess(c, gin.H{
+		"total_count": total,
+		"items":       groups,
+		"page_number": page,
+		"page_size":   pageSize,
+	})
 }
 
 // CreateMaterialGroup 管理界面：创建素材组（上游 CreateAssetGroup），并把归属记录到当前用户。
