@@ -593,11 +593,13 @@ func createAssetGroupNameInvalid(r *http.Request, body []byte) bool {
 }
 
 // normalizeUpstreamResponse 把上游响应归一成与 tokenhub 一致的对外格式（火山渠道兼容 tokenhub）：
-// - 无 ResponseMetadata（tokenhub 直接，如会话类动作）→ 原样
+// - 无 ResponseMetadata（tokenhub 直接成功，如会话类 {"GroupId":...}）→ 原样
+// - 裸 tokenhub 错误（顶层 ResponseError、无 ResponseMetadata）→ 补空 ResponseMetadata，统一错误格式
 // - 火山错误（ResponseMetadata.Error）→ 转 tokenhub 错误格式 {"ResponseMetadata":{},"ResponseError":{...}}
 // - 会话类成功（CreateVisualValidateSession/GetVisualValidateResult 的 Result）→ 直接返回 Result 内容（tokenhub 会话类即直接格式）
 // - CRUD 成功（Result）→ 保留信封（tokenhub CRUD 本身也返回信封，两渠道一致）
 // 其余（如空 ResponseMetadata + 顶层 ResponseError）视为 tokenhub 格式原样透传。
+// 分类约定：仅会话类动作剥壳，其余（CRUD）默认保留信封——新增直接格式动作时需同步此规则。
 func normalizeUpstreamResponse(action string, body []byte) []byte {
 	var m map[string]any
 	if err := common.Unmarshal(body, &m); err != nil {
@@ -605,6 +607,13 @@ func normalizeUpstreamResponse(action string, body []byte) []byte {
 	}
 	meta, ok := m["ResponseMetadata"].(map[string]any)
 	if !ok {
+		// 无信封：tokenhub 直接成功或裸错误。
+		if _, has := m["ResponseError"]; has {
+			// 裸 tokenhub 错误补空 ResponseMetadata，对齐文档错误契约。
+			m["ResponseMetadata"] = map[string]any{}
+			data, _ := common.Marshal(m)
+			return data
+		}
 		return body // 已是 tokenhub 直接格式
 	}
 	if e, ok := meta["Error"].(map[string]any); ok {

@@ -172,6 +172,19 @@ func TestProxy_rewritesClientCallbackToGateway(t *testing.T) {
 	assert.Contains(t, rec.Body.String(), `"CallbackURL":"https://client.example.com/cb"`)
 	assert.NotContains(t, rec.Body.String(), `"CallbackURL":"https://gw.example.com/v1/material/h5-callback"`)
 
+	// 会话类响应为直接格式（无 Result 信封）：顶层 BytedToken/H5Link/CallbackURL。
+	var direct struct {
+		BytedToken  string `json:"BytedToken"`
+		H5Link      string `json:"H5Link"`
+		CallbackURL string `json:"CallbackURL"`
+		Result      any    `json:"Result"`
+	}
+	require.NoError(t, common.Unmarshal(rec.Body.Bytes(), &direct))
+	assert.Equal(t, "bt-rw", direct.BytedToken)
+	assert.Equal(t, "https://h5.example/rw", direct.H5Link)
+	assert.Equal(t, "https://client.example.com/cb", direct.CallbackURL)
+	assert.Nil(t, direct.Result) // 无信封，证明会话类直接格式
+
 	s, err := model.GetVisualValidateSessionByToken("bt-rw")
 	require.NoError(t, err)
 	assert.Equal(t, "https://client.example.com/cb", s.CustomCallback)

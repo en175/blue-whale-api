@@ -107,6 +107,27 @@ func TestProxy_forwardsUpstreamErrorVerbatim(t *testing.T) {
 	assert.JSONEq(t, `{"ResponseMetadata":{},"ResponseError":{"Code":"Forbidden","Message":"feature not enabled"}}`, rec.Body.String())
 }
 
+// TestProxy_volcengineCRUDKeepsEnvelope 验证火山渠道 CRUD 成功响应保留信封
+// （与 tokenhub 一致的对外格式，符合已外发接口文档）。
+func TestProxy_volcengineCRUDKeepsEnvelope(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ResponseMetadata":{"RequestId":"req-1"},"Result":{"Id":"group-volc"}}`))
+	}))
+	defer upstream.Close()
+	setConfig(t, fmt.Sprintf(`{"enabled":true,"provider":"volcengine","volcengine_access_key":"ak","volcengine_secret_key":"sk","volcengine_base_url":%q}`, upstream.URL))
+	defer setConfig(t, `{"enabled":true,"provider":"tokenhub","ak":"pak_x","sk":"psk_y","base_url":""}`)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/material/CreateAssetGroup", strings.NewReader(`{"Name":"g","GroupType":"AIGC"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	Proxy().ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.JSONEq(t, `{"ResponseMetadata":{"RequestId":"req-1"},"Result":{"Id":"group-volc"}}`, rec.Body.String())
+}
+
 // TestNormalizeUpstreamResponse 表驱动验证响应归一化（火山渠道兼容 tokenhub 实际格式）：
 // CRUD 保留信封、会话类去信封、火山错误转 tokenhub 错误、tokenhub 直接/错误原样透传。
 func TestNormalizeUpstreamResponse(t *testing.T) {
@@ -121,6 +142,7 @@ func TestNormalizeUpstreamResponse(t *testing.T) {
 		{"会话类成功去信封", "GetVisualValidateResult", `{"ResponseMetadata":{},"Result":{"GroupId":"g3"}}`, `{"GroupId":"g3"}`},
 		{"火山错误转 tokenhub 错误", "CreateAssetGroup", `{"ResponseMetadata":{"Error":{"Code":"NotFound","Message":"x"}}}`, `{"ResponseMetadata":{},"ResponseError":{"Code":"NotFound","Message":"x"}}`},
 		{"tokenhub 错误原样", "CreateAssetGroup", `{"ResponseMetadata":{},"ResponseError":{"Code":"Forbidden","Message":"f"}}`, `{"ResponseMetadata":{},"ResponseError":{"Code":"Forbidden","Message":"f"}}`},
+		{"裸 tokenhub 错误补空信封", "CreateAssetGroup", `{"ResponseError":{"Code":"InternalError","Message":"e"}}`, `{"ResponseMetadata":{},"ResponseError":{"Code":"InternalError","Message":"e"}}`},
 		{"非 JSON 原样", "CreateAssetGroup", `not-json`, `not-json`},
 	}
 	for _, tc := range cases {
