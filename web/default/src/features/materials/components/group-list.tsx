@@ -88,14 +88,6 @@ export function MaterialGroupList({
     return <Skeleton className='h-64 w-full' />
   }
 
-  if (!groups.length) {
-    return (
-      <div className='text-muted-foreground flex h-32 items-center justify-center rounded-lg border text-sm'>
-        {search ? t('No matching groups') : t('No material groups')}
-      </div>
-    )
-  }
-
   return (
     <>
       <div className='relative mb-2'>
@@ -108,44 +100,50 @@ export function MaterialGroupList({
           aria-label={t('Filter by name...')}
         />
       </div>
-      <div className='space-y-1.5'>
-        {groups.map((group) => {
-          const groupId = group.seedance_asset_group_id
-          const isSelected = selectedGroupId === groupId
-          return (
-            <div
-              key={groupId}
-              className={cn(
-                'group flex w-full items-center gap-1 rounded-lg border px-3 py-2 transition-colors',
-                isSelected ? 'bg-accent text-accent-foreground' : 'hover:bg-muted'
-              )}
-            >
-              <button
-                type='button'
-                onClick={() => onSelect(groupId)}
-                className='min-w-0 flex-1 text-left'
+      {groups.length === 0 ? (
+        <div className='text-muted-foreground flex h-32 items-center justify-center rounded-lg border text-sm'>
+          {search ? t('No matching groups') : t('No material groups')}
+        </div>
+      ) : (
+        <div className='space-y-1.5'>
+          {groups.map((group) => {
+            const groupId = group.seedance_asset_group_id
+            const isSelected = selectedGroupId === groupId
+            return (
+              <div
+                key={groupId}
+                className={cn(
+                  'group flex w-full items-center gap-1 rounded-lg border px-3 py-2 transition-colors',
+                  isSelected ? 'bg-accent text-accent-foreground' : 'hover:bg-muted'
+                )}
               >
-                <div className='truncate text-sm font-medium'>
-                  {group.name || groupId}
-                </div>
-                <div className='text-muted-foreground mt-0.5 truncate text-xs'>
-                  {groupId}
-                </div>
-              </button>
-              <Button
-                type='button'
-                variant='ghost'
-                size='icon-sm'
-                onClick={() => setDeleteTarget(group)}
-                aria-label={t('Delete Material Group')}
-                className='text-muted-foreground shrink-0 opacity-0 group-hover:opacity-100'
-              >
-                <Trash2 className='size-4' />
-              </Button>
-            </div>
-          )
-        })}
-      </div>
+                <button
+                  type='button'
+                  onClick={() => onSelect(groupId)}
+                  className='min-w-0 flex-1 text-left'
+                >
+                  <div className='truncate text-sm font-medium'>
+                    {group.name || groupId}
+                  </div>
+                  <div className='text-muted-foreground mt-0.5 truncate text-xs'>
+                    {groupId}
+                  </div>
+                </button>
+                <Button
+                  type='button'
+                  variant='ghost'
+                  size='icon-sm'
+                  onClick={() => setDeleteTarget(group)}
+                  aria-label={t('Delete Material Group')}
+                  className='text-muted-foreground shrink-0 opacity-0 group-hover:opacity-100'
+                >
+                  <Trash2 className='size-4' />
+                </Button>
+              </div>
+            )
+          })}
+        </div>
+      )}
 
       {Math.ceil(totalCount / pageSize) > 1 && (
         <Pagination className='mt-3'>
