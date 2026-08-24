@@ -84,8 +84,58 @@ export function MaterialGroupList({
     }
   }
 
+  // 列表区三态（加载/空/有数据）只替换列表内容，搜索框与分页始终挂载。
+  // 若 isLoading 时整体 return Skeleton，输入框会随每次搜索请求卸载重挂，导致焦点跳出输入框。
+  let listContent
   if (isLoading) {
-    return <Skeleton className='h-64 w-full' />
+    listContent = <Skeleton className='h-64 w-full' />
+  } else if (groups.length === 0) {
+    listContent = (
+      <div className='text-muted-foreground flex h-32 items-center justify-center rounded-lg border text-sm'>
+        {search ? t('No matching groups') : t('No material groups')}
+      </div>
+    )
+  } else {
+    listContent = (
+      <div className='space-y-1.5'>
+        {groups.map((group) => {
+          const groupId = group.seedance_asset_group_id
+          const isSelected = selectedGroupId === groupId
+          return (
+            <div
+              key={groupId}
+              className={cn(
+                'group flex w-full items-center gap-1 rounded-lg border px-3 py-2 transition-colors',
+                isSelected ? 'bg-accent text-accent-foreground' : 'hover:bg-muted'
+              )}
+            >
+              <button
+                type='button'
+                onClick={() => onSelect(groupId)}
+                className='min-w-0 flex-1 text-left'
+              >
+                <div className='truncate text-sm font-medium'>
+                  {group.name || groupId}
+                </div>
+                <div className='text-muted-foreground mt-0.5 truncate text-xs'>
+                  {groupId}
+                </div>
+              </button>
+              <Button
+                type='button'
+                variant='ghost'
+                size='icon-sm'
+                onClick={() => setDeleteTarget(group)}
+                aria-label={t('Delete Material Group')}
+                className='text-muted-foreground shrink-0 opacity-0 group-hover:opacity-100'
+              >
+                <Trash2 className='size-4' />
+              </Button>
+            </div>
+          )
+        })}
+      </div>
+    )
   }
 
   return (
@@ -100,50 +150,7 @@ export function MaterialGroupList({
           aria-label={t('Filter by name...')}
         />
       </div>
-      {groups.length === 0 ? (
-        <div className='text-muted-foreground flex h-32 items-center justify-center rounded-lg border text-sm'>
-          {search ? t('No matching groups') : t('No material groups')}
-        </div>
-      ) : (
-        <div className='space-y-1.5'>
-          {groups.map((group) => {
-            const groupId = group.seedance_asset_group_id
-            const isSelected = selectedGroupId === groupId
-            return (
-              <div
-                key={groupId}
-                className={cn(
-                  'group flex w-full items-center gap-1 rounded-lg border px-3 py-2 transition-colors',
-                  isSelected ? 'bg-accent text-accent-foreground' : 'hover:bg-muted'
-                )}
-              >
-                <button
-                  type='button'
-                  onClick={() => onSelect(groupId)}
-                  className='min-w-0 flex-1 text-left'
-                >
-                  <div className='truncate text-sm font-medium'>
-                    {group.name || groupId}
-                  </div>
-                  <div className='text-muted-foreground mt-0.5 truncate text-xs'>
-                    {groupId}
-                  </div>
-                </button>
-                <Button
-                  type='button'
-                  variant='ghost'
-                  size='icon-sm'
-                  onClick={() => setDeleteTarget(group)}
-                  aria-label={t('Delete Material Group')}
-                  className='text-muted-foreground shrink-0 opacity-0 group-hover:opacity-100'
-                >
-                  <Trash2 className='size-4' />
-                </Button>
-              </div>
-            )
-          })}
-        </div>
-      )}
+      {listContent}
 
       {Math.ceil(totalCount / pageSize) > 1 && (
         <Pagination className='mt-3'>
