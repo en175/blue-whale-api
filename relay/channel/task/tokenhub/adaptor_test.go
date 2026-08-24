@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
 
 	"github.com/stretchr/testify/assert"
@@ -55,6 +56,34 @@ func TestParseTaskResult(t *testing.T) {
 			wantReason:   "upstream task failed",
 		},
 		{
+			name:         "failed uses upstream error.message",
+			body:         `{"id":"x","status":"failed","model":"dreamina-seedance-2-0-mini-260615","error":{"code":1000,"message":"content safety check failed"}}`,
+			wantStatus:   string(model.TaskStatusFailure),
+			wantProgress: "100%",
+			wantReason:   "content safety check failed",
+		},
+		{
+			name:         "failed uses resultSummary error.message",
+			body:         `{"id":"x","status":"failed","model":"dreamina-seedance-2-0-mini-260615","resultSummary":{"upstreamStatus":"failed","error":{"code":1000,"message":"resultSummary safety violation"}}}`,
+			wantStatus:   string(model.TaskStatusFailure),
+			wantProgress: "100%",
+			wantReason:   "resultSummary safety violation",
+		},
+		{
+			name:         "cancelled maps to failure",
+			body:         `{"id":"x","status":"cancelled","model":"dreamina-seedance-2-0-mini-260615"}`,
+			wantStatus:   string(model.TaskStatusFailure),
+			wantProgress: "100%",
+			wantReason:   "task cancelled by user",
+		},
+		{
+			name:         "expired maps to failure",
+			body:         `{"id":"x","status":"expired","model":"dreamina-seedance-2-0-mini-260615"}`,
+			wantStatus:   string(model.TaskStatusFailure),
+			wantProgress: "100%",
+			wantReason:   "task expired",
+		},
+		{
 			name:           "upstreamStatus absent falls back to top-level status",
 			body:           `{"id":"x","status":"succeeded","model":"dreamina-seedance-2-0-mini-260615","resultSummary":{"content":{"video_url":"https://example.volces.com/seedance.mp4"},"usage":{"completion_tokens":1,"total_tokens":1}}}`,
 			wantStatus:     string(model.TaskStatusSuccess),
@@ -97,4 +126,54 @@ func TestExtractTaskUsage_NoTokens(t *testing.T) {
 	assert.Nil(t, (&TaskAdaptor{}).ExtractTaskUsage(empty))
 	bad := &model.Task{Data: json.RawMessage(`not-json`)}
 	assert.Nil(t, (&TaskAdaptor{}).ExtractTaskUsage(bad))
+}
+
+// TestConvertToOpenAIVideo_TerminalErrors 终态任务转 OpenAI Video 时，
+// error.message 与 ParseTaskResult 的 Reason 一致（含上游 error.message 与回退文案）。
+func TestConvertToOpenAIVideo_TerminalErrors(t *testing.T) {
+	tests := []struct {
+		name       string
+		data       string
+		wantErrMsg string
+	}{
+		{
+			name:       "cancelled surfaces error",
+			data:       `{"id":"x","status":"cancelled","model":"m"}`,
+			wantErrMsg: "task cancelled by user",
+		},
+		{
+			name:       "expired surfaces error",
+			data:       `{"id":"x","status":"expired","model":"m"}`,
+			wantErrMsg: "task expired",
+		},
+		{
+			name:       "failed surfaces upstream error.message",
+			data:       `{"id":"x","status":"failed","model":"m","error":{"code":1000,"message":"content safety check failed"}}`,
+			wantErrMsg: "content safety check failed",
+		},
+		{
+			name:       "failed surfaces resultSummary error.message",
+			data:       `{"id":"x","status":"failed","model":"m","resultSummary":{"upstreamStatus":"failed","error":{"code":1000,"message":"resultSummary safety violation"}}}`,
+			wantErrMsg: "resultSummary safety violation",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			task := &model.Task{
+				TaskID: "task_xxx",
+				Status: model.TaskStatusFailure,
+				Data:   json.RawMessage(tt.data),
+				Properties: model.Properties{
+					OriginModelName: "m",
+				},
+			}
+			body, err := (&TaskAdaptor{}).ConvertToOpenAIVideo(task)
+			require.NoError(t, err)
+			var ov dto.OpenAIVideo
+			require.NoError(t, json.Unmarshal(body, &ov))
+			assert.Equal(t, dto.VideoStatusFailed, ov.Status)
+			require.NotNil(t, ov.Error)
+			assert.Equal(t, tt.wantErrMsg, ov.Error.Message)
+		})
+	}
 }
