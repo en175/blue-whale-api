@@ -139,10 +139,7 @@ func GetMaterialGroupsPaged(userId int, provider, groupType, name string, page, 
 		query = query.Where("group_type = ?", groupType)
 	}
 	if name != "" {
-		// 转义 LIKE 通配符，避免用户输入 % _ 变成全量匹配。
-		escaped := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(name)
-		pattern := "%" + escaped + "%"
-		query = query.Where("(name LIKE ? ESCAPE '\\' OR seedance_asset_group_id LIKE ? ESCAPE '\\')", pattern, pattern)
+		query = applyMaterialNameLike(query, name)
 	}
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
@@ -151,4 +148,14 @@ func GetMaterialGroupsPaged(userId int, provider, groupType, name string, page, 
 	var groups []*UserMaterialGroup
 	err := query.Order("id DESC").Limit(pageSize).Offset((page - 1) * pageSize).Find(&groups).Error
 	return total, groups, err
+}
+
+// applyMaterialNameLike 追加组名/组 id 的 LIKE 模糊匹配过滤，返回新查询。
+// 转义 LIKE 通配符（% _）与 ESCAPE 字符 ! 自身，用户输入按字面匹配。
+// 用 ! 而非 \ 作 ESCAPE：MySQL 字符串字面量里反斜杠是转义符，ESCAPE '\' 会把闭合引号
+// 转义掉导致 SQL 语法错误（1064）——与 model/token.go 的 sanitizeLikePattern 同源约定（三库兼容）。
+func applyMaterialNameLike(query *gorm.DB, name string) *gorm.DB {
+	escaped := strings.NewReplacer(`!`, `!!`, `%`, `!%`, `_`, `!_`).Replace(name)
+	pattern := "%" + escaped + "%"
+	return query.Where("(name LIKE ? ESCAPE '!' OR seedance_asset_group_id LIKE ? ESCAPE '!')", pattern, pattern)
 }
