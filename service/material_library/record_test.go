@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -416,6 +417,48 @@ func TestProxy_nameXSSRejected(t *testing.T) {
 	rec2 := httptest.NewRecorder()
 	Proxy().ServeHTTP(rec2, c2.Request)
 	require.Equal(t, http.StatusBadRequest, rec2.Code)
+}
+
+// TestProxy_nameTooLongRejected 验证建组/真人会话名称超过 255 rune 被拒绝（防镜像表列宽溢出），
+// 且恰好 255 rune 的边界名放行（按 rune 计数而非 byte，多字节 UTF-8 不误伤）。
+func TestProxy_nameTooLongRejected(t *testing.T) {
+	model.DB = openMaterialRecordDB(t)
+
+	// 256 个中文字符 = 256 rune（每字 3 byte）
+	longName := strings.Repeat("中", 256)
+
+	// 代理 CreateAssetGroup 超长名 → 400
+	c := newRecordContext(t, "/api/material/CreateAssetGroup", fmt.Sprintf(`{"Name":%q,"GroupType":"AIGC"}`, longName))
+	rec := httptest.NewRecorder()
+	Proxy().ServeHTTP(rec, c.Request)
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+
+	// 代理 CreateVisualValidateSession 超长名 → 400
+	c2 := newRecordContext(t, "/api/material/CreateVisualValidateSession", fmt.Sprintf(`{"Name":%q,"CallbackURL":"https://gw.example/cb"}`, longName))
+	rec2 := httptest.NewRecorder()
+	Proxy().ServeHTTP(rec2, c2.Request)
+	require.Equal(t, http.StatusBadRequest, rec2.Code)
+
+	// 边界：恰好 255 rune 放行（转上游成功 → 200）
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ResponseMetadata":{},"Result":{"Id":"group-255"}}`))
+	}))
+	defer upstream.Close()
+	setConfig(t, fmt.Sprintf(`{"enabled":true,"ak":"pak_x","sk":"psk_y","base_url":%q}`, upstream.URL))
+
+	boundaryName := strings.Repeat("中", 255)
+	c3 := newRecordContext(t, "/api/material/CreateAssetGroup", fmt.Sprintf(`{"Name":%q,"GroupType":"AIGC"}`, boundaryName))
+	rec3 := httptest.NewRecorder()
+	Proxy().ServeHTTP(rec3, c3.Request)
+	require.Equal(t, http.StatusOK, rec3.Code)
+
+	// 边界名确实以完整 255 rune 落库（镜像表列宽安全的直接证据，非仅请求放行）
+	groups, err := model.GetUserMaterialGroups(42)
+	require.NoError(t, err)
+	require.Len(t, groups, 1)
+	assert.Equal(t, boundaryName, groups[0].Name)
 }
 
 // TestProxy_getVisualValidateResult_tokenhubInternalError 验证 tokenhub 未认证（上游 500 InternalError，
