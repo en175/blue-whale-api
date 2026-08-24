@@ -86,8 +86,9 @@ func TestProxy_passesThroughRequestAndResponse(t *testing.T) {
 	assert.Equal(t, `{"ResponseMetadata":{},"Result":{"Id":"group-abc"}}`, rec.Body.String())
 }
 
-// TestProxy_forwardsUpstreamErrorVerbatim 验证上游错误信封（状态码 + 体）原样透传。
-func TestProxy_forwardsUpstreamErrorVerbatim(t *testing.T) {
+// TestProxy_forwardsUpstreamErrorInTokenhubFormat 验证上游错误归一为 tokenhub 格式
+// （状态码 + {"ResponseMetadata":{},"ResponseError":{...}}），CRUD 渠道不影响错误格式。
+func TestProxy_forwardsUpstreamErrorInTokenhubFormat(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusForbidden)
@@ -108,9 +109,13 @@ func TestProxy_forwardsUpstreamErrorVerbatim(t *testing.T) {
 }
 
 // TestProxy_volcengineCRUDKeepsEnvelope 验证火山渠道 CRUD 成功响应保留信封
-// （与 tokenhub 一致的对外格式，符合已外发接口文档）。
+// （与 tokenhub 一致的对外格式，符合已外发接口文档），并证明确实走了火山渠道
+// provider（/ark 路径 + SigV4 签名 Authorization 头）。
 func TestProxy_volcengineCRUDKeepsEnvelope(t *testing.T) {
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	var gotPath, gotAuth string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotAuth = r.Header.Get("Authorization")
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"ResponseMetadata":{"RequestId":"req-1"},"Result":{"Id":"group-volc"}}`))
@@ -126,6 +131,9 @@ func TestProxy_volcengineCRUDKeepsEnvelope(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	assert.JSONEq(t, `{"ResponseMetadata":{"RequestId":"req-1"},"Result":{"Id":"group-volc"}}`, rec.Body.String())
+	// 证明走了火山渠道 provider：基础路径为 /（火山管控面根，tokenhub 才是 /ark）+ SigV4 签名头
+	assert.Equal(t, "/", gotPath)
+	assert.NotEmpty(t, gotAuth)
 }
 
 // TestNormalizeUpstreamResponse 表驱动验证响应归一化（火山渠道兼容 tokenhub 实际格式）：
@@ -140,6 +148,7 @@ func TestNormalizeUpstreamResponse(t *testing.T) {
 		{"tokenhub 直接原样", "GetVisualValidateResult", `{"GroupId":"g1"}`, `{"GroupId":"g1"}`},
 		{"CRUD 成功保留信封", "CreateAssetGroup", `{"ResponseMetadata":{},"Result":{"Id":"g2"}}`, `{"ResponseMetadata":{},"Result":{"Id":"g2"}}`},
 		{"会话类成功去信封", "GetVisualValidateResult", `{"ResponseMetadata":{},"Result":{"GroupId":"g3"}}`, `{"GroupId":"g3"}`},
+		{"会话类大整数保精度", "GetVisualValidateResult", `{"ResponseMetadata":{},"Result":{"GroupId":"g","ExpireAt":9007199254740993}}`, `{"GroupId":"g","ExpireAt":9007199254740993}`},
 		{"火山错误转 tokenhub 错误", "CreateAssetGroup", `{"ResponseMetadata":{"Error":{"Code":"NotFound","Message":"x"}}}`, `{"ResponseMetadata":{},"ResponseError":{"Code":"NotFound","Message":"x"}}`},
 		{"tokenhub 错误原样", "CreateAssetGroup", `{"ResponseMetadata":{},"ResponseError":{"Code":"Forbidden","Message":"f"}}`, `{"ResponseMetadata":{},"ResponseError":{"Code":"Forbidden","Message":"f"}}`},
 		{"裸 tokenhub 错误补空信封", "CreateAssetGroup", `{"ResponseError":{"Code":"InternalError","Message":"e"}}`, `{"ResponseMetadata":{},"ResponseError":{"Code":"InternalError","Message":"e"}}`},

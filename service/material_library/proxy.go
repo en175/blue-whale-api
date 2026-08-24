@@ -3,6 +3,7 @@ package material_library
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -596,38 +597,45 @@ func createAssetGroupNameInvalid(r *http.Request, body []byte) bool {
 // - 无 ResponseMetadata（tokenhub 直接成功，如会话类 {"GroupId":...}）→ 原样
 // - 裸 tokenhub 错误（顶层 ResponseError、无 ResponseMetadata）→ 补空 ResponseMetadata，统一错误格式
 // - 火山错误（ResponseMetadata.Error）→ 转 tokenhub 错误格式 {"ResponseMetadata":{},"ResponseError":{...}}
-// - 会话类成功（CreateVisualValidateSession/GetVisualValidateResult 的 Result）→ 直接返回 Result 内容（tokenhub 会话类即直接格式）
+// - 会话类成功（CreateVisualValidateSession/GetVisualValidateResult 的 Result）→ 直接返回 Result 原字节（tokenhub 会话类即直接格式）
 // - CRUD 成功（Result）→ 保留信封（tokenhub CRUD 本身也返回信封，两渠道一致）
 // 其余（如空 ResponseMetadata + 顶层 ResponseError）视为 tokenhub 格式原样透传。
 // 分类约定：仅会话类动作剥壳，其余（CRUD）默认保留信封——新增直接格式动作时需同步此规则。
+// Result/ResponseError 以 json.RawMessage 保留原字节，避免 map 重 marshal 的 float64 精度损失。
 func normalizeUpstreamResponse(action string, body []byte) []byte {
-	var m map[string]any
-	if err := common.Unmarshal(body, &m); err != nil {
+	var parsed struct {
+		ResponseMetadata map[string]any  `json:"ResponseMetadata"`
+		ResponseError    json.RawMessage `json:"ResponseError"`
+		Result           json.RawMessage `json:"Result"`
+	}
+	if err := common.Unmarshal(body, &parsed); err != nil {
 		return body
 	}
-	meta, ok := m["ResponseMetadata"].(map[string]any)
-	if !ok {
+	if parsed.ResponseMetadata == nil {
 		// 无信封：tokenhub 直接成功或裸错误。
-		if _, has := m["ResponseError"]; has {
+		if len(parsed.ResponseError) > 0 {
 			// 裸 tokenhub 错误补空 ResponseMetadata，对齐文档错误契约。
-			m["ResponseMetadata"] = map[string]any{}
-			data, _ := common.Marshal(m)
+			data, _ := common.Marshal(map[string]any{
+				"ResponseMetadata": map[string]any{},
+				"ResponseError":    parsed.ResponseError,
+			})
 			return data
 		}
 		return body // 已是 tokenhub 直接格式
 	}
-	if e, ok := meta["Error"].(map[string]any); ok {
+	if e, ok := parsed.ResponseMetadata["Error"].(map[string]any); ok {
+		// 火山错误 → tokenhub 错误格式。
 		data, _ := common.Marshal(map[string]any{
 			"ResponseMetadata": map[string]any{},
 			"ResponseError":    e,
 		})
 		return data
 	}
-	if _, ok := m["Result"].(map[string]any); ok {
+	if len(parsed.Result) > 0 {
 		if action == "CreateVisualValidateSession" || action == "GetVisualValidateResult" {
-			// 会话类：tokenhub 返回直接格式，剥壳对齐。
-			data, _ := common.Marshal(m["Result"])
-			return data
+			// 会话类：直接返回 Result 原字节（避免 float64 精度损失）。
+			// GetVisualValidateResult 在 proxyHandler 提前返回，此处主要被单测/未来重构触达。
+			return parsed.Result
 		}
 		// CRUD：tokenhub 也返回信封，原样保留。
 		return body
