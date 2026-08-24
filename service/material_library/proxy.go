@@ -6,7 +6,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -126,7 +125,12 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	if customCallback != "" {
 		resp.Body = restoreClientCallback(resp.Body, customCallback)
 	}
+	// 统一返回 tokenhub 直接格式（去掉火山 ResponseMetadata/Result 信封），客户端只解析一种格式。
+	resp.Body = normalizeUpstreamResponse(resp.Body)
 	for k, vs := range resp.Header {
+		if k == "Content-Length" {
+			continue // 响应体已改写，旧 Content-Length 失效，交由 Go 按实际长度重算（防截断）
+		}
 		for _, v := range vs {
 			w.Header().Add(k, v)
 		}
@@ -259,17 +263,8 @@ func handleLocalAssetGroups(w http.ResponseWriter, r *http.Request, body []byte)
 			UpdateTime: time.Unix(g.UpdatedAt, 0).UTC().Format(time.RFC3339),
 		})
 	}
-	envelope := map[string]any{
-		"ResponseMetadata": map[string]any{
-			"RequestId": "req_local_" + strconv.Itoa(userID) + "_" + strconv.Itoa(page),
-			"Action":    "ListAssetGroups",
-			"Version":   arkVersion,
-			"Service":   "ark",
-			"Region":    material_setting.GetConfig().VolcengineRegion,
-		},
-		"Result": ListAssetGroupsResult{TotalCount: total, Items: items, PageNumber: page, PageSize: pageSize},
-	}
-	data, err := common.Marshal(envelope)
+	// 统一返回 tokenhub 直接格式（无信封）：TotalCount/Items/PageNumber/PageSize 顶层。
+	data, err := common.Marshal(ListAssetGroupsResult{TotalCount: total, Items: items, PageNumber: page, PageSize: pageSize})
 	if err != nil {
 		http.Error(w, "list asset groups failed", http.StatusInternalServerError)
 		return
@@ -317,10 +312,11 @@ func handleGetVisualValidateResult(w http.ResponseWriter, r *http.Request, body 
 	groupId, err := GetVisualValidateResult(r.Context(), provider, req.BytedToken, session.ProjectName)
 	if err != nil {
 		var arkErr *ArkError
-		// 认证未完成：返回 200 + 空 GroupId（与 tokenhub 200+空契约一致），客户端继续轮询。
-		// 火山返回 ValidatePending；tokenhub 对未认证/认证中返回 500 InternalError（有本地会话即视为未完成）。
-		// InternalError 仅限 tokenhub（有本地会话），避免掩盖火山真实内部故障。
+		// 认证未完成：返回 200 + 空 GroupId（客户端继续轮询）。
+		// 火山返回 ValidatePending（认证中）或 NotFound（未认证/未找到）；tokenhub 返回 500 InternalError。
+		// 有本地会话即视为认证未完成（InternalError 仅限 tokenhub，避免掩盖火山真实故障）。
 		if errors.As(err, &arkErr) && (arkErr.Code == "ValidatePending" ||
+			arkErr.Code == "NotFound" ||
 			(arkErr.Code == "InternalError" && provider == material_setting.ProviderTokenhub)) {
 			writeVisualValidateResult(w, provider, "")
 			return
@@ -349,22 +345,8 @@ func writeVisualValidateResult(w http.ResponseWriter, provider, groupId string) 
 
 // buildVisualValidateResult 构造与上游一致的结果格式：
 // 火山带 ResponseMetadata/Result 信封；tokenhub 直接返回 {"GroupId": "..."}。
-func buildVisualValidateResult(provider, groupId string) []byte {
-	if provider == material_setting.ProviderVolcengine {
-		data, err := common.Marshal(map[string]any{
-			"ResponseMetadata": map[string]any{
-				"RequestId": "req_local_" + groupId,
-				"Action":    "GetVisualValidateResult",
-				"Version":   arkVersion,
-				"Service":   "ark",
-				"Region":    material_setting.GetConfig().VolcengineRegion,
-			},
-			"Result": map[string]any{"GroupId": groupId},
-		})
-		if err == nil {
-			return data
-		}
-	}
+func buildVisualValidateResult(_ string, groupId string) []byte {
+	// 统一返回 tokenhub 直接格式 {"GroupId": ...}（不分渠道），客户端只解析一种格式。
 	data, _ := common.Marshal(map[string]any{"GroupId": groupId})
 	return data
 }
@@ -434,9 +416,7 @@ func createAssetGroupOwned(r *http.Request, body []byte) bool {
 // writeMaterialNotFound 返回上游风格 404 错误信封（不区分不存在/无权，避免探测）。
 func writeMaterialNotFound(w http.ResponseWriter) {
 	envelope := map[string]any{
-		"ResponseMetadata": map[string]any{
-			"Error": map[string]any{"Code": "NotFound", "Message": "resource not found"},
-		},
+		"ResponseError": map[string]any{"Code": "NotFound", "Message": "resource not found"},
 	}
 	data, _ := common.Marshal(envelope)
 	w.Header().Set("Content-Type", "application/json")
@@ -447,9 +427,7 @@ func writeMaterialNotFound(w http.ResponseWriter) {
 // writeMaterialBadRequest 返回上游风格 400 错误信封（请求参数非法，如 ListAssets 空 GroupIds）。
 func writeMaterialBadRequest(w http.ResponseWriter) {
 	envelope := map[string]any{
-		"ResponseMetadata": map[string]any{
-			"Error": map[string]any{"Code": "InvalidParameter", "Message": "invalid parameter"},
-		},
+		"ResponseError": map[string]any{"Code": "InvalidParameter", "Message": "invalid parameter"},
 	}
 	data, _ := common.Marshal(envelope)
 	w.Header().Set("Content-Type", "application/json")
@@ -602,4 +580,32 @@ func createAssetGroupNameInvalid(r *http.Request, body []byte) bool {
 	}
 	_ = common.Unmarshal(body, &req)
 	return strings.ContainsAny(req.Name, "<>")
+}
+
+// normalizeUpstreamResponse 把上游响应统一成 tokenhub 直接格式（去掉火山 ResponseMetadata/Result 信封），
+// 使对外接口不分渠道返回同一种格式：
+// - 无 ResponseMetadata（tokenhub 直接）→ 原样
+// - 火山错误（ResponseMetadata.Error）→ 转 tokenhub 错误格式 ResponseError
+// - 火山成功（Result）→ 直接返回 Result 内容
+func normalizeUpstreamResponse(body []byte) []byte {
+	var m map[string]any
+	if err := common.Unmarshal(body, &m); err != nil {
+		return body
+	}
+	meta, ok := m["ResponseMetadata"].(map[string]any)
+	if !ok {
+		return body // 已是 tokenhub 直接格式
+	}
+	if e, ok := meta["Error"].(map[string]any); ok {
+		data, _ := common.Marshal(map[string]any{"ResponseError": e})
+		return data
+	}
+	if result, ok := m["Result"].(map[string]any); ok {
+		data, _ := common.Marshal(result)
+		return data
+	}
+	// ResponseMetadata 存在但无 Error/Result（如空 {} + 顶层 ResponseError）：剥掉信封残留，保留其余字段。
+	delete(m, "ResponseMetadata")
+	data, _ := common.Marshal(m)
+	return data
 }

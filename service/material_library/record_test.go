@@ -191,21 +191,19 @@ func TestProxy_listAssetGroupsLocalIsolation(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	var out struct {
-		Result struct {
-			TotalCount int `json:"TotalCount"`
-			Items []struct {
-				Id        string `json:"Id"`
-				Name      string `json:"Name"`
-				GroupType string `json:"GroupType"`
-			} `json:"Items"`
-		} `json:"Result"`
+		TotalCount int `json:"TotalCount"`
+		Items []struct {
+			Id        string `json:"Id"`
+			Name      string `json:"Name"`
+			GroupType string `json:"GroupType"`
+		} `json:"Items"`
 	}
 	require.NoError(t, common.Unmarshal(rec.Body.Bytes(), &out))
-	assert.Equal(t, 1, out.Result.TotalCount)
-	require.Len(t, out.Result.Items, 1)
-	assert.Equal(t, "g-user42", out.Result.Items[0].Id)
-	assert.Equal(t, "组A", out.Result.Items[0].Name)
-	assert.Equal(t, "AIGC", out.Result.Items[0].GroupType)
+	assert.Equal(t, 1, out.TotalCount)
+	require.Len(t, out.Items, 1)
+	assert.Equal(t, "g-user42", out.Items[0].Id)
+	assert.Equal(t, "组A", out.Items[0].Name)
+	assert.Equal(t, "AIGC", out.Items[0].GroupType)
 }
 
 // TestProxy_getVisualValidateResult_localCacheHit 验证对外查询认证结果：本地会话已结算
@@ -221,14 +219,12 @@ func TestProxy_getVisualValidateResult_localCacheHit(t *testing.T) {
 	Proxy().ServeHTTP(rec, c.Request)
 
 	require.Equal(t, http.StatusOK, rec.Code)
-	// 火山信封格式
-	var out struct {
-		Result struct {
-			GroupId string `json:"GroupId"`
-		} `json:"Result"`
+	// 统一 tokenhub 直接格式
+	var direct struct {
+		GroupId string `json:"GroupId"`
 	}
-	require.NoError(t, common.Unmarshal(rec.Body.Bytes(), &out))
-	assert.Equal(t, "group-cached", out.Result.GroupId)
+	require.NoError(t, common.Unmarshal(rec.Body.Bytes(), &direct))
+	assert.Equal(t, "group-cached", direct.GroupId)
 }
 
 // TestProxy_getVisualValidateResult_backfillsSession 验证对外查询认证结果：本地未结算时
@@ -306,14 +302,12 @@ func TestProxy_getVisualValidateResult_validatePending(t *testing.T) {
 	rec := httptest.NewRecorder()
 	Proxy().ServeHTTP(rec, c.Request)
 
-	require.Equal(t, http.StatusOK, rec.Code) // 200 而非 502
-	var out struct {
-		Result struct {
-			GroupId string `json:"GroupId"`
-		} `json:"Result"`
+	require.Equal(t, http.StatusOK, rec.Code) // 200 + 空 GroupId（继续轮询）
+	var direct struct {
+		GroupId string `json:"GroupId"`
 	}
-	require.NoError(t, common.Unmarshal(rec.Body.Bytes(), &out))
-	assert.Equal(t, "", out.Result.GroupId)
+	require.NoError(t, common.Unmarshal(rec.Body.Bytes(), &direct))
+	assert.Equal(t, "", direct.GroupId)
 }
 
 // TestProxy_getVisualValidateResult_noSessionFailsClosed 验证会话不存在的 token fail-closed：
@@ -439,6 +433,33 @@ func TestProxy_getVisualValidateResult_tokenhubInternalError(t *testing.T) {
 	setConfig(t, fmt.Sprintf(`{"enabled":true,"ak":"pak_x","sk":"psk_y","base_url":%q}`, upstream.URL))
 
 	c := newRecordContext(t, "/api/material/GetVisualValidateResult", `{"BytedToken":"bt-ie"}`)
+	rec := httptest.NewRecorder()
+	Proxy().ServeHTTP(rec, c.Request)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var direct struct {
+		GroupId string `json:"GroupId"`
+	}
+	require.NoError(t, common.Unmarshal(rec.Body.Bytes(), &direct))
+	assert.Equal(t, "", direct.GroupId)
+}
+
+// TestProxy_getVisualValidateResult_volcengineNotFound 验证火山未认证（上游 NotFound，有本地会话）
+// → 返回 200 + 空 GroupId（统一 tokenhub 直接格式，继续轮询），非 502。
+func TestProxy_getVisualValidateResult_volcengineNotFound(t *testing.T) {
+	model.DB = openMaterialRecordDB(t)
+	require.NoError(t, model.AddVisualValidateSession(42, "volcengine", "真人组1", "bt-nf", "https://h5/1", "https://gw/cb", "default", ""))
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"ResponseMetadata":{"Error":{"Code":"NotFound","Message":"token not found"}}}`))
+	}))
+	defer upstream.Close()
+	setConfig(t, fmt.Sprintf(`{"enabled":true,"ak":"pak_x","sk":"psk_y","base_url":%q,"provider":"volcengine","volcengine_access_key":"ak","volcengine_secret_key":"sk","volcengine_base_url":%q}`, upstream.URL, upstream.URL))
+	defer setConfig(t, `{"enabled":true,"provider":"tokenhub","ak":"pak_x","sk":"psk_y","base_url":""}`)
+
+	c := newRecordContext(t, "/api/material/GetVisualValidateResult", `{"BytedToken":"bt-nf"}`)
 	rec := httptest.NewRecorder()
 	Proxy().ServeHTTP(rec, c.Request)
 
