@@ -192,19 +192,21 @@ func TestProxy_listAssetGroupsLocalIsolation(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	var out struct {
-		TotalCount int `json:"TotalCount"`
-		Items []struct {
-			Id        string `json:"Id"`
-			Name      string `json:"Name"`
-			GroupType string `json:"GroupType"`
-		} `json:"Items"`
+		Result struct {
+			TotalCount int `json:"TotalCount"`
+			Items []struct {
+				Id        string `json:"Id"`
+				Name      string `json:"Name"`
+				GroupType string `json:"GroupType"`
+			} `json:"Items"`
+		} `json:"Result"`
 	}
 	require.NoError(t, common.Unmarshal(rec.Body.Bytes(), &out))
-	assert.Equal(t, 1, out.TotalCount)
-	require.Len(t, out.Items, 1)
-	assert.Equal(t, "g-user42", out.Items[0].Id)
-	assert.Equal(t, "组A", out.Items[0].Name)
-	assert.Equal(t, "AIGC", out.Items[0].GroupType)
+	assert.Equal(t, 1, out.Result.TotalCount)
+	require.Len(t, out.Result.Items, 1)
+	assert.Equal(t, "g-user42", out.Result.Items[0].Id)
+	assert.Equal(t, "组A", out.Result.Items[0].Name)
+	assert.Equal(t, "AIGC", out.Result.Items[0].GroupType)
 }
 
 // TestProxy_getVisualValidateResult_localCacheHit 验证对外查询认证结果：本地会话已结算
@@ -276,13 +278,11 @@ func TestProxy_getVisualValidateResult_userIsolation(t *testing.T) {
 	Proxy().ServeHTTP(rec, c.Request)
 
 	require.Equal(t, http.StatusOK, rec.Code)
-	var out struct {
-		Result struct {
-			GroupId string `json:"GroupId"`
-		} `json:"Result"`
+	var direct struct {
+		GroupId string `json:"GroupId"`
 	}
-	require.NoError(t, common.Unmarshal(rec.Body.Bytes(), &out))
-	assert.Equal(t, "", out.Result.GroupId) // 不泄露他人组
+	require.NoError(t, common.Unmarshal(rec.Body.Bytes(), &direct))
+	assert.Equal(t, "", direct.GroupId) // 不泄露他人组
 }
 
 // TestProxy_getVisualValidateResult_validatePending 验证火山认证未完成（ValidatePending）时
