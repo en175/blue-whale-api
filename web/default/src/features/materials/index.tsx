@@ -28,7 +28,7 @@ export function Materials() {
   const [createGroupOpen, setCreateGroupOpen] = useState(false)
   const [uploadOpen, setUploadOpen] = useState(false)
   const [page, setPage] = useState(1)
-  const pageSize = 20
+  const pageSize = 10
 
   const { data, isLoading: groupsLoading } = useQuery({
     queryKey: ['material-groups', groupType, search, page, pageSize],
