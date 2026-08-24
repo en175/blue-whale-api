@@ -6,6 +6,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
+	"gorm.io/gorm/utils/tests"
 )
 
 // TestUserMaterialGroupCRUD 覆盖归属表的 upsert / 按用户查询 / 删除。
@@ -168,4 +170,19 @@ func TestGetMaterialGroupsPaged(t *testing.T) {
 		assert.EqualValues(t, 0, total)
 		assert.Len(t, groups, 0)
 	})
+}
+
+// TestMaterialNameLikeEscape 验证组名搜索的 LIKE ESCAPE 跨库契约：用 ! 而非 \ 作 ESCAPE。
+// SQLite 测试库对 ESCAPE '\' 也能跑通（单引号内反斜杠不转义），只有 MySQL 会因反斜杠
+// 转义掉闭合引号而语法错误（1064），故用 DryRun 捕获 SQL 文本断言，防回归到 \。
+func TestMaterialNameLikeEscape(t *testing.T) {
+	dummyDB, err := gorm.Open(tests.DummyDialector{}, &gorm.Config{DryRun: true})
+	require.NoError(t, err)
+
+	// Find 触发 DryRun 构建 SQL（同 locking_test 范式），断言 ESCAPE 契约文本。
+	var rows []UserMaterialGroup
+	query := applyMaterialNameLike(dummyDB.Model(&UserMaterialGroup{}), "测试")
+	sql := query.Find(&rows).Statement.SQL.String()
+	assert.Contains(t, sql, "ESCAPE '!'")
+	assert.NotContains(t, sql, `ESCAPE '\`)
 }
