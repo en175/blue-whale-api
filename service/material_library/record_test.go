@@ -474,6 +474,43 @@ func TestProxy_nameTooLongRejected(t *testing.T) {
 	assert.Equal(t, boundaryName, groups[0].Name)
 }
 
+// TestProxy_materialNameTooLongActions 验证代理层对超长名称（>255 rune）在全部 Name 动作上
+// 统一 400 拒绝（防镜像表列宽溢出，不把超长名透传上游触发 tokenhub 500）。
+// SQL 注入负载按产品决策不在网关拦截（注入防御在上游后端），故不在此断言。
+func TestProxy_materialNameTooLongActions(t *testing.T) {
+	model.DB = openMaterialRecordDB(t)
+	require.NoError(t, model.AddUserMaterialGroup(42, "tokenhub", "group-own", "g", "AIGC"))
+	setConfig(t, `{"enabled":true,"ak":"pak_x","sk":"psk_y","base_url":""}`)
+
+	longName := strings.Repeat("中", 256)
+
+	// CreateAssetGroup：超长名 → 400（校验在透传上游前），锁定 tokenhub 格式错误信封
+	rec := httptest.NewRecorder()
+	Proxy().ServeHTTP(rec, newRecordContext(t, "/api/material/CreateAssetGroup", fmt.Sprintf(`{"Name":%q,"GroupType":"AIGC"}`, longName)).Request)
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.JSONEq(t, `{"ResponseMetadata":{},"ResponseError":{"Code":"InvalidParameter","Message":"invalid parameter"}}`, rec.Body.String())
+
+	// CreateVisualValidateSession：超长名 → 400
+	rec2 := httptest.NewRecorder()
+	Proxy().ServeHTTP(rec2, newRecordContext(t, "/api/material/CreateVisualValidateSession", fmt.Sprintf(`{"Name":%q}`, longName)).Request)
+	require.Equal(t, http.StatusBadRequest, rec2.Code)
+
+	// CreateAsset：超长名 → 400（归属组有效，先过归属校验再拒绝名称）
+	rec3 := httptest.NewRecorder()
+	Proxy().ServeHTTP(rec3, newRecordContext(t, "/api/material/CreateAsset", fmt.Sprintf(`{"GroupId":"group-own","Name":%q,"URL":"https://e.com/a.jpg","AssetType":"Image"}`, longName)).Request)
+	require.Equal(t, http.StatusBadRequest, rec3.Code)
+
+	// UpdateAssetGroup：超长名 → 400（归属组有效）
+	rec5 := httptest.NewRecorder()
+	Proxy().ServeHTTP(rec5, newRecordContext(t, "/api/material/UpdateAssetGroup", fmt.Sprintf(`{"Id":"group-own","Name":%q}`, longName)).Request)
+	require.Equal(t, http.StatusBadRequest, rec5.Code)
+
+	// UpdateAsset：超长名 → 400
+	rec6 := httptest.NewRecorder()
+	Proxy().ServeHTTP(rec6, newRecordContext(t, "/api/material/UpdateAsset", fmt.Sprintf(`{"Id":"Asset-x","Name":%q}`, longName)).Request)
+	require.Equal(t, http.StatusBadRequest, rec6.Code)
+}
+
 // TestProxy_getVisualValidateResult_tokenhubInternalError 验证 tokenhub 未认证（上游 500 InternalError，
 // 有本地会话）→ 返回 200 + 空 GroupId 继续轮询（非 502）。
 func TestProxy_getVisualValidateResult_tokenhubInternalError(t *testing.T) {
