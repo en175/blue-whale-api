@@ -232,11 +232,14 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 		logger.LogError(ctx, "error settling billing: "+err.Error())
 	}
 
-	// Charge the settled tokens against the Run Capability that authorized this call. The capability
-	// bounds spend in tokens, which is only knowable here — the pre-flight check can bound what one
-	// call asks for, never what it turns out to cost.
+	// Charge the settled usage against the Run Capability that authorized this call. Only knowable
+	// here — the pre-flight check can bound what one call asks for, never what it turns out to cost.
+	//
+	// `quota` is the same value settled above, deliberately: a capability minted with a spend bound
+	// is bounded by what the user is actually billed, not by raw token count, which prices cached
+	// input and completion identically and so runs 1.5x-8.7x high on cache-friendly traffic.
 	if relayInfo.RunCapabilityBilling {
-		RecordRunCapabilityUsage(ctx, relayInfo.RunCapabilityDigest, totalTokens)
+		RecordRunCapabilityUsage(ctx, relayInfo.RunCapabilityDigest, totalTokens, quota)
 	}
 
 
@@ -363,11 +366,14 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 		logger.LogError(ctx, "error settling billing: "+err.Error())
 	}
 
-	// Charge the settled tokens against the Run Capability that authorized this call. The capability
-	// bounds spend in tokens, which is only knowable here — the pre-flight check can bound what one
-	// call asks for, never what it turns out to cost.
+	// Charge the settled usage against the Run Capability that authorized this call. Only knowable
+	// here — the pre-flight check can bound what one call asks for, never what it turns out to cost.
+	//
+	// `quota` is the same value settled above, deliberately: a capability minted with a spend bound
+	// is bounded by what the user is actually billed, not by raw token count, which prices cached
+	// input and completion identically and so runs 1.5x-8.7x high on cache-friendly traffic.
 	if relayInfo.RunCapabilityBilling {
-		RecordRunCapabilityUsage(ctx, relayInfo.RunCapabilityDigest, totalTokens)
+		RecordRunCapabilityUsage(ctx, relayInfo.RunCapabilityDigest, totalTokens, quota)
 	}
 
 
