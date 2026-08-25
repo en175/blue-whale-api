@@ -179,6 +179,14 @@ func HandleFinalResponse(c *gin.Context, info *relaycommon.RelayInfo, lastStream
 			return
 		}
 
+		// Some upstreams (e.g. Volcengine) omit usage in the final chunk that carries
+		// finish_reason. Inject the computed usage so StreamResponseOpenAI2Claude can
+		// generate the required closing events (content_block_stop, message_delta,
+		// message_stop) instead of returning empty and deferring for a usage-only chunk
+		// that will never arrive.
+		if streamResponse.Usage == nil && usage != nil {
+			streamResponse.Usage = usage
+		}
 		info.ClaudeConvertInfo.Usage = usage
 
 		result, err := relayconvert.ConvertStreamResponse(c, info, types.RelayFormatClaude, &streamResponse)
