@@ -20,6 +20,17 @@ const runCapabilityPrefix = "bwcap_"
 
 var ErrRunCapabilityDenied = errors.New("run capability denied")
 
+// ErrRunCapabilityExhausted separates "this capability has spent what it was given" from every
+// other reason a capability is refused.
+//
+// They were one error, reported to the consumer as one 401 reading "invalid, out of scope, or
+// exhausted". A consumer cannot act on that: an invalid or out-of-scope capability is a fault and
+// the turn should fail, while an exhausted one is the breaker doing its job and the right response
+// is to stop starting new calls and deliver what the turn already produced. Collapsing the two
+// meant the second was handled like the first — a mid-stream abort that discarded text the User was
+// already reading, and any work the turn had committed.
+var ErrRunCapabilityExhausted = errors.New("run capability exhausted")
+
 type RunCapabilityRequest struct {
 	SubjectUserId   int      `json:"subject_user_id"`
 	Consumer        string   `json:"consumer"`
@@ -201,6 +212,16 @@ redis.call('HINCRBY', KEYS[1], 'used_quota', ARGV[2])
 return redis.call('HINCRBY', KEYS[1], 'used_tokens', ARGV[1])
 `)
 
+// classifyConsumeRefusal maps the consume script's refusal to a sentinel the caller can branch on.
+// The script signals its reason in the error text; `exhausted` covers the call breaker and both
+// budgets, which are one event from a consumer's point of view — it has spent what it was given.
+func classifyConsumeRefusal(err error) error {
+	if strings.Contains(err.Error(), "exhausted") {
+		return fmt.Errorf("%w: %v", ErrRunCapabilityExhausted, err)
+	}
+	return fmt.Errorf("%w: %v", ErrRunCapabilityDenied, err)
+}
+
 func ConsumeRunCapability(ctx context.Context, value, model string, requestedOutput int) (*RunCapabilityContext, error) {
 	if !strings.HasPrefix(value, runCapabilityPrefix) || !common.RedisEnabled || common.RDB == nil {
 		return nil, ErrRunCapabilityDenied
@@ -208,7 +229,7 @@ func ConsumeRunCapability(ctx context.Context, value, model string, requestedOut
 	key := "run-capability:" + capabilityDigest(value)
 	result, err := consumeRunCapability.Run(ctx, common.RDB, []string{key}, model, requestedOutput).Result()
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrRunCapabilityDenied, err)
+		return nil, classifyConsumeRefusal(err)
 	}
 	values, ok := result.([]interface{})
 	if !ok || len(values) != 14 {

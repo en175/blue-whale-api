@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -48,7 +49,15 @@ func RunCapabilityOrTokenAuth() gin.HandlerFunc {
 		}
 		capability, err := service.ConsumeRunCapability(c, value, request.Model, requestedOutput)
 		if err != nil {
-			abortWithOpenAiMessage(c, http.StatusUnauthorized, "Run capability invalid, out of scope, or exhausted")
+			// An exhausted capability is answered distinctly so the consumer can tell the breaker
+			// tripping apart from a bad credential. 429 rather than 401: nothing is wrong with the
+			// credential, it has simply spent what it was given, and the consumer's correct response
+			// is to stop rather than to re-authenticate.
+			if errors.Is(err, service.ErrRunCapabilityExhausted) {
+				abortWithOpenAiMessage(c, http.StatusTooManyRequests, "Run capability exhausted", "run_capability_exhausted")
+				return
+			}
+			abortWithOpenAiMessage(c, http.StatusUnauthorized, "Run capability invalid or out of scope")
 			return
 		}
 		user, err := model.GetUserCache(capability.SubjectUserId)

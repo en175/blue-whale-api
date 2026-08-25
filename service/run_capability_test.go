@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -113,5 +114,29 @@ func TestIssueRunCapabilityRejectsAnOutOfRangeSpendBound(t *testing.T) {
 			"the quota ceiling should match the token ceiling at the definitional rate, got %d vs %d",
 			runCapabilityMaxSpendQuota, runCapabilityMaxTotalTokens,
 		)
+	}
+}
+
+func TestClassifyConsumeRefusalSeparatesExhaustionFromDenial(t *testing.T) {
+	// A consumer acts differently on the two: a bad or out-of-scope capability is a fault and the
+	// turn should fail, while an exhausted one is the breaker working and the turn should stop and
+	// deliver what it has. Reporting both as one refusal made the second behave like the first.
+	for _, reason := range []string{"exhausted", "budget_exhausted"} {
+		err := classifyConsumeRefusal(errors.New(reason))
+		if !errors.Is(err, ErrRunCapabilityExhausted) {
+			t.Fatalf("%q should classify as exhausted, got %v", reason, err)
+		}
+		if errors.Is(err, ErrRunCapabilityDenied) {
+			t.Fatalf("%q must not also read as a denial, got %v", reason, err)
+		}
+	}
+	for _, reason := range []string{"denied", "scope_denied", "redis unavailable"} {
+		err := classifyConsumeRefusal(errors.New(reason))
+		if !errors.Is(err, ErrRunCapabilityDenied) {
+			t.Fatalf("%q should classify as denied, got %v", reason, err)
+		}
+		if errors.Is(err, ErrRunCapabilityExhausted) {
+			t.Fatalf("%q must not read as exhaustion — that would let a bad credential stop a turn quietly, got %v", reason, err)
+		}
 	}
 }
