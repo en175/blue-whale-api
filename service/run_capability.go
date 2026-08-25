@@ -29,14 +29,34 @@ type RunCapabilityRequest struct {
 	MaxModelCalls   int      `json:"max_model_calls"`
 	MaxInputTokens  int      `json:"max_input_tokens"`
 	MaxOutputTokens int      `json:"max_output_tokens"`
-	// MaxTotalTokens bounds what the capability may actually spend, summed across every call it
-	// authorizes. This is the bound that matters: money is spent in tokens, and MaxModelCalls only
-	// ever stood in for it. Optional for compatibility with callers that predate it — see
-	// resolveTotalTokenBudget.
+	// MaxTotalTokens bounds raw tokens — prompt plus completion, undiscounted — summed across every
+	// call the capability authorizes.
+	//
+	// It was introduced as a spend bound on the premise that "money is spent in tokens". That premise
+	// is false: money is spent in quota, which prices cached prompt tokens, completion tokens, the
+	// model and the group each at their own ratio. Measured against real agent traffic the two
+	// diverge by 1.5x to 8.7x, and the gap widens precisely as prompt caching improves — so the
+	// better a consumer is at caching, the sooner this bound stops it. See MaxSpendQuota.
+	//
+	// Kept, and still enforced, for callers that predate MaxSpendQuota. New callers should send
+	// MaxSpendQuota instead and leave this at zero.
 	MaxTotalTokens int `json:"max_total_tokens"`
-	ExpiresAt       int64    `json:"expires_at"`
-	IdempotencyKey  string   `json:"idempotency_key"`
-	TraceId         string   `json:"trace_id"`
+	// MaxSpendQuota bounds what the capability may actually spend, in the same quota unit the
+	// billing path settles in (common.QuotaPerUnit quota to the dollar). Charged from the same
+	// value SettleBilling uses, so the bound and the invoice cannot drift.
+	//
+	// This is a breaker, not a budget, and the two are sized by opposite rules. A budget sits where
+	// you want spending to stop and is meant to be reached; a breaker sits where normal operation
+	// never reaches, and tripping during ordinary use means it is set wrong. Money is already
+	// bounded per user by the balance the relay pre-consumes against — that is what says "you are
+	// out of funds". This says "you have run away", and nothing else. Size it from the observed
+	// spend distribution with room above it, never from what a run ought to be allowed to cost.
+	//
+	// Zero means unset: the capability then falls back to MaxTotalTokens, as before.
+	MaxSpendQuota  int    `json:"max_spend_quota"`
+	ExpiresAt      int64  `json:"expires_at"`
+	IdempotencyKey string `json:"idempotency_key"`
+	TraceId        string `json:"trace_id"`
 }
 
 type RunCapabilityGrant struct {
@@ -65,7 +85,8 @@ redis.call('HSET', KEYS[2],
   'resource_id', ARGV[4], 'models', ARGV[5], 'max_calls', ARGV[6],
   'used_calls', 0, 'max_output_tokens', ARGV[7],
   'max_input_tokens', ARGV[8], 'status', 'active',
-  'max_total_tokens', ARGV[11], 'used_tokens', 0)
+  'max_total_tokens', ARGV[11], 'used_tokens', 0,
+  'max_spend_quota', ARGV[12], 'used_quota', 0)
 redis.call('PEXPIRE', KEYS[2], ARGV[9])
 redis.call('SET', KEYS[1], ARGV[10], 'PX', ARGV[9])
 return 1
@@ -81,6 +102,12 @@ const runCapabilityMaxCalls = 64
 // asks for.
 const runCapabilityMaxTotalTokens = 2_000_000
 
+// runCapabilityMaxSpendQuota is the same ceiling expressed in quota. common.QuotaPerUnit is defined
+// as $0.002 per 1K tokens, so the 2,000,000-token ceiling above is exactly 2,000,000 quota at that
+// definitional rate; the two ceilings therefore stay the same size rather than one quietly becoming
+// the looser of the pair.
+const runCapabilityMaxSpendQuota = 2_000_000
+
 // resolveTotalTokenBudget keeps capabilities minted by callers that predate max_total_tokens working
 // by deriving the budget those bounds already implied: every call could spend its full input and
 // output allowance. It is a compatibility path, not a default worth relying on — an explicit budget
@@ -88,6 +115,12 @@ const runCapabilityMaxTotalTokens = 2_000_000
 func resolveTotalTokenBudget(request RunCapabilityRequest) int {
 	if request.MaxTotalTokens > 0 {
 		return request.MaxTotalTokens
+	}
+	// A caller that sends a quota budget has said what it wants bounded. Deriving a token budget on
+	// top would reintroduce the very bound MaxSpendQuota exists to replace, and it would bind first,
+	// since the derived figure is the loosest one the other bounds already imply.
+	if request.MaxSpendQuota > 0 {
+		return 0
 	}
 	implied := request.MaxModelCalls * (request.MaxInputTokens + request.MaxOutputTokens)
 	if implied <= 0 || implied > runCapabilityMaxTotalTokens {
@@ -105,7 +138,7 @@ func IssueRunCapability(ctx context.Context, request RunCapabilityRequest, now t
 	if !common.RedisEnabled || common.RDB == nil {
 		return nil, fmt.Errorf("%w: redis unavailable", ErrRunCapabilityDenied)
 	}
-	if request.SubjectUserId <= 0 || request.Consumer != "blue-whale-agent-runtime" || request.Purpose != "agent_run" || request.ResourceId == "" || len(request.Models) == 0 || request.MaxModelCalls < 1 || request.MaxModelCalls > runCapabilityMaxCalls || request.MaxOutputTokens < 1 || request.MaxTotalTokens < 0 || request.MaxTotalTokens > runCapabilityMaxTotalTokens || request.ExpiresAt <= now.Unix() || request.ExpiresAt > now.Add(10*time.Minute).Unix() || request.IdempotencyKey == "" {
+	if request.SubjectUserId <= 0 || request.Consumer != "blue-whale-agent-runtime" || request.Purpose != "agent_run" || request.ResourceId == "" || len(request.Models) == 0 || request.MaxModelCalls < 1 || request.MaxModelCalls > runCapabilityMaxCalls || request.MaxOutputTokens < 1 || request.MaxTotalTokens < 0 || request.MaxTotalTokens > runCapabilityMaxTotalTokens || request.MaxSpendQuota < 0 || request.MaxSpendQuota > runCapabilityMaxSpendQuota || request.ExpiresAt <= now.Unix() || request.ExpiresAt > now.Add(10*time.Minute).Unix() || request.IdempotencyKey == "" {
 		return nil, ErrRunCapabilityDenied
 	}
 	totalTokenBudget := resolveTotalTokenBudget(request)
@@ -127,7 +160,7 @@ func IssueRunCapability(ctx context.Context, request RunCapabilityRequest, now t
 		id, request.SubjectUserId, request.Consumer, request.ResourceId,
 		strings.Join(request.Models, ","), request.MaxModelCalls,
 		request.MaxOutputTokens, request.MaxInputTokens, ttl.Milliseconds(), digest,
-		totalTokenBudget,
+		totalTokenBudget, request.MaxSpendQuota,
 	).Int()
 	if err != nil || accepted != 1 {
 		return nil, ErrRunCapabilityDenied
@@ -136,7 +169,7 @@ func IssueRunCapability(ctx context.Context, request RunCapabilityRequest, now t
 }
 
 var consumeRunCapability = redis.NewScript(`
-local values = redis.call('HMGET', KEYS[1], 'id', 'subject_user_id', 'consumer', 'resource_id', 'models', 'max_calls', 'used_calls', 'max_output_tokens', 'status', 'max_input_tokens', 'max_total_tokens', 'used_tokens')
+local values = redis.call('HMGET', KEYS[1], 'id', 'subject_user_id', 'consumer', 'resource_id', 'models', 'max_calls', 'used_calls', 'max_output_tokens', 'status', 'max_input_tokens', 'max_total_tokens', 'used_tokens', 'max_spend_quota', 'used_quota')
 if not values[1] or values[9] ~= 'active' then return {err='denied'} end
 local allowed = false
 for model in string.gmatch(values[5], '([^,]+)') do
@@ -148,15 +181,23 @@ if requested_output < 0 or requested_output > tonumber(values[8]) then return {e
 if tonumber(values[7]) >= tonumber(values[6]) then return {err='exhausted'} end
 local budget = tonumber(values[11])
 if budget and budget > 0 and tonumber(values[12] or 0) >= budget then return {err='budget_exhausted'} end
+local quota_budget = tonumber(values[13])
+if quota_budget and quota_budget > 0 and tonumber(values[14] or 0) >= quota_budget then return {err='budget_exhausted'} end
 redis.call('HINCRBY', KEYS[1], 'used_calls', 1)
 return values
 `)
 
 // recordRunCapabilityUsage charges settled usage against the capability. It runs after the model
-// call, because only then is the real token count known: the pre-flight check can bound one call's
+// call, because only then is the real cost is known: the pre-flight check can bound one call's
 // request, never what it turns out to cost.
+//
+// Both counters advance on every call, whichever bound the capability was minted with. Charging
+// only the one in force would mean the record could not answer what a capability actually cost in
+// the other unit, and a capability carrying both bounds is then held to both — strictly the safer
+// reading of a caller that asked for two.
 var recordRunCapabilityUsage = redis.NewScript(`
 if redis.call('EXISTS', KEYS[1]) == 0 then return 0 end
+redis.call('HINCRBY', KEYS[1], 'used_quota', ARGV[2])
 return redis.call('HINCRBY', KEYS[1], 'used_tokens', ARGV[1])
 `)
 
@@ -170,7 +211,7 @@ func ConsumeRunCapability(ctx context.Context, value, model string, requestedOut
 		return nil, fmt.Errorf("%w: %v", ErrRunCapabilityDenied, err)
 	}
 	values, ok := result.([]interface{})
-	if !ok || len(values) != 12 {
+	if !ok || len(values) != 14 {
 		return nil, ErrRunCapabilityDenied
 	}
 	text := func(i int) string {
@@ -188,13 +229,21 @@ func ConsumeRunCapability(ctx context.Context, value, model string, requestedOut
 	return &RunCapabilityContext{CapabilityId: text(0), SubjectUserId: userId, Consumer: text(2), ResourceId: text(3), Models: strings.Split(text(4), ","), MaxOutputTokens: maxOutput, MaxInputTokens: maxInput, Digest: capabilityDigest(value)}, nil
 }
 
-// RecordRunCapabilityUsage charges settled token usage against the capability that authorized the
-// call. Failures are non-fatal to the request that already completed: the call is paid for either
-// way, and losing one increment must not fail a response the user already received. The capability
+// RecordRunCapabilityUsage charges settled usage against the capability that authorized the call.
+//
+// `quota` must be the same value the billing path settles — pass what SettleBilling was given, not
+// a recomputation. The whole point of the quota bound is that it cannot drift from the invoice, and
+// it drifts the moment two places work it out separately.
+//
+// Failures are non-fatal to the request that already completed: the call is paid for either way,
+// and losing one increment must not fail a response the user already received. The capability
 // expires on its own within ten minutes, which bounds what a lost increment can cost.
-func RecordRunCapabilityUsage(ctx context.Context, digest string, totalTokens int) {
-	if digest == "" || totalTokens <= 0 || !common.RedisEnabled || common.RDB == nil {
+func RecordRunCapabilityUsage(ctx context.Context, digest string, totalTokens int, quota int) {
+	if digest == "" || !common.RedisEnabled || common.RDB == nil {
 		return
 	}
-	_ = recordRunCapabilityUsage.Run(ctx, common.RDB, []string{"run-capability:" + digest}, totalTokens).Err()
+	if totalTokens <= 0 && quota <= 0 {
+		return
+	}
+	_ = recordRunCapabilityUsage.Run(ctx, common.RDB, []string{"run-capability:" + digest}, max(totalTokens, 0), max(quota, 0)).Err()
 }

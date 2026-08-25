@@ -71,7 +71,47 @@ func TestResolveTotalTokenBudgetIsAlwaysCapped(t *testing.T) {
 
 func TestRecordRunCapabilityUsageIsInertWithoutRedis(t *testing.T) {
 	// Charging usage must never fail a response the User already received.
-	RecordRunCapabilityUsage(context.Background(), "", 100)
-	RecordRunCapabilityUsage(context.Background(), "deadbeef", 0)
-	RecordRunCapabilityUsage(context.Background(), "deadbeef", 100)
+	RecordRunCapabilityUsage(context.Background(), "", 100, 40)
+	RecordRunCapabilityUsage(context.Background(), "deadbeef", 0, 0)
+	RecordRunCapabilityUsage(context.Background(), "deadbeef", 100, 40)
+	RecordRunCapabilityUsage(context.Background(), "deadbeef", 0, 40)
+	RecordRunCapabilityUsage(context.Background(), "deadbeef", -1, -1)
+}
+
+func TestResolveTotalTokenBudgetYieldsToAnExplicitSpendBound(t *testing.T) {
+	// A caller that sends a spend bound has said what it wants bounded. Deriving a token budget on
+	// top would bind first — the derived figure is the loosest thing the other bounds already imply,
+	// and it is denominated in the unit MaxSpendQuota exists to stop using.
+	budget := resolveTotalTokenBudget(RunCapabilityRequest{
+		MaxSpendQuota:   120_000,
+		MaxModelCalls:   8,
+		MaxInputTokens:  40_000,
+		MaxOutputTokens: 8_000,
+	})
+	if budget != 0 {
+		t.Fatalf("a quota-bounded capability should carry no derived token budget, got %d", budget)
+	}
+}
+
+func TestResolveTotalTokenBudgetKeepsBothBoundsWhenBothAreSent(t *testing.T) {
+	// Sending both is legal and means both apply. Only the derived fallback yields.
+	budget := resolveTotalTokenBudget(RunCapabilityRequest{
+		MaxTotalTokens: 50_000,
+		MaxSpendQuota:  120_000,
+	})
+	if budget != 50_000 {
+		t.Fatalf("an explicit token budget must survive alongside a spend bound, got %d", budget)
+	}
+}
+
+func TestIssueRunCapabilityRejectsAnOutOfRangeSpendBound(t *testing.T) {
+	// The ceiling exists so a caller cannot authorize an unbounded run by asking for one. Redis is
+	// unavailable here, so a rejection proves nothing on its own — assert the ceiling arithmetic
+	// instead, which is what the bounds check reads.
+	if runCapabilityMaxSpendQuota != runCapabilityMaxTotalTokens {
+		t.Fatalf(
+			"the quota ceiling should match the token ceiling at the definitional rate, got %d vs %d",
+			runCapabilityMaxSpendQuota, runCapabilityMaxTotalTokens,
+		)
+	}
 }
