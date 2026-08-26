@@ -2,7 +2,9 @@ package billing_setting
 
 import (
 	"fmt"
+	"strings"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	"github.com/QuantumNous/new-api/setting/config"
 	"github.com/samber/lo"
@@ -100,6 +102,30 @@ func smokeTestExpr(exprStr string) error {
 			if result < 0 {
 				return fmt.Errorf("vector {p=%g, c=%g}: result %f < 0", v.P, v.C, result)
 			}
+		}
+	}
+	return nil
+}
+
+// ValidateBillingExprMap validates the raw option value of
+// billing_setting.billing_expr before it is persisted: every non-empty
+// expression must compile and pass the smoke test. This makes broken
+// expressions fail fast at save time instead of aborting request pre-consume.
+func ValidateBillingExprMap(raw string) error {
+	var exprs map[string]string
+	if err := common.UnmarshalJsonStr(strings.TrimSpace(raw), &exprs); err != nil {
+		return fmt.Errorf("billing expression map is not valid JSON: %w", err)
+	}
+	for modelName, exprStr := range exprs {
+		exprStr = strings.TrimSpace(exprStr)
+		if exprStr == "" {
+			continue
+		}
+		if _, err := billingexpr.CompileFromCache(exprStr); err != nil {
+			return fmt.Errorf("model %s: %w", modelName, err)
+		}
+		if err := smokeTestExpr(exprStr); err != nil {
+			return fmt.Errorf("model %s: %w", modelName, err)
 		}
 	}
 	return nil

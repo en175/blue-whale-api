@@ -2,7 +2,6 @@ package billingexpr
 
 import (
 	"fmt"
-	"math"
 	"strings"
 	"sync"
 
@@ -38,31 +37,36 @@ var (
 )
 
 // compileEnvPrototypeV1 is the v1 type-checking prototype used at compile time.
+// Function signatures MUST match the runtime env in runProgram exactly: expr
+// picks the call opcode from the compiled type, and a mismatch surfaces as a
+// runtime interface-conversion panic. The math helpers and tier intentionally
+// use interface{}-arg, (float64, error)-return forms so integer operands
+// (e.g. `param("n") ?? 1`) do not abort billing with a reflect type error.
 var compileEnvPrototypeV1 = map[string]interface{}{
-	"p":    float64(0),
-	"c":    float64(0),
-	"len":  float64(0),
-	"cr":   float64(0),
-	"cc":   float64(0),
-	"cc1h": float64(0),
-	"img":  float64(0),
-	"img_o": float64(0),
-	"ai":   float64(0),
-	"ao":   float64(0),
-	"tier":                   func(string, float64) float64 { return 0 },
-	"header":                 func(string) string { return "" },
-	"param":                  func(string) interface{} { return nil },
-	"has":                    func(interface{}, string) bool { return false },
-	"hour":                   func(string) int { return 0 },
-	"minute":                 func(string) int { return 0 },
-	"weekday":                func(string) int { return 0 },
-	"month":                  func(string) int { return 0 },
-	"day":                    func(string) int { return 0 },
-	"max":                    math.Max,
-	"min":                    math.Min,
-	"abs":                    math.Abs,
-	"ceil":                   math.Ceil,
-	"floor":                  math.Floor,
+	"p":       float64(0),
+	"c":       float64(0),
+	"len":     float64(0),
+	"cr":      float64(0),
+	"cc":      float64(0),
+	"cc1h":    float64(0),
+	"img":     float64(0),
+	"img_o":   float64(0),
+	"ai":      float64(0),
+	"ao":      float64(0),
+	"tier":    func(string, interface{}) (float64, error) { return 0, nil },
+	"header":  func(string) string { return "" },
+	"param":   func(string) interface{} { return nil },
+	"has":     func(interface{}, string) bool { return false },
+	"hour":    func(string) int { return 0 },
+	"minute":  func(string) int { return 0 },
+	"weekday": func(string) int { return 0 },
+	"month":   func(string) int { return 0 },
+	"day":     func(string) int { return 0 },
+	"max":     mathMax,
+	"min":     mathMin,
+	"abs":     mathAbs,
+	"ceil":    mathCeil,
+	"floor":   mathFloor,
 }
 
 func getCompileEnv(version int) map[string]interface{} {
