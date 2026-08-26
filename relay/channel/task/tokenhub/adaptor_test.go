@@ -70,6 +70,20 @@ func TestParseTaskResult(t *testing.T) {
 			wantReason:   "resultSummary safety violation",
 		},
 		{
+			name:         "failed uses string errorCode and string resultSummary error.code",
+			body:         `{"id":"x","status":"failed","model":"dreamina-seedance-2-0-mini-260615","resultSummary":{"upstreamStatus":"failed","error":{"code":"OutputAudioSensitiveContentDetected.PolicyViolation","message":"output audio sensitive content detected"}},"errorCode":"OutputAudioSensitiveContentDetected.PolicyViolation"}`,
+			wantStatus:   string(model.TaskStatusFailure),
+			wantProgress: "100%",
+			wantReason:   "output audio sensitive content detected",
+		},
+		{
+			name:         "failed uses string top-level error.code",
+			body:         `{"id":"x","status":"failed","model":"dreamina-seedance-2-0-mini-260615","error":{"code":"OutputAudioSensitiveContentDetected.PolicyViolation","message":"content safety check failed"}}`,
+			wantStatus:   string(model.TaskStatusFailure),
+			wantProgress: "100%",
+			wantReason:   "content safety check failed",
+		},
+		{
 			name:         "cancelled maps to failure",
 			body:         `{"id":"x","status":"cancelled","model":"dreamina-seedance-2-0-mini-260615"}`,
 			wantStatus:   string(model.TaskStatusFailure),
@@ -155,6 +169,11 @@ func TestConvertToOpenAIVideo_TerminalErrors(t *testing.T) {
 			name:       "failed surfaces resultSummary error.message",
 			data:       `{"id":"x","status":"failed","model":"m","resultSummary":{"upstreamStatus":"failed","error":{"code":1000,"message":"resultSummary safety violation"}}}`,
 			wantErrMsg: "resultSummary safety violation",
+		},
+		{
+			name:       "failed surfaces string resultSummary error.code",
+			data:       `{"id":"x","status":"failed","model":"m","resultSummary":{"upstreamStatus":"failed","error":{"code":"OutputAudioSensitiveContentDetected.PolicyViolation","message":"output audio sensitive content detected"}},"errorCode":"OutputAudioSensitiveContentDetected.PolicyViolation"}`,
+			wantErrMsg: "output audio sensitive content detected",
 		},
 	}
 	for _, tt := range tests {
