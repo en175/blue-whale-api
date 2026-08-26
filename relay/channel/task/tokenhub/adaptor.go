@@ -63,6 +63,29 @@ type requestPayload struct {
 	Watermark        *dto.BoolValue `json:"watermark,omitempty"`
 }
 
+// codeValue 接受 JSON 数字和字符串两种形态的 code。
+// TokenHub 多数错误返回整型 code（如 1000），但内容安全违规类错误返回字符串 code
+// （如 "OutputAudioSensitiveContentDetected.PolicyViolation"）。若字段声明为 int，
+// 字符串形态会让 common.Unmarshal 整体失败，任务卡在 IN_PROGRESS 直到 24h 超时扫尾。
+// 这里统一归一到字符串表示。
+type codeValue string
+
+func (c *codeValue) UnmarshalJSON(data []byte) error {
+	var s string
+	if err := common.Unmarshal(data, &s); err == nil {
+		*c = codeValue(s)
+		return nil
+	}
+	var n int64
+	if err := common.Unmarshal(data, &n); err == nil {
+		*c = codeValue(strconv.FormatInt(n, 10))
+		return nil
+	}
+	// 兜底：保留原始内容，避免未知形态再次阻塞解析。
+	*c = codeValue(bytes.TrimSpace(data))
+	return nil
+}
+
 // responsePayload 对应 create 响应。成功时顶层 id 即上游任务ID；
 // 失败（非 200）时返回 API 级错误信封，id 为空。
 type responsePayload struct {
@@ -72,9 +95,9 @@ type responsePayload struct {
 	Model          string `json:"model"`
 	CreatedAt      string `json:"createdAt"`
 	RequestID      string `json:"requestId"`
-	Error          string `json:"error"`
-	ErrorCode      int    `json:"errorCode"`
-	Message        string `json:"message"`
+	Error          string    `json:"error"`
+	ErrorCode      codeValue `json:"errorCode"`
+	Message        string    `json:"message"`
 }
 
 // responseTask 对应查询响应。结果包在 resultSummary 信封里（与 doubao 顶层字段不同）。
@@ -96,8 +119,8 @@ type responseTask struct {
 		} `json:"usage"`
 		// Error 为状态结果信封内的错误对象（与 upstreamStatus/usage 同级），可能为 null 或缺省。
 		Error *struct {
-			Code    int    `json:"code"`
-			Message string `json:"message"`
+			Code    codeValue `json:"code"`
+			Message string    `json:"message"`
 		} `json:"error"`
 	} `json:"resultSummary"`
 	CreatedAt string `json:"createdAt"`
@@ -105,11 +128,11 @@ type responseTask struct {
 	RequestID string `json:"requestId"`
 	// Error 为顶层错误对象 {code, message}，可能为 null 或缺省。
 	Error     *struct {
-		Code    int    `json:"code"`
-		Message string `json:"message"`
+		Code    codeValue `json:"code"`
+		Message string    `json:"message"`
 	} `json:"error"`
-	ErrorCode int    `json:"errorCode"`
-	Message   string `json:"message"`
+	ErrorCode codeValue `json:"errorCode"`
+	Message   string    `json:"message"`
 }
 
 // effectiveStatus 返回用于状态判定的字段：优先 resultSummary.upstreamStatus，回退顶层 status。
@@ -240,7 +263,7 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 
 	if dResp.ID == "" {
 		if dResp.Message != "" {
-			taskErr = service.TaskErrorWrapper(fmt.Errorf("%s (error=%s, code=%d)", dResp.Message, dResp.Error, dResp.ErrorCode), "upstream_error", http.StatusInternalServerError)
+			taskErr = service.TaskErrorWrapper(fmt.Errorf("%s (error=%s, code=%s)", dResp.Message, dResp.Error, dResp.ErrorCode), "upstream_error", http.StatusInternalServerError)
 		} else {
 			taskErr = service.TaskErrorWrapper(fmt.Errorf("task_id is empty"), "invalid_response", http.StatusInternalServerError)
 		}
