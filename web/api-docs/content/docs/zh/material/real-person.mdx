@@ -12,7 +12,7 @@ description: 真人（LivenessFace）素材的 H5 活体认证闭环（CreateVis
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `Name` | string | 否 | 组名，认证完成后用作归属组名 |
-| `CallbackURL` | string | 否 | 客户回调地址（认证完成后网关 302 到它）；不传则走网关内置回调 |
+| `CallbackURL` | string | 是 | 客户回调地址（认证完成后网关 302 到它）；缺失返回 `400 MissingParameter.CallbackURL` |
 | `ProjectName` | string | 否 | 项目名 |
 
 ```bash
@@ -32,7 +32,7 @@ curl "$BASE_URL/api/material/CreateVisualValidateSession" \
 { "BytedToken": "bt-xxx", "H5Link": "https://h5.example.com/verify", "CallbackURL": "https://example.com/cb" }
 ```
 
-`BytedToken` 是会话标识（供查询认证结果用），`H5Link` 给待验证者打开完成活体认证。传了自定义 `CallbackURL` 时，认证完成后网关带认证结果 302 到该地址，响应中的 `CallbackURL` 即你传入的原值；未传时响应中 `CallbackURL` 为空。
+`BytedToken` 是会话标识（供查询认证结果用），`H5Link` 给待验证者打开完成活体认证。认证完成后，网关带认证结果 302 到 `CallbackURL`，响应中的 `CallbackURL` 即你传入的原值。
 
 ## GetVisualValidateResult — 查询真人认证结果
 

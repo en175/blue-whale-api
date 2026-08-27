@@ -12,7 +12,7 @@ Real-person materials (LivenessFace) require an H5 liveness verification loop: f
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `Name` | string | No | Group name, used as the ownership group name after verification |
-| `CallbackURL` | string | No | Client callback URL (the gateway 302-redirects to it after verification); if omitted, the gateway's built-in callback is used |
+| `CallbackURL` | string | Yes | Client callback URL (the gateway 302-redirects to it after verification); missing → `400 MissingParameter.CallbackURL` |
 | `ProjectName` | string | No | Project name |
 
 ```bash
@@ -32,7 +32,7 @@ Direct format (no envelope):
 { "BytedToken": "bt-xxx", "H5Link": "https://h5.example.com/verify", "CallbackURL": "https://example.com/cb" }
 ```
 
-`BytedToken` is the session identifier (used to query the verification result), and `H5Link` is opened by the verifier to complete liveness verification. If a custom `CallbackURL` is provided, the gateway 302-redirects to it with the verification result once verification completes, and the `CallbackURL` in the response is the value you passed in; if omitted, the `CallbackURL` in the response is empty.
+`BytedToken` is the session identifier (used to query the verification result), and `H5Link` is opened by the verifier to complete liveness verification. Once verification completes, the gateway 302-redirects to the `CallbackURL` with the verification result, and the `CallbackURL` in the response is the value you passed in.
 
 ## GetVisualValidateResult — Query the Verification Result
 
