@@ -50,8 +50,8 @@ curl "$BASE_URL/api/material/CreateAsset" \
 | `Filter.GroupType` | string | 是 | 组类型过滤（当前 `AIGC` / `LivenessFace`） |
 | `Filter.Statuses` | []string | 否 | `Active` / `Processing` / `Failed` |
 | `Filter.Name` | string | 否 | 名称模糊匹配 |
-| `PageNumber` | int | 否 | 页码，默认 `1` |
-| `PageSize` | int | 否 | 每页数量，默认 `20`，范围 1–100 |
+| `PageNumber` | int | 是 | 页码（缺失返回 400 `MissingParameter.PageNumber`） |
+| `PageSize` | int | 是 | 每页数量（默认 `20`，范围 1–100；与 `PageNumber` 同必填） |
 
 ```bash
 BASE_URL="https://yunjizi.cn"   # 国内；国外用 https://api.yunjizi.cn

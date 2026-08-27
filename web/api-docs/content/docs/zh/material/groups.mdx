@@ -76,7 +76,7 @@ curl "$BASE_URL/api/material/GetAssetGroup" \
 
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
-| `Name` | string | 是 | 素材组名称（≤255 字符、不含 `<`/`>`，否则 400 `InvalidParameter`） |
+| `Name` | string | 是 | 素材组名称（≤255 字符、不含 `<`/`>`，否则 400 `InvalidParameter`）。**建议用 ASCII**——上游对中文名可能乱码为 `�` |
 | `Description` | string | 否 | 描述 |
 | `GroupType` | string | 是 | 组类型，当前仅支持 `AIGC` |
 
@@ -132,7 +132,7 @@ curl "$BASE_URL/api/material/UpdateAssetGroup" \
 
 ## DeleteAssetGroup — 删除素材组
 
-删除组，并**同步删除组内全部素材**。仅能删除当前 API Key 归属的组，非本人组返回 `404 NotFound`。
+删除组，并**同步删除组内全部素材**。仅能删除当前 API Key 归属的组，非本人组返回 `404 NotFound`（网关 `groupOwnedByCurrentUser` 校验）。
 
 ### 请求
 

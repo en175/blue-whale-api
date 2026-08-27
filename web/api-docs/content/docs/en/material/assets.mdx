@@ -50,8 +50,8 @@ Lists assets by asset group. **Both `Filter.GroupIds` and `Filter.GroupType` are
 | `Filter.GroupType` | string | Yes | Group type filter (currently `AIGC` / `LivenessFace`) |
 | `Filter.Statuses` | []string | No | `Active` / `Processing` / `Failed` |
 | `Filter.Name` | string | No | Fuzzy name match |
-| `PageNumber` | int | No | Page number, default `1` |
-| `PageSize` | int | No | Page size, default `20`, range 1–100 |
+| `PageNumber` | int | Yes | Page number (missing → 400 `MissingParameter.PageNumber`) |
+| `PageSize` | int | Yes | Page size (default `20`, range 1–100; required together with `PageNumber`) |
 
 ```bash
 BASE_URL="https://yunjizi.cn"   # Domestic; overseas use https://api.yunjizi.cn

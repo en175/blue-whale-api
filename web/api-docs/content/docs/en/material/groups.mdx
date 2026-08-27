@@ -76,7 +76,7 @@ curl "$BASE_URL/api/material/GetAssetGroup" \
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `Name` | string | Yes | Group name (≤255 chars, no `<`/`>`, otherwise `400 InvalidParameter`) |
+| `Name` | string | Yes | Group name (≤255 chars, no `<`/`>`, otherwise `400 InvalidParameter`). **Prefer ASCII** — upstream may corrupt Chinese names into `�` |
 | `Description` | string | No | Description |
 | `GroupType` | string | Yes | Group type; currently only `AIGC` |
 
@@ -132,7 +132,7 @@ curl "$BASE_URL/api/material/UpdateAssetGroup" \
 
 ## DeleteAssetGroup — Delete Asset Group
 
-Deletes the group and **all assets within it**. Only groups owned by the current API key can be deleted; others return `404 NotFound`.
+Deletes the group and **all assets within it**. Only groups owned by the current API key can be deleted; others return `404 NotFound` (gateway `groupOwnedByCurrentUser` check).
 
 ### Request
 
