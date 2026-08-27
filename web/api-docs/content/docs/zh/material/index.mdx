@@ -64,11 +64,11 @@ Authorization: Bearer sk-YOUR-KEY
 
 | HTTP | Code | 说明 |
 | --- | --- | --- |
-| 400 | `InvalidParameter` | 请求参数非法（如 `ListAssets` 空 `GroupIds`、名称含 `<`/`>` 或超长） |
-| 400 | `UnsupportedField` | 不支持的字段修改（如 `UpdateAssetGroup` 改 `Name`，上游返回） |
+| 400 | `InvalidParameter` | 请求参数非法（如 `ListAssets` 空 `GroupIds` 或缺 `Filter.GroupType`、名称含 `<`/`>` 或超长） |
 | 404 | `NotFound` | 资源不存在或**不属于当前 API Key**（归属校验，网关主动返回） |
 | 404 | `InvalidActionOrVersion` | 不存在的 `Action`（上游返回） |
 | 500 | `InternalError` | 上游内部错误 |
+| 502 | — | 网关查上游失败（如真人认证会话刚创建暂不可查），稍后重试即可 |
 | 401 | — | 鉴权失败走 OpenAI 风格错误（见「鉴权」），不入此表 |
 
 ## 归属隔离

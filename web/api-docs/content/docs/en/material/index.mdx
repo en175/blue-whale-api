@@ -64,11 +64,11 @@ Business-layer errors (returned by the gateway or normalized from upstream) use:
 
 | HTTP | Code | Description |
 | --- | --- | --- |
-| 400 | `InvalidParameter` | Invalid request parameter (e.g. empty `GroupIds` in `ListAssets`, name containing `<`/`>` or too long) |
-| 400 | `UnsupportedField` | Unsupported field update (e.g. `Name` in `UpdateAssetGroup`, returned upstream) |
+| 400 | `InvalidParameter` | Invalid request parameter (e.g. empty `GroupIds` or missing `Filter.GroupType` in `ListAssets`, name containing `<`/`>` or too long) |
 | 404 | `NotFound` | Resource not found or **not owned by the current API key** (ownership check, returned by the gateway) |
 | 404 | `InvalidActionOrVersion` | Unknown `Action` (returned upstream) |
 | 500 | `InternalError` | Upstream internal error |
+| 502 | — | The gateway failed to query upstream (e.g. a just-created real-person verification session not yet queryable); retry shortly |
 | 401 | — | Authentication failures use the OpenAI-style error (see "Authentication"), not listed here |
 
 ## Ownership Isolation

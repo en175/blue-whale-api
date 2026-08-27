@@ -40,14 +40,14 @@ Registration is asynchronous; check the status via `ListAssets` or `GetAsset`.
 
 ## ListAssets — List Assets
 
-Lists assets by asset group. **`Filter.GroupIds` is required** — when empty the gateway returns `400 InvalidParameter`, preventing unauthorized listing of all assets under the shared account.
+Lists assets by asset group. **Both `Filter.GroupIds` and `Filter.GroupType` are required** — when empty/missing the gateway returns `400 InvalidParameter`, preventing unauthorized listing of all assets under the shared account.
 
 ### Request
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `Filter.GroupIds` | []string | Yes | Asset group id list (must all be owned by the current API key, otherwise 404) |
-| `Filter.GroupType` | string | No | Group type filter |
+| `Filter.GroupType` | string | Yes | Group type filter (currently `AIGC` / `LivenessFace`) |
 | `Filter.Statuses` | []string | No | `Active` / `Processing` / `Failed` |
 | `Filter.Name` | string | No | Fuzzy name match |
 | `PageNumber` | int | No | Page number, default `1` |

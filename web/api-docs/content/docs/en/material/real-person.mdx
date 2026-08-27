@@ -59,6 +59,9 @@ Direct format (no envelope):
 { "GroupId": "group-xxx" }
 ```
 
-> Note: once verification completes, the real-person group id `group-xxx` is returned; **pending / token-not-found / not-owned cases all return `200` + `{"GroupId":""}`** (fail-closed, no leakage) — just keep polling, no need to distinguish them.
+> Note: after verification completes, the real-person group id `group-xxx` is returned:
+> - Token not found / not owned by you → `200` + `{"GroupId":""}` (local fail-closed, no upstream call, no leakage)
+> - Session exists but verification incomplete → the gateway queries upstream once: `200` + `{"GroupId":""}` when queryable (keep polling); `502` right after creation if not yet queryable (retry shortly)
+> - Verification complete → `200` + `{"GroupId":"group-xxx"}`
 
 The real-person group id `group-xxx` returned after verification can be referenced in [video generation](../video/submit) via `asset://group-xxx` (see [Material Library Overview](./index)).

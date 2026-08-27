@@ -100,7 +100,7 @@ curl "$BASE_URL/api/material/CreateAssetGroup" \
 
 ## UpdateAssetGroup — Update Asset Group
 
-> Only `Description` can be updated; sending a `Name` field returns `UnsupportedField`. Groups not owned by you return `404 NotFound`.
+> Both `Description` and `Name` can be updated; `Name` must be ≤255 chars and free of `<`/`>` (otherwise `400 InvalidParameter`). Groups not owned by you return `404 NotFound`.
 
 ### Request
 
@@ -108,6 +108,7 @@ curl "$BASE_URL/api/material/CreateAssetGroup" \
 | --- | --- | --- | --- |
 | `Id` | string | Yes | Asset group id |
 | `Description` | string | No | New description |
+| `Name` | string | No | New name (≤255 chars, no `<`/`>`, otherwise 400 `InvalidParameter`) |
 
 ```bash
 BASE_URL="https://yunjizi.cn"   # Domestic; overseas use https://api.yunjizi.cn

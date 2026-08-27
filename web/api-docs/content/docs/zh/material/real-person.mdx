@@ -59,6 +59,9 @@ curl "$BASE_URL/api/material/GetVisualValidateResult" \
 { "GroupId": "group-xxx" }
 ```
 
-> 说明：认证完成返回真人素材组 id `group-xxx`；**未完成 / token 不存在 / 非本人均返回 `200` + `{"GroupId":""}`**（fail-closed，不泄露），客户端持续轮询即可，无需区分。
+> 说明：认证完成后返回真人素材组 id `group-xxx`：
+> - 会话不存在 / 非本人 token → `200` + `{"GroupId":""}`（本地 fail-closed，不查上游、不泄露）
+> - 会话存在但未认证完成 → 网关查一次上游：可查时返回 `200` + `{"GroupId":""}`（继续轮询）；刚创建暂不可查时返回 `502`，稍后重试
+> - 认证完成 → `200` + `{"GroupId":"group-xxx"}`
 
 认证完成返回的真人素材组 id `group-xxx` 可在[视频生成](../video/submit)中用 `asset://group-xxx` 引用（见[素材库概览](./index)）。

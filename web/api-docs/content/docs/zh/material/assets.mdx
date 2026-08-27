@@ -40,14 +40,14 @@ curl "$BASE_URL/api/material/CreateAsset" \
 
 ## ListAssets — 列出素材
 
-按素材组列出素材。**`Filter.GroupIds` 必填**——为空时网关直接返回 `400 InvalidParameter`，防止越权列出共享账号下全部素材。
+按素材组列出素材。**`Filter.GroupIds` 与 `Filter.GroupType` 均必填**——为空/缺失时网关直接返回 `400 InvalidParameter`，防止越权列出共享账号下全部素材。
 
 ### 请求
 
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `Filter.GroupIds` | []string | 是 | 素材组 id 列表（须全部属当前 API Key，否则 404） |
-| `Filter.GroupType` | string | 否 | 组类型过滤 |
+| `Filter.GroupType` | string | 是 | 组类型过滤（当前 `AIGC` / `LivenessFace`） |
 | `Filter.Statuses` | []string | 否 | `Active` / `Processing` / `Failed` |
 | `Filter.Name` | string | 否 | 名称模糊匹配 |
 | `PageNumber` | int | 否 | 页码，默认 `1` |
