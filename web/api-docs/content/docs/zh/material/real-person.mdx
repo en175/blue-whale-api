@@ -32,7 +32,7 @@ curl "$BASE_URL/api/material/CreateVisualValidateSession" \
 { "BytedToken": "bt-xxx", "H5Link": "https://h5.example.com/verify", "CallbackURL": "https://example.com/cb" }
 ```
 
-`BytedToken` 是会话标识（5.2 查询用），`H5Link` 给待验证者打开完成活体认证。传了自定义 `CallbackURL` 时，认证完成后网关带认证结果 302 到该地址；响应中的 `CallbackURL` 即你传入的原值。
+`BytedToken` 是会话标识（供查询认证结果用），`H5Link` 给待验证者打开完成活体认证。传了自定义 `CallbackURL` 时，认证完成后网关带认证结果 302 到该地址，响应中的 `CallbackURL` 即你传入的原值；未传时响应中 `CallbackURL` 为空。
 
 ## GetVisualValidateResult — 查询真人认证结果
 
@@ -60,3 +60,5 @@ curl "$BASE_URL/api/material/GetVisualValidateResult" \
 ```
 
 > 说明：认证完成返回真人素材组 id `group-xxx`；**未完成 / token 不存在 / 非本人均返回 `200` + `{"GroupId":""}`**（fail-closed，不泄露），客户端持续轮询即可，无需区分。
+
+认证完成返回的真人素材组 id `group-xxx` 可在[视频生成](../video/submit)中用 `asset://group-xxx` 引用（见[素材库概览](./index)）。

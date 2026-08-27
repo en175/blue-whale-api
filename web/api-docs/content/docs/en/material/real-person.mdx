@@ -32,7 +32,7 @@ Direct format (no envelope):
 { "BytedToken": "bt-xxx", "H5Link": "https://h5.example.com/verify", "CallbackURL": "https://example.com/cb" }
 ```
 
-`BytedToken` is the session identifier (used in the result query), and `H5Link` is opened by the verifier to complete liveness verification. If a custom `CallbackURL` is provided, the gateway 302-redirects to it with the verification result once verification completes; the `CallbackURL` in the response is the value you passed in.
+`BytedToken` is the session identifier (used to query the verification result), and `H5Link` is opened by the verifier to complete liveness verification. If a custom `CallbackURL` is provided, the gateway 302-redirects to it with the verification result once verification completes, and the `CallbackURL` in the response is the value you passed in; if omitted, the `CallbackURL` in the response is empty.
 
 ## GetVisualValidateResult — Query the Verification Result
 
@@ -60,3 +60,5 @@ Direct format (no envelope):
 ```
 
 > Note: once verification completes, the real-person group id `group-xxx` is returned; **pending / token-not-found / not-owned cases all return `200` + `{"GroupId":""}`** (fail-closed, no leakage) — just keep polling, no need to distinguish them.
+
+The real-person group id `group-xxx` returned after verification can be referenced in [video generation](../video/submit) via `asset://group-xxx` (see [Material Library Overview](./index)).
