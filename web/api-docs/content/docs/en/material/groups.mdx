@@ -1,0 +1,156 @@
+---
+title: Asset Groups
+description: Create, query, update, and delete asset groups (ListAssetGroups / GetAssetGroup / CreateAssetGroup / UpdateAssetGroup / DeleteAssetGroup)
+---
+
+An asset group is the container for assets. Create a group first, then upload assets into it (see [Assets](./assets)). All five Actions below use the **CRUD envelope** response format.
+
+## ListAssetGroups — List Asset Groups
+
+Lists the asset groups owned by the account of the current API key. **This endpoint is a gateway-local query** (served from the ownership table, no upstream call).
+
+### Request
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `Filter.GroupType` | string | No | Group type filter (`AIGC` / `LivenessFace`) |
+| `PageNumber` | int | No | Page number, default `1` |
+| `PageSize` | int | No | Page size, default `20`, range 1–100 |
+
+```bash
+BASE_URL="https://yunjizi.cn"   # Domestic; overseas use https://api.yunjizi.cn
+
+curl "$BASE_URL/api/material/ListAssetGroups" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"Filter":{"GroupType":"AIGC"},"PageNumber":1,"PageSize":20}'
+```
+
+### Response
+
+```json
+{
+  "ResponseMetadata": { "RequestId": "req_local_1_1", "Action": "ListAssetGroups", "Version": "2024-01-01", "Service": "ark", "Region": "cn-beijing" },
+  "Result": {
+    "TotalCount": 1,
+    "Items": [
+      { "Id": "group-xxx", "Name": "My Asset Group", "GroupType": "AIGC", "CreateTime": "2026-08-19T02:10:00Z", "UpdateTime": "2026-08-19T02:10:00Z" }
+    ],
+    "PageNumber": 1,
+    "PageSize": 20
+  }
+}
+```
+
+## GetAssetGroup — Get Asset Group Details
+
+Query an asset group by `Id`. **Only groups owned by the current API key are accessible**; others return `404 NotFound`.
+
+### Request
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `Id` | string | Yes | Asset group id (`group-...`) |
+
+```bash
+BASE_URL="https://yunjizi.cn"   # Domestic; overseas use https://api.yunjizi.cn
+
+curl "$BASE_URL/api/material/GetAssetGroup" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"Id":"group-xxx"}'
+```
+
+### Response
+
+```json
+{
+  "ResponseMetadata": { "RequestId": "req_xxx", "Action": "GetAssetGroup", "Version": "2024-01-01", "Service": "ark", "Region": "cn-beijing" },
+  "Result": { "Id": "group-xxx", "Name": "My Asset Group", "GroupType": "AIGC", "CreateTime": "2026-08-19T02:10:00Z", "UpdateTime": "2026-08-19T02:10:00Z" }
+}
+```
+
+## CreateAssetGroup — Create Asset Group
+
+### Request
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `Name` | string | Yes | Group name (≤255 chars, no `<`/`>`, otherwise `400 InvalidParameter`) |
+| `Description` | string | No | Description |
+| `GroupType` | string | Yes | Group type; currently only `AIGC` |
+
+```bash
+BASE_URL="https://yunjizi.cn"   # Domestic; overseas use https://api.yunjizi.cn
+
+curl "$BASE_URL/api/material/CreateAssetGroup" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"Name":"My Asset Group","Description":"test","GroupType":"AIGC"}'
+```
+
+### Response
+
+```json
+{
+  "ResponseMetadata": { "RequestId": "req_xxx", "Action": "CreateAssetGroup", "Version": "2024-01-01", "Service": "ark", "Region": "cn-beijing" },
+  "Result": { "Id": "group-xxx" }
+}
+```
+
+## UpdateAssetGroup — Update Asset Group
+
+> Only `Description` can be updated; passing a `Name` different from creation returns `UnsupportedField`. Groups not owned by you return `404 NotFound`.
+
+### Request
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `Id` | string | Yes | Asset group id |
+| `Description` | string | No | New description |
+
+```bash
+BASE_URL="https://yunjizi.cn"   # Domestic; overseas use https://api.yunjizi.cn
+
+curl "$BASE_URL/api/material/UpdateAssetGroup" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"Id":"group-xxx","Description":"New description"}'
+```
+
+### Response
+
+```json
+{
+  "ResponseMetadata": { "RequestId": "req_xxx", "Action": "UpdateAssetGroup", "Version": "2024-01-01", "Service": "ark", "Region": "cn-beijing" },
+  "Result": {}
+}
+```
+
+## DeleteAssetGroup — Delete Asset Group
+
+Deletes the group and **all assets within it**. Only groups owned by the current API key can be deleted; others return `404 NotFound`.
+
+### Request
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `Id` | string | Yes | Asset group id |
+
+```bash
+BASE_URL="https://yunjizi.cn"   # Domestic; overseas use https://api.yunjizi.cn
+
+curl "$BASE_URL/api/material/DeleteAssetGroup" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"Id":"group-xxx"}'
+```
+
+### Response
+
+```json
+{
+  "ResponseMetadata": { "RequestId": "req_xxx", "Action": "DeleteAssetGroup", "Version": "2024-01-01", "Service": "ark", "Region": "cn-beijing" },
+  "Result": {}
+}
+```
