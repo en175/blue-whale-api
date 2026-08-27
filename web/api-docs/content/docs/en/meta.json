@@ -6,6 +6,7 @@
     "authentication",
     "models",
     "video",
+    "material",
     "errors",
     "rate-limits",
     "faq"
