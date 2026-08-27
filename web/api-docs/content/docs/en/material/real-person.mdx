@@ -1,0 +1,62 @@
+---
+title: Real-Person Verification
+description: H5 liveness verification loop for real-person (LivenessFace) materials (CreateVisualValidateSession / GetVisualValidateResult)
+---
+
+Real-person materials (LivenessFace) require an H5 liveness verification loop: first create a verification session to obtain `H5Link` and `BytedToken`, have the verifier open the link and complete liveness verification, then query the result with `BytedToken`. **Session endpoints return the direct format** (no `ResponseMetadata`/`Result` envelope).
+
+## CreateVisualValidateSession — Create a Verification Session
+
+### Request
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `Name` | string | No | Group name, used as the ownership group name after verification |
+| `CallbackURL` | string | No | Client callback URL (the gateway 302-redirects to it after verification); if omitted, the gateway's built-in callback is used |
+| `ProjectName` | string | No | Project name |
+
+```bash
+BASE_URL="https://yunjizi.cn"   # Domestic; overseas use https://api.yunjizi.cn
+
+curl "$BASE_URL/api/material/CreateVisualValidateSession" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"Name":"My real-person group","CallbackURL":"https://example.com/cb","ProjectName":"default"}'
+```
+
+### Response
+
+Direct format (no envelope):
+
+```json
+{ "BytedToken": "bt-xxx", "H5Link": "https://h5.example.com/verify", "CallbackURL": "https://example.com/cb" }
+```
+
+`BytedToken` is the session identifier (used in the result query), and `H5Link` is opened by the verifier to complete liveness verification. If a custom `CallbackURL` is provided, the gateway 302-redirects to it with the verification result once verification completes; the `CallbackURL` in the response is the value you passed in.
+
+## GetVisualValidateResult — Query the Verification Result
+
+### Request
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `BytedToken` | string | Yes | The `BytedToken` returned when creating the session |
+
+```bash
+BASE_URL="https://yunjizi.cn"   # Domestic; overseas use https://api.yunjizi.cn
+
+curl "$BASE_URL/api/material/GetVisualValidateResult" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"BytedToken":"bt-xxx"}'
+```
+
+### Response
+
+Direct format (no envelope):
+
+```json
+{ "GroupId": "group-xxx" }
+```
+
+> Note: once verification completes, the real-person group id `group-xxx` is returned; **pending / token-not-found / not-owned cases all return `200` + `{"GroupId":""}`** (fail-closed, no leakage) — just keep polling, no need to distinguish them.

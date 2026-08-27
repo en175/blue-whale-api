@@ -1,0 +1,62 @@
+---
+title: 真人认证
+description: 真人（LivenessFace）素材的 H5 活体认证闭环（CreateVisualValidateSession / GetVisualValidateResult）
+---
+
+真人素材（LivenessFace）需走 H5 活体认证闭环：先创建认证会话拿到 `H5Link` 与 `BytedToken`，待验证者打开链接完成活体认证后，用 `BytedToken` 查询结果。**会话类接口返回直接格式**（无 `ResponseMetadata`/`Result` 信封）。
+
+## CreateVisualValidateSession — 创建真人认证会话
+
+### 请求
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `Name` | string | 否 | 组名，认证完成后用作归属组名 |
+| `CallbackURL` | string | 否 | 客户回调地址（认证完成后网关 302 到它）；不传则走网关内置回调 |
+| `ProjectName` | string | 否 | 项目名 |
+
+```bash
+BASE_URL="https://yunjizi.cn"   # 国内；国外用 https://api.yunjizi.cn
+
+curl "$BASE_URL/api/material/CreateVisualValidateSession" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"Name":"我的真人组","CallbackURL":"https://example.com/cb","ProjectName":"default"}'
+```
+
+### 响应
+
+直接格式（无信封）：
+
+```json
+{ "BytedToken": "bt-xxx", "H5Link": "https://h5.example.com/verify", "CallbackURL": "https://example.com/cb" }
+```
+
+`BytedToken` 是会话标识（5.2 查询用），`H5Link` 给待验证者打开完成活体认证。传了自定义 `CallbackURL` 时，认证完成后网关带认证结果 302 到该地址；响应中的 `CallbackURL` 即你传入的原值。
+
+## GetVisualValidateResult — 查询真人认证结果
+
+### 请求
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `BytedToken` | string | 是 | 创建会话返回的 `BytedToken` |
+
+```bash
+BASE_URL="https://yunjizi.cn"   # 国内；国外用 https://api.yunjizi.cn
+
+curl "$BASE_URL/api/material/GetVisualValidateResult" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"BytedToken":"bt-xxx"}'
+```
+
+### 响应
+
+直接格式（无信封）：
+
+```json
+{ "GroupId": "group-xxx" }
+```
+
+> 说明：认证完成返回真人素材组 id `group-xxx`；**未完成 / token 不存在 / 非本人均返回 `200` + `{"GroupId":""}`**（fail-closed，不泄露），客户端持续轮询即可，无需区分。
