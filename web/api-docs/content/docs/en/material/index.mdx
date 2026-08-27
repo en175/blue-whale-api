@@ -1,0 +1,86 @@
+---
+title: Material Library Overview
+description: Material library API — CRUD for virtual/real-person materials plus real-person verification
+---
+
+The material library API exposes a single gateway entry point `POST /api/material/{Action}`, providing create/read/update/delete for **virtual (AIGC) asset groups and assets** plus **real-person (LivenessFace) verification**. Once created, materials can be referenced in [video generation](../video/submit) via `asset://<asset-id>`.
+
+## Unified Endpoint
+
+All operations share one endpoint, distinguished by the `Action` field in the request body:
+
+```bash
+POST /api/material/{Action}
+```
+
+`Action` values fall into three groups — see [Asset Groups](./groups), [Assets](./assets), and [Real-Person Verification](./real-person).
+
+## Authentication
+
+Same as the rest of the platform — Bearer authentication with an API key:
+
+```bash
+Authorization: Bearer sk-YOUR-KEY
+```
+
+> Authentication failures (missing/invalid/disabled key) return `401` with an OpenAI-compatible error (`type: new_api_error`), **not** this module's `ResponseError` envelope — see [Authentication](../authentication).
+
+## Base URL
+
+| Region | Base URL |
+| --- | --- |
+| Domestic | `https://yunjizi.cn` |
+| Overseas | `https://api.yunjizi.cn` |
+
+## Response Formats
+
+Two formats (unified to the tokenhub shape):
+
+**CRUD envelope** (create/list/update/delete for groups and assets):
+
+```json
+{
+  "ResponseMetadata": { "RequestId": "req_xxx", "Action": "ListAssets", "Version": "2024-01-01", "Service": "ark", "Region": "cn-beijing" },
+  "Result": { }
+}
+```
+
+**Session direct format** (`CreateVisualValidateSession` / `GetVisualValidateResult`, no envelope):
+
+```json
+{ "BytedToken": "bt-xxx", "H5Link": "https://.../verify", "CallbackURL": "https://example.com/cb" }
+```
+
+## Error Codes
+
+Business-layer errors (returned by the gateway or normalized from upstream) use:
+
+```json
+{
+  "ResponseMetadata": {},
+  "ResponseError": { "Code": "InvalidParameter", "Message": "invalid parameter" }
+}
+```
+
+| HTTP | Code | Description |
+| --- | --- | --- |
+| 400 | `InvalidParameter` | Invalid request parameter (e.g. empty `GroupIds` in `ListAssets`, name containing `<`/`>` or too long) |
+| 400 | `UnsupportedField` | Unsupported field update (e.g. `Name` in `UpdateAssetGroup`, returned upstream) |
+| 404 | `NotFound` | Resource not found or **not owned by the current API key** (ownership check, returned by the gateway) |
+| 404 | `InvalidActionOrVersion` | Unknown `Action` (returned upstream) |
+| 500 | `InternalError` | Upstream internal error |
+| 401 | — | Authentication failures use the OpenAI-style error (see "Authentication"), not listed here |
+
+## Ownership Isolation
+
+Materials are isolated by the **account owning the API key**:
+
+- Group operations (`GetAssetGroup` / `UpdateAssetGroup` / `DeleteAssetGroup`), `ListAssets`, `CreateAsset`, and `CreateVisualValidateSession` all verify that the target belongs to the current API key; unauthorized access returns `404 NotFound` (not distinguishing missing vs. unauthorized, to avoid probing).
+- `GetAsset` / `DeleteAsset` (operating by asset id) **currently do not verify ownership** (assets have no ownership record; a "asset→group" mapping is required — a known limitation, see ADR-0007).
+
+## Referencing Materials
+
+Once created, materials / real-person groups can be referenced in [video generation](../video/submit) via `asset://<asset-id>`:
+
+- Virtual asset: `asset://Asset-xxx`
+- Real-person material: the returned group id `group-xxx`, referenced as `asset://group-xxx`

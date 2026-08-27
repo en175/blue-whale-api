@@ -1,0 +1,86 @@
+---
+title: 素材库概览
+description: 素材库对外 API：虚拟/真人素材的增删改查与真人认证
+---
+
+素材库对外 API 基于网关统一入口 `POST /api/material/{Action}`，提供**虚拟（AIGC）素材组/素材**的增删改查与**真人（LivenessFace）素材认证**，素材创建后可在[视频生成](../video/submit)中通过 `asset://<素材ID>` 引用。
+
+## 统一入口
+
+所有操作走同一个端点，用请求体里的 `Action` 区分：
+
+```bash
+POST /api/material/{Action}
+```
+
+`Action` 取值分三组，见各页：[素材组](./groups)、[素材](./assets)、[真人认证](./real-person)。
+
+## 鉴权
+
+与平台其它 API 相同，使用 API Key Bearer 鉴权：
+
+```bash
+Authorization: Bearer sk-YOUR-KEY
+```
+
+> 鉴权失败（Key 缺失/无效/禁用）返回 `401`，错误为 OpenAI 兼容格式（`type: new_api_error`），**不是**本模块的 `ResponseError` 信封，详见[鉴权](../authentication)。
+
+## Base URL
+
+| 区域 | Base URL |
+| --- | --- |
+| 国内 | `https://yunjizi.cn` |
+| 国外 | `https://api.yunjizi.cn` |
+
+## 响应格式
+
+分两类（统一为 tokenhub 实际格式）：
+
+**CRUD 信封**（建/列/改/删 组与素材）：
+
+```json
+{
+  "ResponseMetadata": { "RequestId": "req_xxx", "Action": "ListAssets", "Version": "2024-01-01", "Service": "ark", "Region": "cn-beijing" },
+  "Result": { }
+}
+```
+
+**会话类直接格式**（`CreateVisualValidateSession` / `GetVisualValidateResult`，无信封）：
+
+```json
+{ "BytedToken": "bt-xxx", "H5Link": "https://.../verify", "CallbackURL": "https://example.com/cb" }
+```
+
+## 错误码
+
+业务层错误（网关主动返回或上游归一化）统一为：
+
+```json
+{
+  "ResponseMetadata": {},
+  "ResponseError": { "Code": "InvalidParameter", "Message": "invalid parameter" }
+}
+```
+
+| HTTP | Code | 说明 |
+| --- | --- | --- |
+| 400 | `InvalidParameter` | 请求参数非法（如 `ListAssets` 空 `GroupIds`、名称含 `<`/`>` 或超长） |
+| 400 | `UnsupportedField` | 不支持的字段修改（如 `UpdateAssetGroup` 改 `Name`，上游返回） |
+| 404 | `NotFound` | 资源不存在或**不属于当前 API Key**（归属校验，网关主动返回） |
+| 404 | `InvalidActionOrVersion` | 不存在的 `Action`（上游返回） |
+| 500 | `InternalError` | 上游内部错误 |
+| 401 | — | 鉴权失败走 OpenAI 风格错误（见「鉴权」），不入此表 |
+
+## 归属隔离
+
+素材按 **API Key 所属账号**隔离：
+
+- 组操作（`GetAssetGroup` / `UpdateAssetGroup` / `DeleteAssetGroup`）、`ListAssets`、`CreateAsset`、`CreateVisualValidateSession` 均校验「操作对象是否属于当前 API Key」，越权一律 `404 NotFound`（不区分不存在/无权，防探测）。
+- `GetAsset` / `DeleteAsset`（按素材 ID 操作）**当前未校验归属**（素材不落归属表，需「素材→组」映射，为已知限制，见 ADR-0007）。
+
+## 引用素材
+
+素材/真人素材组创建完成后，可在[视频生成](../video/submit)接口里用 `asset://<素材ID>` 引用：
+
+- 虚拟素材：`asset://Asset-xxx`
+- 真人素材：认证完成后返回素材组 id `group-xxx`，用 `asset://group-xxx` 引用
