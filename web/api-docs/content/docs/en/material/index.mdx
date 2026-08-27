@@ -7,7 +7,7 @@ The material library API exposes a single gateway entry point `POST /api/materia
 
 ## Unified Endpoint
 
-All operations share one endpoint, distinguished by the `Action` field in the request body:
+All operations share one endpoint, distinguished by the `Action` in the URL path:
 
 ```bash
 POST /api/material/{Action}
@@ -34,7 +34,7 @@ Authorization: Bearer sk-YOUR-KEY
 
 ## Response Formats
 
-Two formats (unified to the tokenhub shape):
+Two formats (unified to the gateway's actual response shape):
 
 **CRUD envelope** (create/list/update/delete for groups and assets):
 

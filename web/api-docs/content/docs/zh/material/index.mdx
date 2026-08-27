@@ -7,7 +7,7 @@ description: 素材库对外 API：虚拟/真人素材的增删改查与真人�
 
 ## 统一入口
 
-所有操作走同一个端点，用请求体里的 `Action` 区分：
+所有操作走同一个端点，用 URL 路径中的 `Action` 区分：
 
 ```bash
 POST /api/material/{Action}
@@ -34,7 +34,7 @@ Authorization: Bearer sk-YOUR-KEY
 
 ## 响应格式
 
-分两类（统一为 tokenhub 实际格式）：
+分两类（统一为网关实际返回格式）：
 
 **CRUD 信封**（建/列/改/删 组与素材）：
 
