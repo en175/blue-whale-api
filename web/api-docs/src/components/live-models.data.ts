@@ -3,7 +3,6 @@
 // 网关模型有增删时,需手动同步并重新构建部署
 export type DocModel = {
   model_name: string;
-  display_name: string;
   description: string;
   tag: string;
   region: 'domestic' | 'overseas';
@@ -14,7 +13,6 @@ export const STATIC_MODELS: DocModel[] = [
   // 国内渠道(方舟)
   {
     model_name: 'doubao-seedance-2-5-260628',
-    display_name: 'Doubao-Seedance-2.5',
     description: '30秒超长叙事，全模态参考扩容',
     tag: '全面开放',
     region: 'domestic',
@@ -22,7 +20,6 @@ export const STATIC_MODELS: DocModel[] = [
   },
   {
     model_name: 'doubao-seedance-2-0-260128',
-    display_name: 'Doubao-Seedance-2.0',
     description: '超强的参考一致性，极致拟真的视听稳定性',
     tag: '',
     region: 'domestic',
@@ -30,7 +27,6 @@ export const STATIC_MODELS: DocModel[] = [
   },
   {
     model_name: 'doubao-seedance-2-0-mini-260615',
-    display_name: 'Doubao-Seedance-2.0-mini',
     description: '音视图文参考，高性价比',
     tag: '',
     region: 'domestic',
@@ -38,7 +34,6 @@ export const STATIC_MODELS: DocModel[] = [
   },
   {
     model_name: 'doubao-seedance-2-0-fast-260128',
-    display_name: 'Doubao-Seedance-2.0-fast',
     description: '音视图文参考，更快，继承2.0核心优势',
     tag: '',
     region: 'domestic',
@@ -47,7 +42,6 @@ export const STATIC_MODELS: DocModel[] = [
   // 海外渠道(BytePlus)
   {
     model_name: 'dreamina-seedance-2-0-mini-260615',
-    display_name: 'Dreamina-Seedance-2.0-mini',
     description: 'Audio/video/image reference, cost-effective',
     tag: '',
     region: 'overseas',
@@ -55,7 +49,6 @@ export const STATIC_MODELS: DocModel[] = [
   },
   {
     model_name: 'dreamina-seedance-2-0-260128',
-    display_name: 'Dreamina-Seedance-2.0',
     description:
       'Strong reference consistency, realistic audio-visual stability',
     tag: '',
@@ -64,7 +57,6 @@ export const STATIC_MODELS: DocModel[] = [
   },
   {
     model_name: 'dreamina-seedance-2-0-fast-260128',
-    display_name: 'Dreamina-Seedance-2.0-fast',
     description:
       'Audio/video/image reference, faster, inherits 2.0 core advantages',
     tag: '',
