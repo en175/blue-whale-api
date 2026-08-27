@@ -6,7 +6,7 @@ function ModelCard({ m }: { m: DocModel }) {
   return (
     <div className="rounded-lg border p-4">
       <div className="flex items-center gap-2">
-        <span className="font-semibold">{m.display_name || m.model_name}</span>
+        <span className="font-mono font-semibold">{m.model_name}</span>
         {m.tag ? (
           <span className="bg-primary/10 text-primary rounded-full px-2 py-0.5 text-xs font-medium">
             {m.tag}
@@ -16,9 +16,6 @@ function ModelCard({ m }: { m: DocModel }) {
       {m.description ? (
         <p className="text-muted-foreground mt-1 text-sm">{m.description}</p>
       ) : null}
-      <p className="text-muted-foreground mt-2 font-mono text-xs">
-        {m.model_name}
-      </p>
     </div>
   );
 }
