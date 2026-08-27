@@ -100,7 +100,7 @@ curl "$BASE_URL/api/material/CreateAssetGroup" \
 
 ## UpdateAssetGroup — 编辑素材组
 
-> 仅支持修改 `Description`；传入与创建时不同的 `Name` 会报 `UnsupportedField`。非本人组返回 `404 NotFound`。
+> 仅支持修改 `Description`；请求体中传入 `Name` 字段会报 `UnsupportedField`。非本人组返回 `404 NotFound`。
 
 ### 请求
 
