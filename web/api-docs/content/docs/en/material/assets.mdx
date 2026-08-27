@@ -15,7 +15,7 @@ Uploads an asset into a group (by URL, registered asynchronously).
 | --- | --- | --- | --- |
 | `GroupId` | string | Yes | Target asset group id (must be owned by the current API key, otherwise 404) |
 | `URL` | string | Yes | Publicly accessible URL of the asset |
-| `Name` | string | Yes | Asset name (≤255 chars, no `<`/`>`) |
+| `Name` | string | Yes | Asset name (≤255 chars, no `<`/`>`, otherwise 400) |
 | `AssetType` | string | Yes | `Image` / `Video` / `Audio` |
 
 ```bash
@@ -50,8 +50,8 @@ Lists assets by asset group. **`Filter.GroupIds` is required** — when empty th
 | `Filter.GroupType` | string | No | Group type filter |
 | `Filter.Statuses` | []string | No | `Active` / `Processing` / `Failed` |
 | `Filter.Name` | string | No | Fuzzy name match |
-| `PageNumber` | int | Yes | Page number |
-| `PageSize` | int | Yes | Page size |
+| `PageNumber` | int | No | Page number, default `1` |
+| `PageSize` | int | No | Page size, default `20`, range 1–100 |
 
 ```bash
 BASE_URL="https://yunjizi.cn"   # Domestic; overseas use https://api.yunjizi.cn

@@ -15,7 +15,7 @@ description: 素材的上传、列出、查询、编辑与删除（CreateAsset /
 | --- | --- | --- | --- |
 | `GroupId` | string | 是 | 目标素材组 id（须属当前 API Key，否则 404） |
 | `URL` | string | 是 | 素材公网可访问地址 |
-| `Name` | string | 是 | 素材名称（≤255 字符、不含 `<`/`>`） |
+| `Name` | string | 是 | 素材名称（≤255 字符、不含 `<`/`>`，否则 400） |
 | `AssetType` | string | 是 | `Image` / `Video` / `Audio` |
 
 ```bash
@@ -50,8 +50,8 @@ curl "$BASE_URL/api/material/CreateAsset" \
 | `Filter.GroupType` | string | 否 | 组类型过滤 |
 | `Filter.Statuses` | []string | 否 | `Active` / `Processing` / `Failed` |
 | `Filter.Name` | string | 否 | 名称模糊匹配 |
-| `PageNumber` | int | 是 | 页码 |
-| `PageSize` | int | 是 | 每页数量 |
+| `PageNumber` | int | 否 | 页码，默认 `1` |
+| `PageSize` | int | 否 | 每页数量，默认 `20`，范围 1–100 |
 
 ```bash
 BASE_URL="https://yunjizi.cn"   # 国内；国外用 https://api.yunjizi.cn
