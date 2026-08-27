@@ -68,7 +68,7 @@ curl "$BASE_URL/v1/video/generations" \
   -H "Authorization: Bearer sk-YOUR-KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "doubao-seedance-2-0-260128",
+    "model": "dreamina-seedance-2-0-260128",
     "prompt": "A blue whale leaping out of the ocean, slow motion, cinematic look",
     "seconds": "5",
     "metadata": {
@@ -86,7 +86,7 @@ curl "$BASE_URL/v1/video/generations" \
   -H "Authorization: Bearer sk-YOUR-KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "doubao-seedance-2-0-260128",
+    "model": "dreamina-seedance-2-0-260128",
     "prompt": "The camera slowly pushes in; the cup in the frame wobbles gently",
     "images": ["https://example.com/first-frame.jpg"],
     "seconds": "5",
@@ -105,7 +105,7 @@ curl "$BASE_URL/v1/video/generations" \
   -H "Authorization: Bearer sk-YOUR-KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "doubao-seedance-2-0-260128",
+    "model": "dreamina-seedance-2-0-260128",
     "prompt": "Keep the first-person perspective of video 1 throughout, with audio 1 as the background music. A first-person fruit tea commercial for the seedance-brand \"Ping Ping An An\" apple fruit tea limited edition; frame 1 is image 1: your hand picks a dewy Aksu red apple with a crisp crunch; 2-4s: quick cut, you drop apple chunks into a shaker, add ice and tea base, shake hard, the clinking of ice syncing with a light beat, voiceover: \"fresh-cut and freshly shaken\"; 4-6s: first-person close-up of the finished drink, layered fruit tea poured into a clear cup, your hand squeezes milk cap on top, a pink label is stuck on the cup, the camera zooms in on the layering; 6-8s: first-person handheld toast, you raise the drink from image 2 toward the camera (as if handing it to the viewer), the label clearly visible, voiceover: \"have a fresh sip\", and the last frame freezes on image 2. Background voice: female throughout.",
     "seconds": "11",
     "metadata": {
@@ -131,7 +131,7 @@ curl "$BASE_URL/v1/video/generations" \
   -H "Authorization: Bearer sk-YOUR-KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "doubao-seedance-2-0-260128",
+    "model": "dreamina-seedance-2-0-260128",
     "prompt": "Using image 1 as the visual reference and audio 1 as the background music: a sunrise by the sea, waves gently lapping the shore, the camera slowly pushes in toward a lighthouse in the morning light, calm and healing.",
     "seconds": "5",
     "metadata": {
@@ -155,7 +155,7 @@ curl "$BASE_URL/v1/video/generations" \
   -H "Authorization: Bearer sk-YOUR-KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "doubao-seedance-2-0-260128",
+    "model": "dreamina-seedance-2-0-260128",
     "prompt": "A blue whale leaping out of the ocean, slow motion, cinematic look",
     "images": ["https://example.com/first-frame.png"],
     "seconds": "5",
@@ -183,7 +183,7 @@ The endpoint returns an OpenAI-compatible video object; `id` (same as `task_id`)
   "id": "task_9f3a2b7c",
   "task_id": "task_9f3a2b7c",
   "object": "video",
-  "model": "doubao-seedance-2-0-260128",
+  "model": "dreamina-seedance-2-0-260128",
   "status": "queued",
   "progress": 0,
   "created_at": 1786344639
