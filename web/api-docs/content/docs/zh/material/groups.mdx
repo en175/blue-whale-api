@@ -101,6 +101,8 @@ curl "$BASE_URL/api/material/CreateAssetGroup" \
 ## UpdateAssetGroup — 编辑素材组
 
 > `Description` 与 `Name` 均可修改；`Name` 需 ≤255 字符、不含 `<`/`>`，否则 400 `InvalidParameter`。非本人组返回 `404 NotFound`。
+>
+> 注意：改名（`Name`）直接写上游，但 `ListAssetGroups` 由网关本地归属表服务，改名后本地表**不会立即刷新**——`ListAssetGroups` 可能仍显示旧名，以 `GetAssetGroup`（直查上游）返回为准。
 
 ### 请求
 

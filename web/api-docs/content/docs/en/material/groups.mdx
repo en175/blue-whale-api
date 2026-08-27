@@ -101,6 +101,8 @@ curl "$BASE_URL/api/material/CreateAssetGroup" \
 ## UpdateAssetGroup — Update Asset Group
 
 > Both `Description` and `Name` can be updated; `Name` must be ≤255 chars and free of `<`/`>` (otherwise `400 InvalidParameter`). Groups not owned by you return `404 NotFound`.
+>
+> Note: renaming (`Name`) writes straight to upstream, but `ListAssetGroups` is served from the gateway's local ownership table, which is **not refreshed immediately** after a rename — it may still show the old name. Trust the `GetAssetGroup` (direct upstream) result.
 
 ### Request
 
