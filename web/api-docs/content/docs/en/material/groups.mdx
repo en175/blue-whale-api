@@ -1,46 +1,9 @@
 ---
 title: Asset Groups
-description: Create, query, update, and delete asset groups (ListAssetGroups / GetAssetGroup / CreateAssetGroup / UpdateAssetGroup / DeleteAssetGroup)
+description: Create, query, update, and delete asset groups (GetAssetGroup / CreateAssetGroup / UpdateAssetGroup / DeleteAssetGroup)
 ---
 
-An asset group is the container for assets. Create a group first, then upload assets into it (see [Assets](./assets)). All five Actions below use the **CRUD envelope** response format.
-
-## ListAssetGroups — List Asset Groups
-
-Lists the asset groups owned by the account of the current API key. **This endpoint is a gateway-local query** (served from the ownership table, no upstream call).
-
-### Request
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `Filter.GroupType` | string | No | Group type filter (`AIGC` / `LivenessFace`) |
-| `PageNumber` | int | No | Page number, default `1` |
-| `PageSize` | int | No | Page size, default `20`, range 1–100 |
-
-```bash
-BASE_URL="https://yunjizi.cn"   # Domestic; overseas use https://api.yunjizi.cn
-
-curl "$BASE_URL/api/material/ListAssetGroups" \
-  -H "Authorization: Bearer sk-YOUR-KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"Filter":{"GroupType":"AIGC"},"PageNumber":1,"PageSize":20}'
-```
-
-### Response
-
-```json
-{
-  "ResponseMetadata": { "RequestId": "req_local_1_1", "Action": "ListAssetGroups", "Version": "2024-01-01", "Service": "ark", "Region": "cn-beijing" },
-  "Result": {
-    "TotalCount": 1,
-    "Items": [
-      { "Id": "group-xxx", "Name": "My Asset Group", "GroupType": "AIGC", "CreateTime": "2026-08-19T02:10:00Z", "UpdateTime": "2026-08-19T02:10:00Z" }
-    ],
-    "PageNumber": 1,
-    "PageSize": 20
-  }
-}
-```
+An asset group is the container for assets. Create a group first, then upload assets into it (see [Assets](./assets)). All four Actions below use the **CRUD envelope** response format.
 
 ## GetAssetGroup — Get Asset Group Details
 
