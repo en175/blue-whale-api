@@ -646,6 +646,12 @@ func RechargeBlueWhalePay(tradeNo string, callerIp string) (err error) {
 		return errors.New("充值失败，请稍后重试")
 	}
 
+	// 事务成功后失效用户 Redis 缓存，使 GET /api/usage/token 等查询立即读到新余额，
+	// 避免顶栏余额延迟到缓存 TTL（默认 60s）过期才更新。
+	go func() {
+		_ = InvalidateUserCache(topUp.UserId)
+	}()
+
 	RecordTopupLog(topUp.UserId, fmt.Sprintf("BlueWhalePay充值成功，充值额度: %v，支付金额：%.2f", logger.FormatQuota(int(quotaToAdd)), topUp.Money), callerIp, topUp.PaymentMethod, PaymentMethodBlueWhalePay)
 
 	return nil
