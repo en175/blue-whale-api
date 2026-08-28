@@ -39,20 +39,8 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, header *http.Header, info *
 	return nil
 }
 
-// imageRequestPayload HighwayAPI 文生图请求体。不含 model（已拼接进请求路径），
-// 其余字段按上游文档透传，未设置的字段省略。
-type imageRequestPayload struct {
-	Prompt            string          `json:"prompt"`
-	N                 *uint           `json:"n,omitempty"`
-	Size              string          `json:"size,omitempty"`
-	Quality           string          `json:"quality,omitempty"`
-	Background        json.RawMessage `json:"background,omitempty"`
-	Moderation        json.RawMessage `json:"moderation,omitempty"`
-	OutputFormat      json.RawMessage `json:"output_format,omitempty"`
-	OutputCompression json.RawMessage `json:"output_compression,omitempty"`
-}
-
-// ConvertImageRequest 透传已知图像参数与客户端未知字段（Extra）给上游。
+// ConvertImageRequest 除 model 外全部透传：model 已拼接进请求路径，其余客户端
+// 字段（已知字段 + 未知字段）原样转发给上游，不逐项列白名单。
 func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.ImageRequest) (any, error) {
 	if info.RelayMode == relayconstant.RelayModeImagesEdits {
 		return nil, errors.New("highwayapi channel does not support image edits")
@@ -62,17 +50,8 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInf
 		return nil, errors.New("highwayapi channel only supports url response format")
 	}
 
-	payload := imageRequestPayload{
-		Prompt:            request.Prompt,
-		N:                 request.N,
-		Size:              request.Size,
-		Quality:           request.Quality,
-		Background:        request.Background,
-		Moderation:        request.Moderation,
-		OutputFormat:      request.OutputFormat,
-		OutputCompression: request.OutputCompression,
-	}
-	data, err := common.Marshal(payload)
+	// 利用 ImageRequest.MarshalJSON 把全部已定义字段平铺成 map（Extra 除外）。
+	data, err := common.Marshal(request)
 	if err != nil {
 		return nil, err
 	}
@@ -80,6 +59,10 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInf
 	if err := common.Unmarshal(data, &body); err != nil {
 		return nil, err
 	}
+	// 只剔除 model 与 extra_fields 占位（extra_fields 下面单独展开合并）。
+	delete(body, "model")
+	delete(body, "extra_fields")
+
 	// 兼容 ExtraFields 透传约定（与 jimeng/replicate 一致）：其中的顶层字段合并进请求体。
 	if len(request.ExtraFields) > 0 {
 		var extraFields map[string]json.RawMessage

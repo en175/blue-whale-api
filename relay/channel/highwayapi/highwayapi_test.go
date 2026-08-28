@@ -80,7 +80,7 @@ func TestConvertImageRequest(t *testing.T) {
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	info := &relaycommon.RelayInfo{RelayMode: relayconstant.RelayModeImagesGenerations}
 
-	t.Run("known fields are passed through, absent fields omitted", func(t *testing.T) {
+	t.Run("all client fields except model are passed through", func(t *testing.T) {
 		n := uint(3)
 		request := dto.ImageRequest{
 			Prompt:            "a cat",
@@ -91,6 +91,7 @@ func TestConvertImageRequest(t *testing.T) {
 			Moderation:        json.RawMessage(`"low"`),
 			OutputFormat:      json.RawMessage(`"jpeg"`),
 			OutputCompression: json.RawMessage(`80`),
+			Image:             json.RawMessage(`"https://cdn.example.com/in.png"`),
 		}
 
 		converted, err := adaptor.ConvertImageRequest(c, info, request)
@@ -107,6 +108,7 @@ func TestConvertImageRequest(t *testing.T) {
 		assert.JSONEq(t, `"low"`, string(body["moderation"]))
 		assert.JSONEq(t, `"jpeg"`, string(body["output_format"]))
 		assert.JSONEq(t, `80`, string(body["output_compression"]))
+		assert.JSONEq(t, `"https://cdn.example.com/in.png"`, string(body["image"]))
 
 		// model 拼接进请求路径，请求体中不应出现
 		_, hasModel := body["model"]
