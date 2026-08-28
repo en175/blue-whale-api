@@ -1,46 +1,9 @@
 ---
 title: 素材组
-description: 素材组的创建、查询、编辑与删除（ListAssetGroups / GetAssetGroup / CreateAssetGroup / UpdateAssetGroup / DeleteAssetGroup）
+description: 素材组的创建、查询、编辑与删除（GetAssetGroup / CreateAssetGroup / UpdateAssetGroup / DeleteAssetGroup）
 ---
 
-素材组是素材的容器。创建组后，才能向组内上传素材（见[素材](./assets)）。以下 5 个 Action 均为 **CRUD 信封**响应格式。
-
-## ListAssetGroups — 列出素材组
-
-列出当前 API Key 所属账号的素材组。**本接口为网关本地查询**（按归属表返回，不查上游）。
-
-### 请求
-
-| 字段 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| `Filter.GroupType` | string | 否 | 组类型过滤（当前 `AIGC` / `LivenessFace`） |
-| `PageNumber` | int | 否 | 页码，默认 `1` |
-| `PageSize` | int | 否 | 每页数量，默认 `20`，范围 1–100 |
-
-```bash
-BASE_URL="https://yunjizi.cn"   # 国内；国外用 https://api.yunjizi.cn
-
-curl "$BASE_URL/api/material/ListAssetGroups" \
-  -H "Authorization: Bearer sk-YOUR-KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"Filter":{"GroupType":"AIGC"},"PageNumber":1,"PageSize":20}'
-```
-
-### 响应
-
-```json
-{
-  "ResponseMetadata": { "RequestId": "req_local_1_1", "Action": "ListAssetGroups", "Version": "2024-01-01", "Service": "ark", "Region": "cn-beijing" },
-  "Result": {
-    "TotalCount": 1,
-    "Items": [
-      { "Id": "group-xxx", "Name": "我的素材组", "GroupType": "AIGC", "CreateTime": "2026-08-19T02:10:00Z", "UpdateTime": "2026-08-19T02:10:00Z" }
-    ],
-    "PageNumber": 1,
-    "PageSize": 20
-  }
-}
-```
+素材组是素材的容器。创建组后，才能向组内上传素材（见[素材](./assets)）。以下 4 个 Action 均为 **CRUD 信封**响应格式。
 
 ## GetAssetGroup — 获取素材组详情
 
