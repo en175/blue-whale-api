@@ -81,7 +81,7 @@ export const CHANNEL_TYPES = {
   60: 'XFAI',
   61: 'TokenHub',
   62: 'DoubaoAudio',
-  63: 'HighwayAPI',
+  63: 'jiekouAI',
 } as const
 
 const CHANNEL_TYPE_DISPLAY_ORDER: number[] = [

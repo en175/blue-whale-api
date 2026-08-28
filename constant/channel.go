@@ -192,7 +192,7 @@ var ChannelTypeNames = map[int]string{
 	ChannelTypeXFAI:           "XFAI",
 	ChannelTypeTokenHub:       "TokenHub",
 	ChannelTypeDoubaoAudio:    "DoubaoAudio",
-	ChannelTypeHighwayAPI:     "HighwayAPI",
+	ChannelTypeHighwayAPI:     "jiekouAI",
 }
 
 func GetChannelTypeName(channelType int) string {
