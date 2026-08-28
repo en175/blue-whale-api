@@ -106,6 +106,7 @@ export function getChannelTypeIcon(type: number): string {
     60: 'XFAI', // XFAI
     61: 'TokenHub', // TokenHub
     62: 'Doubao', // DoubaoAudio
+    63: 'OpenAI', // HighwayAPI (gpt-image family)
 
     // Tools & Platforms
     37: 'Dify', // Dify

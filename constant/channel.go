@@ -60,6 +60,7 @@ const (
 	ChannelTypeXFAI           = 60
 	ChannelTypeTokenHub       = 61
 	ChannelTypeDoubaoAudio    = 62
+	ChannelTypeHighwayAPI     = 63
 	ChannelTypeDummy          // this one is only for count, do not add any channel after this
 
 )
@@ -128,6 +129,7 @@ var ChannelBaseURLs = []string{
 	"",                                          //60
 	"https://ai-tokenhub.ai",                    //61
 	"https://openspeech.bytedance.com",          //62
+	"https://api.highwayapi.ai/v3",              //63
 }
 
 var ChannelTypeNames = map[int]string{
@@ -190,6 +192,7 @@ var ChannelTypeNames = map[int]string{
 	ChannelTypeXFAI:           "XFAI",
 	ChannelTypeTokenHub:       "TokenHub",
 	ChannelTypeDoubaoAudio:    "DoubaoAudio",
+	ChannelTypeHighwayAPI:     "HighwayAPI",
 }
 
 func GetChannelTypeName(channelType int) string {
