@@ -57,6 +57,23 @@ For per-model supported metadata options, see [Models](../models).
 - **Reference materials** (reference image / video / audio): always use `metadata.content` with `role:"reference_*"`; do not mix with top-level `images` (when both are present, `metadata.content` overrides `images`)
 - **Duration**: always use top-level `seconds` (string); do not use top-level `duration`
 
+## V2V Task Type and Parameter Rules (Important)
+
+> **⚠️ On 2.5, edit-style prompts must use `seconds=-1`** — otherwise the task ends in `FAILURE`.
+
+Seedance 2.5 (`doubao-seedance-2-5-260628`) **auto-detects the task type** from the prompt semantics: when the prompt is an instruction to **modify video content** (e.g. "turn the cream red"), the task is treated as a **video-edit** task rather than reference-video generation. The output of a video-edit task is a rework of a model-selected input video, so **its duration and aspect ratio must follow that input video and cannot be specified by you**.
+
+- **`seconds` must be `-1`** (meaning "follow the input video"); the input video must be **4–30s** long.
+- Passing a concrete duration (e.g. `5`) violates this constraint → parameter validation fails → the task ends in `FAILURE`.
+- **2.0 / fast / mini are unaffected**: they always process as video generation and accept a concrete `seconds` (e.g. `5` / `10`).
+
+| Scenario | Task type | `seconds` | `ratio` | Input video | Models |
+| --- | --- | --- | --- | --- | --- |
+| Reference-video-guided generation | Video generation | concrete value (`5`/`10`) | concrete value (`16:9` etc.) | optional | 2.0 / fast / mini |
+| Modifying video content | Video edit | `-1` (follow input) | follows input video | required, 4–30s | 2.5 (auto-detected) |
+
+Verified with prompt "turn the cream red": 2.5 + `seconds=5` → ❌ `FAILURE`; 2.5 + `seconds=-1` → ✅ `SUCCESS`; 2.0 / fast / mini + `seconds=5` → ✅ `SUCCESS`.
+
 ## Examples
 
 ### Text-to-Video
