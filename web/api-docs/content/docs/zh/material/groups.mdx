@@ -1,0 +1,159 @@
+---
+title: 素材组
+description: 素材组的创建、查询、编辑与删除（ListAssetGroups / GetAssetGroup / CreateAssetGroup / UpdateAssetGroup / DeleteAssetGroup）
+---
+
+素材组是素材的容器。创建组后，才能向组内上传素材（见[素材](./assets)）。以下 5 个 Action 均为 **CRUD 信封**响应格式。
+
+## ListAssetGroups — 列出素材组
+
+列出当前 API Key 所属账号的素材组。**本接口为网关本地查询**（按归属表返回，不查上游）。
+
+### 请求
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `Filter.GroupType` | string | 否 | 组类型过滤（当前 `AIGC` / `LivenessFace`） |
+| `PageNumber` | int | 否 | 页码，默认 `1` |
+| `PageSize` | int | 否 | 每页数量，默认 `20`，范围 1–100 |
+
+```bash
+BASE_URL="https://yunjizi.cn"   # 国内；国外用 https://api.yunjizi.cn
+
+curl "$BASE_URL/api/material/ListAssetGroups" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"Filter":{"GroupType":"AIGC"},"PageNumber":1,"PageSize":20}'
+```
+
+### 响应
+
+```json
+{
+  "ResponseMetadata": { "RequestId": "req_local_1_1", "Action": "ListAssetGroups", "Version": "2024-01-01", "Service": "ark", "Region": "cn-beijing" },
+  "Result": {
+    "TotalCount": 1,
+    "Items": [
+      { "Id": "group-xxx", "Name": "我的素材组", "GroupType": "AIGC", "CreateTime": "2026-08-19T02:10:00Z", "UpdateTime": "2026-08-19T02:10:00Z" }
+    ],
+    "PageNumber": 1,
+    "PageSize": 20
+  }
+}
+```
+
+## GetAssetGroup — 获取素材组详情
+
+按 `Id` 查询单个素材组。**仅能查询当前 API Key 归属的组**，非本人组返回 `404 NotFound`。
+
+### 请求
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `Id` | string | 是 | 素材组 id（`group-...`） |
+
+```bash
+BASE_URL="https://yunjizi.cn"   # 国内；国外用 https://api.yunjizi.cn
+
+curl "$BASE_URL/api/material/GetAssetGroup" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"Id":"group-xxx"}'
+```
+
+### 响应
+
+```json
+{
+  "ResponseMetadata": { "RequestId": "req_xxx", "Action": "GetAssetGroup", "Version": "2024-01-01", "Service": "ark", "Region": "cn-beijing" },
+  "Result": { "Id": "group-xxx", "Name": "我的素材组", "GroupType": "AIGC", "CreateTime": "2026-08-19T02:10:00Z", "UpdateTime": "2026-08-19T02:10:00Z" }
+}
+```
+
+## CreateAssetGroup — 创建素材组
+
+### 请求
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `Name` | string | 是 | 素材组名称（≤255 字符、不含 `<`/`>`，否则 400 `InvalidParameter`）。**建议用 ASCII**——上游对中文名可能乱码为 `�` |
+| `Description` | string | 否 | 描述 |
+| `GroupType` | string | 是 | 组类型，当前仅支持 `AIGC` |
+
+```bash
+BASE_URL="https://yunjizi.cn"   # 国内；国外用 https://api.yunjizi.cn
+
+curl "$BASE_URL/api/material/CreateAssetGroup" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"Name":"我的素材组","Description":"test","GroupType":"AIGC"}'
+```
+
+### 响应
+
+```json
+{
+  "ResponseMetadata": { "RequestId": "req_xxx", "Action": "CreateAssetGroup", "Version": "2024-01-01", "Service": "ark", "Region": "cn-beijing" },
+  "Result": { "Id": "group-xxx" }
+}
+```
+
+## UpdateAssetGroup — 编辑素材组
+
+> `Description` 与 `Name` 均可修改；`Name` 需 ≤255 字符、不含 `<`/`>`，否则 400 `InvalidParameter`。非本人组返回 `404 NotFound`。
+>
+> 注意：改名（`Name`）直接写上游，但 `ListAssetGroups` 由网关本地归属表服务，改名后本地表**不会立即刷新**——`ListAssetGroups` 可能仍显示旧名，以 `GetAssetGroup`（直查上游）返回为准。
+
+### 请求
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `Id` | string | 是 | 素材组 id |
+| `Description` | string | 否 | 新描述 |
+| `Name` | string | 否 | 新名称（≤255 字符、不含 `<`/`>`，否则 400 `InvalidParameter`） |
+
+```bash
+BASE_URL="https://yunjizi.cn"   # 国内；国外用 https://api.yunjizi.cn
+
+curl "$BASE_URL/api/material/UpdateAssetGroup" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"Id":"group-xxx","Description":"新描述"}'
+```
+
+### 响应
+
+```json
+{
+  "ResponseMetadata": { "RequestId": "req_xxx", "Action": "UpdateAssetGroup", "Version": "2024-01-01", "Service": "ark", "Region": "cn-beijing" },
+  "Result": {}
+}
+```
+
+## DeleteAssetGroup — 删除素材组
+
+删除组，并**同步删除组内全部素材**。仅能删除当前 API Key 归属的组，非本人组返回 `404 NotFound`（网关 `groupOwnedByCurrentUser` 校验）。
+
+### 请求
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `Id` | string | 是 | 素材组 id |
+
+```bash
+BASE_URL="https://yunjizi.cn"   # 国内；国外用 https://api.yunjizi.cn
+
+curl "$BASE_URL/api/material/DeleteAssetGroup" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"Id":"group-xxx"}'
+```
+
+### 响应
+
+```json
+{
+  "ResponseMetadata": { "RequestId": "req_xxx", "Action": "DeleteAssetGroup", "Version": "2024-01-01", "Service": "ark", "Region": "cn-beijing" },
+  "Result": {}
+}
+```

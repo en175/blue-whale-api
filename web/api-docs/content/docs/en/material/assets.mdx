@@ -1,0 +1,166 @@
+---
+title: Assets
+description: Upload, list, query, update, and delete assets (CreateAsset / ListAssets / GetAsset / UpdateAsset / DeleteAsset)
+---
+
+An asset is a concrete file (image/video/audio) attached to an asset group. Create a group first (see [Asset Groups](./groups)). All five Actions below use the **CRUD envelope** response format. Asset status enum: `Active` (ready), `Processing` (in progress), `Failed` (failed).
+
+## CreateAsset — Upload Asset
+
+Uploads an asset into a group (by URL, registered asynchronously).
+
+### Request
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `GroupId` | string | Yes | Target asset group id (must be owned by the current API key, otherwise 404) |
+| `URL` | string | Yes | Publicly accessible URL of the asset |
+| `Name` | string | Yes | Asset name (≤255 chars, no `<`/`>`, otherwise 400) |
+| `AssetType` | string | Yes | `Image` / `Video` / `Audio` |
+
+```bash
+BASE_URL="https://yunjizi.cn"   # Domestic; overseas use https://api.yunjizi.cn
+
+curl "$BASE_URL/api/material/CreateAsset" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"GroupId":"group-xxx","URL":"https://example.com/image.jpg","Name":"Asset 1","AssetType":"Image"}'
+```
+
+### Response
+
+```json
+{
+  "ResponseMetadata": { "RequestId": "req_xxx", "Action": "CreateAsset", "Version": "2024-01-01", "Service": "ark", "Region": "cn-beijing" },
+  "Result": { "Id": "Asset-xxx" }
+}
+```
+
+Registration is asynchronous; check the status via `ListAssets` or `GetAsset`.
+
+## ListAssets — List Assets
+
+Lists assets by asset group. **Both `Filter.GroupIds` and `Filter.GroupType` are required** — when empty/missing the gateway returns `400 InvalidParameter`, preventing unauthorized listing of all assets under the shared account.
+
+### Request
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `Filter.GroupIds` | []string | Yes | Asset group id list (must all be owned by the current API key, otherwise 404) |
+| `Filter.GroupType` | string | Yes | Group type filter (currently `AIGC` / `LivenessFace`) |
+| `Filter.Statuses` | []string | No | `Active` / `Processing` / `Failed` |
+| `Filter.Name` | string | No | Fuzzy name match |
+| `PageNumber` | int | Yes | Page number (missing → 400 `MissingParameter.PageNumber`) |
+| `PageSize` | int | Yes | Page size (default `20`, range 1–100; required together with `PageNumber`) |
+
+```bash
+BASE_URL="https://yunjizi.cn"   # Domestic; overseas use https://api.yunjizi.cn
+
+curl "$BASE_URL/api/material/ListAssets" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"Filter":{"GroupIds":["group-xxx"],"GroupType":"AIGC"},"PageNumber":1,"PageSize":10}'
+```
+
+### Response
+
+```json
+{
+  "ResponseMetadata": { "RequestId": "req_xxx", "Action": "ListAssets", "Version": "2024-01-01", "Service": "ark", "Region": "cn-beijing" },
+  "Result": {
+    "TotalCount": 1,
+    "Items": [
+      { "Id": "Asset-xxx", "Name": "Asset 1", "URL": "https://example.com/image.jpg", "GroupId": "group-xxx", "AssetType": "Image", "Status": "Active", "CreateTime": "2026-08-19T02:10:00Z", "UpdateTime": "2026-08-19T02:10:00Z" }
+    ],
+    "PageNumber": 1,
+    "PageSize": 10
+  }
+}
+```
+
+## GetAsset — Get Asset Details
+
+Queries the full information of an asset by `Id` (including `Status`, `URL`, `Error`).
+
+### Request
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `Id` | string | Yes | Asset id (`Asset-...`) |
+
+```bash
+BASE_URL="https://yunjizi.cn"   # Domestic; overseas use https://api.yunjizi.cn
+
+curl "$BASE_URL/api/material/GetAsset" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"Id":"Asset-xxx"}'
+```
+
+### Response
+
+```json
+{
+  "ResponseMetadata": { "RequestId": "req_xxx", "Action": "GetAsset", "Version": "2024-01-01", "Service": "ark", "Region": "cn-beijing" },
+  "Result": { "Id": "Asset-xxx", "Name": "Asset 1", "URL": "https://example.com/image.jpg", "GroupId": "group-xxx", "AssetType": "Image", "Status": "Active", "Error": null }
+}
+```
+
+## UpdateAsset — Update Asset
+
+Renames an asset by `Id`.
+
+### Request
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `Id` | string | Yes | Asset id |
+| `Name` | string | No | New name (≤255 chars, no `<`/`>`, otherwise 400) |
+
+```bash
+BASE_URL="https://yunjizi.cn"   # Domestic; overseas use https://api.yunjizi.cn
+
+curl "$BASE_URL/api/material/UpdateAsset" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"Id":"Asset-xxx","Name":"New name"}'
+```
+
+### Response
+
+```json
+{
+  "ResponseMetadata": { "RequestId": "req_xxx", "Action": "UpdateAsset", "Version": "2024-01-01", "Service": "ark", "Region": "cn-beijing" },
+  "Result": {}
+}
+```
+
+## DeleteAsset — Delete Asset
+
+Deletes a single asset by `Id`.
+
+### Request
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `Id` | string | Yes | Asset id |
+
+```bash
+BASE_URL="https://yunjizi.cn"   # Domestic; overseas use https://api.yunjizi.cn
+
+curl "$BASE_URL/api/material/DeleteAsset" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"Id":"Asset-xxx"}'
+```
+
+### Response
+
+```json
+{
+  "ResponseMetadata": { "RequestId": "req_xxx", "Action": "DeleteAsset", "Version": "2024-01-01", "Service": "ark", "Region": "cn-beijing" },
+  "Result": {}
+}
+```
+
+> Ownership note: `GetAsset` / `DeleteAsset` operate by asset id and **currently do not verify ownership** (assets have no ownership record; an "asset→group" mapping is required — a known limitation, see ADR-0007). Ensure the asset id belongs to the same account used for generation.
