@@ -10,7 +10,7 @@
 | 列名 | 含义 |
 |---|---|
 | `user_id` | 充值用户 |
-| `amount` | **充值的 quota 数(int,500000=$1),不是钱** |
+| `amount` | 钱包流/代收：美元额度 N，回调 `users.quota += N × QuotaPerUnit`。档位流：raw tokens，回调直接加。**不是**实付金额。 |
 | `money` | **实付法币(才是钱)** |
 | `trade_no` | 订单号(唯一) |
 | `payment_method` | 支付方式（渠道族）：钱包新记录 `wxpay`/`alipay`，存量可能是 `bluewhalepay` |
@@ -18,7 +18,8 @@
 | `status` | 订单状态 |
 
 !!! warning "易错点"
-    - `amount` 是 quota(整数),`money` 是钱 —— **别混**
+    - `amount` 与 `money` **别混**：`money` 是实付法币；钱包流/代收的 `amount` 是 N，加账时才变成 quota
+    - 代收口 `POST /internal/v1/topup/pay` 按下游写入 Money/Amount，不走 `getPayMoney`
     - status 到「完成」才加 quota
     - `payment_method` 不是网关名；钱包流新记录用它区分微信/支付宝，`payment_provider` 才是 bluewhalepay
 
