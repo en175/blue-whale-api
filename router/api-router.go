@@ -81,6 +81,17 @@ func SetApiRouter(router *gin.Engine) {
 			userRoute.GET("/epay/notify", controller.EpayNotify)
 			userRoute.GET("/groups", controller.GetUserGroups)
 
+			// IKBVRF：改密接口迁账户层鉴权（AccountTokenOrUserAuth），
+			// 与 log/self、充值三接口同批：sk- 令牌与 session 均可访问，
+			// 不再强制 New-Api-User 头；同组其余 self 路由仍走 UserAuth。
+			// 注意：selfRoute.Use(UserAuth()) 为组级中间件，Gin 组级中间件
+			// 会无条件并入每条子路由，故 PUT /self 必须拆到独立 group，
+			// 避免 UserAuth 先执行后 AccountTokenOrUserAuth 无法短路。
+			selfPasswordRoute := userRoute.Group("/")
+			selfPasswordRoute.Use(middleware.AccountTokenOrUserAuth())
+			{
+				selfPasswordRoute.PUT("/self", middleware.CriticalRateLimit(), controller.UpdateSelf)
+			}
 			selfRoute := userRoute.Group("/")
 			selfRoute.Use(middleware.UserAuth())
 			{
@@ -88,7 +99,6 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.GET("/self", controller.GetSelf)
 				selfRoute.GET("/models", controller.GetUserModels)
 				selfRoute.GET("/docs-models", controller.GetUserDocsModels)
-				selfRoute.PUT("/self", middleware.CriticalRateLimit(), controller.UpdateSelf)
 				selfRoute.DELETE("/self", controller.DeleteSelf)
 				selfRoute.GET("/token", controller.GenerateAccessToken)
 				selfRoute.GET("/passkey", controller.PasskeyStatus)
