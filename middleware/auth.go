@@ -34,6 +34,43 @@ func validUserInfo(username string, role int) bool {
 	return true
 }
 
+// verifyNewApiUserHeader 校验请求携带的 New-Api-User 头是否与鉴权主体一致。
+// required=true 时头缺失直接拒绝（UserAuth 的 authHelper 语义）；
+// required=false 时头可选，但提供即校验（AccountTokenAuth 语义，IKBVRF）。
+// 校验失败时返回一个鉴权错误字符串（已写入响应并 Abort），nil 表示通过。
+func verifyNewApiUserHeader(c *gin.Context, ownerId int, required bool) error {
+	apiUserIdStr := c.Request.Header.Get("New-Api-User")
+	if apiUserIdStr == "" {
+		if !required {
+			return nil
+		}
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"success": false,
+			"message": common.TranslateMessage(c, i18n.MsgAuthUserIdNotProvided),
+		})
+		c.Abort()
+		return fmt.Errorf("New-Api-User header not provided")
+	}
+	apiUserId, err := strconv.Atoi(apiUserIdStr)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"success": false,
+			"message": common.TranslateMessage(c, i18n.MsgAuthUserIdFormatError),
+		})
+		c.Abort()
+		return fmt.Errorf("invalid New-Api-User header: %v", err)
+	}
+	if apiUserId != ownerId {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"success": false,
+			"message": common.TranslateMessage(c, i18n.MsgAuthUserIdMismatch),
+		})
+		c.Abort()
+		return fmt.Errorf("New-Api-User %d mismatch owner %d", apiUserId, ownerId)
+	}
+	return nil
+}
+
 func authHelper(c *gin.Context, minRole int) {
 	session := sessions.Default(c)
 	username := session.Get("username")
@@ -94,31 +131,7 @@ func authHelper(c *gin.Context, minRole int) {
 		}
 	}
 	// get header New-Api-User
-	apiUserIdStr := c.Request.Header.Get("New-Api-User")
-	if apiUserIdStr == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"success": false,
-			"message": common.TranslateMessage(c, i18n.MsgAuthUserIdNotProvided),
-		})
-		c.Abort()
-		return
-	}
-	apiUserId, err := strconv.Atoi(apiUserIdStr)
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"success": false,
-			"message": common.TranslateMessage(c, i18n.MsgAuthUserIdFormatError),
-		})
-		c.Abort()
-		return
-
-	}
-	if id != apiUserId {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"success": false,
-			"message": common.TranslateMessage(c, i18n.MsgAuthUserIdMismatch),
-		})
-		c.Abort()
+	if err := verifyNewApiUserHeader(c, id.(int), true); err != nil {
 		return
 	}
 	if status.(int) == common.UserStatusDisabled {
@@ -298,6 +311,11 @@ func AccountTokenAuth() func(c *gin.Context) {
 		// 充值三接口不使用这两个字段，无行为影响。
 		c.Set("username", userCache.Username)
 		c.Set("group", userCache.Group)
+		// IKBVRF：New-Api-User 头改为「可选」——免头调用方（BFF sk-）可直连，
+		// 但提供时仍须与 Token 属主一致（与 UserAuth 时代一致，防误配/伪造头）。
+		if err := verifyNewApiUserHeader(c, token.UserId, false); err != nil {
+			return
+		}
 		c.Next()
 	}
 }

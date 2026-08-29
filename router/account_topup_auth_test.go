@@ -30,9 +30,7 @@ func openAccountTopUpTestDB(t *testing.T) *gorm.DB {
 
 	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", strings.ReplaceAll(t.Name(), "/", "_"))
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("failed to open sqlite db: %v", err)
-	}
+	require.NoError(t, err, "failed to open sqlite db")
 	model.DB = db
 	model.LOG_DB = db
 
