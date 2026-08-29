@@ -1,8 +1,10 @@
 package model
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
@@ -30,8 +32,23 @@ const (
 	PaymentMethodWaffo        = "waffo"
 	PaymentMethodWaffoPancake = "waffo_pancake"
 	PaymentMethodBlueWhalePay = "bluewhalepay"
+	PaymentMethodWxPay        = "wxpay"
+	PaymentMethodAlipay       = "alipay"
 	PaymentMethodBalance      = "balance"
 )
+
+// PaymentMethodFromWayCode 把付款码前缀收成支付方式（渠道族）。
+// WX_* → wxpay，ALI_* → alipay，其余（含空）→ bluewhalepay。
+func PaymentMethodFromWayCode(wayCode string) string {
+	switch {
+	case strings.HasPrefix(wayCode, "WX_"):
+		return PaymentMethodWxPay
+	case strings.HasPrefix(wayCode, "ALI_"):
+		return PaymentMethodAlipay
+	default:
+		return PaymentMethodBlueWhalePay
+	}
+}
 
 const (
 	PaymentProviderEpay         = "epay"
@@ -593,7 +610,8 @@ func RechargeWaffoPancake(tradeNo string) (err error) {
 // RechargeBlueWhalePay：bluewhalepay（blue-whale-pay）支付成功回调加额度。
 // pay confirmSuccess（notifyUrl 非空）→ PayMchNotifyMQ → GET 商户 notifyUrl，
 // BlueWhalePayNotify 验签后调本函数。TopUp.Amount 为充值额度（整数 quota）。
-func RechargeBlueWhalePay(tradeNo string, callerIp string) (err error) {
+// ifCode 为通知里已验签的渠道族；仅 wxpay/alipay 且与现值不同时，在 pending→success 覆盖 payment_method。
+func RechargeBlueWhalePay(ctx context.Context, tradeNo string, callerIp string, ifCode string) (err error) {
 	if tradeNo == "" {
 		return errors.New("未提供支付单号")
 	}
@@ -626,6 +644,13 @@ func RechargeBlueWhalePay(tradeNo string, callerIp string) (err error) {
 		quotaToAdd = int64(decimal.NewFromInt(topUp.Amount).Mul(decimal.NewFromFloat(common.QuotaPerUnit)).IntPart())
 		if quotaToAdd <= 0 {
 			return errors.New("无效的充值额度")
+		}
+
+		if ifCode == PaymentMethodWxPay || ifCode == PaymentMethodAlipay {
+			if topUp.PaymentMethod != ifCode {
+				logger.LogWarn(ctx, fmt.Sprintf("bluewhalepay 实际支付方式与订单不同 trade_no=%s order_payment_method=%s ifCode=%s", tradeNo, topUp.PaymentMethod, ifCode))
+				topUp.PaymentMethod = ifCode
+			}
 		}
 
 		topUp.CompleteTime = common.GetTimestamp()
