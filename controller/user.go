@@ -264,28 +264,11 @@ func Register(c *gin.Context) {
 	if common.EmailVerificationEnabled {
 		cleanUser.Email = user.Email
 	}
-	var defaultToken *model.Token
-	if constant.GenerateDefaultToken {
-		key, err := common.GenerateKey()
-		if err != nil {
-			common.ApiErrorI18n(c, i18n.MsgUserDefaultTokenFailed)
-			common.SysLog("failed to generate token key: " + err.Error())
-			return
-		}
-		// 生成默认令牌
-		defaultToken = &model.Token{
-			Name:               cleanUser.Username + "的初始令牌",
-			Key:                key,
-			CreatedTime:        common.GetTimestamp(),
-			AccessedTime:       common.GetTimestamp(),
-			ExpiredTime:        -1,     // 永不过期
-			RemainQuota:        500000, // 示例额度
-			UnlimitedQuota:     true,
-			ModelLimitsEnabled: false,
-		}
-		if setting.DefaultUseAutoGroup {
-			defaultToken.Group = "auto"
-		}
+	defaultToken, tokenErr := newInitialUserToken(cleanUser.Username)
+	if tokenErr != nil {
+		common.ApiErrorI18n(c, i18n.MsgUserDefaultTokenFailed)
+		common.SysLog("failed to generate token key: " + tokenErr.Error())
+		return
 	}
 	var insertErr error
 	if defaultToken != nil {
@@ -1003,6 +986,32 @@ func DeleteSelf(c *gin.Context) {
 	return
 }
 
+// newInitialUserToken builds the BlueWhale default API token when
+// GENERATE_DEFAULT_TOKEN is on. Callers insert it in the same transaction as the user.
+func newInitialUserToken(username string) (*model.Token, error) {
+	if !constant.GenerateDefaultToken {
+		return nil, nil
+	}
+	key, err := common.GenerateKey()
+	if err != nil {
+		return nil, err
+	}
+	token := &model.Token{
+		Name:               username + "的初始令牌",
+		Key:                key,
+		CreatedTime:        common.GetTimestamp(),
+		AccessedTime:       common.GetTimestamp(),
+		ExpiredTime:        -1,
+		RemainQuota:        500000,
+		UnlimitedQuota:     true,
+		ModelLimitsEnabled: false,
+	}
+	if setting.DefaultUseAutoGroup {
+		token.Group = "auto"
+	}
+	return token, nil
+}
+
 func CreateUser(c *gin.Context) {
 	var user model.User
 	err := json.NewDecoder(c.Request.Body).Decode(&user)
@@ -1030,10 +1039,22 @@ func CreateUser(c *gin.Context) {
 		DisplayName: user.DisplayName,
 		Role:        user.Role, // 保持管理员设置的角色
 	}
+	defaultToken, tokenErr := newInitialUserToken(cleanUser.Username)
+	if tokenErr != nil {
+		common.ApiErrorI18n(c, i18n.MsgUserDefaultTokenFailed)
+		common.SysLog("failed to generate token key: " + tokenErr.Error())
+		return
+	}
 	authzTouched := false
 	if err := model.DB.Transaction(func(tx *gorm.DB) error {
 		if err := cleanUser.InsertWithTx(tx, 0); err != nil {
 			return err
+		}
+		if defaultToken != nil {
+			defaultToken.UserId = cleanUser.Id
+			if err := tx.Create(defaultToken).Error; err != nil {
+				return err
+			}
 		}
 		touched, err := updateAdminPermissionsForUserInTx(c, tx, cleanUser.Id, cleanUser.Role, user.AdminPermissions)
 		authzTouched = touched

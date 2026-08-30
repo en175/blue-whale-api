@@ -79,6 +79,86 @@ func TestLoginByUsernameOrEmailReturnsSameStableAccountContract(t *testing.T) {
 	}
 }
 
+func setupAdminCreateUserTest(t *testing.T, generateDefaultToken bool, migrateToken bool) *gin.Engine {
+	t.Helper()
+	db := openTokenControllerTestDB(t)
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Log{}, &model.TwoFA{}))
+	if migrateToken {
+		require.NoError(t, db.AutoMigrate(&model.Token{}))
+	}
+	common.PasswordLoginEnabled = true
+	common.QuotaForNewUser = 0
+	constant.GenerateDefaultToken = generateDefaultToken
+	t.Cleanup(func() {
+		constant.GenerateDefaultToken = false
+	})
+	router := gin.New()
+	router.Use(sessions.Sessions("account-contract", cookie.NewStore([]byte("test-secret"))))
+	router.POST("/api/user/", func(c *gin.Context) {
+		c.Set("id", 99)
+		c.Set("role", common.RoleAdminUser)
+		CreateUser(c)
+	})
+	router.POST("/api/user/login", Login)
+	return router
+}
+
+func TestCreateUserCreatesDefaultTokenAndAllowsLogin(t *testing.T) {
+	router := setupAdminCreateUserTest(t, true, true)
+	created := performJSON(router, http.MethodPost, "/api/user/", map[string]any{
+		"username": "admin-created",
+		"password": "password123",
+		"role":     common.RoleCommonUser,
+	}, "")
+	require.Equal(t, http.StatusOK, created.Code, created.Body.String())
+	var createBody struct {
+		Success bool `json:"success"`
+	}
+	require.NoError(t, json.Unmarshal(created.Body.Bytes(), &createBody), created.Body.String())
+	require.True(t, createBody.Success, created.Body.String())
+
+	login := performJSON(router, http.MethodPost, "/api/user/login", map[string]string{
+		"username": "admin-created",
+		"password": "password123",
+	}, "")
+	response := decodeAccountContract(t, login)
+	require.Equal(t, http.StatusOK, login.Code, login.Body.String())
+	require.True(t, response.Success, login.Body.String())
+	assert.Regexp(t, `^sk-.+`, response.Data.Token)
+}
+
+func TestCreateUserSkipsDefaultTokenWhenDisabled(t *testing.T) {
+	router := setupAdminCreateUserTest(t, false, true)
+	created := performJSON(router, http.MethodPost, "/api/user/", map[string]any{
+		"username": "admin-no-token",
+		"password": "password123",
+		"role":     common.RoleCommonUser,
+	}, "")
+	require.Equal(t, http.StatusOK, created.Code, created.Body.String())
+
+	login := performJSON(router, http.MethodPost, "/api/user/login", map[string]string{
+		"username": "admin-no-token",
+		"password": "password123",
+	}, "")
+	response := decodeAccountContract(t, login)
+	require.Equal(t, http.StatusOK, login.Code, login.Body.String())
+	require.True(t, response.Success, login.Body.String())
+	assert.Empty(t, response.Data.Token)
+}
+
+func TestCreateUserRollsBackUserWhenDefaultTokenCannotBeCreated(t *testing.T) {
+	router := setupAdminCreateUserTest(t, true, false)
+	created := performJSON(router, http.MethodPost, "/api/user/", map[string]any{
+		"username": "admin-rollback",
+		"password": "password123",
+		"role":     common.RoleCommonUser,
+	}, "")
+
+	var count int64
+	require.NoError(t, model.DB.Model(&model.User{}).Where("username = ?", "admin-rollback").Count(&count).Error)
+	assert.Zero(t, count, created.Body.String())
+}
+
 func TestLoginWithoutDefaultTokenReturnsConfigurationError(t *testing.T) {
 	router := setupAccountContractTest(t, true)
 	user := model.User{
