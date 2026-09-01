@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -158,4 +159,75 @@ func TestAgentBillingSubjectLookupSeparatesOutageFromBan(t *testing.T) {
 			}
 		})
 	}
+}
+
+// IKCGF1 ④：subject 头只在认出蓝鲸服务凭证时才被信任。
+//
+// 这把 `bwsvc_` 凭证能为**系统里任何用户**记账，所以「普通 sk- token 带着 subject 头会不会
+// 被当真」是整条链上最贵的一个问题——而在本用例之前，没有任何东西守着它。
+//
+// `RelayAuth` 按前缀分流：不带 `bwsvc_` 前缀的凭证走 `TokenAuth()`，那条路径压根不看
+// subject 头。这里断言的就是「没进网关分支」——agent 计费的三个 context key 一个都没被设上。
+//
+// 没有 DB 时 `TokenAuth` 会 nil 解引用 panic。那是环境不是被测行为：**panic 发生在断言的
+// 那些 key 之后**（上面的探测确认过 code=200、两个 key 都是 nil），所以 recover 掉继续断言是
+// 成立的，而不是把失败吞了。
+func TestRelayAuthDoesNotTrustSubjectHeaderFromOrdinaryToken(t *testing.T) {
+	t.Setenv("AGENT_BILLING_SERVICE_TOKEN", "bwsvc_right")
+
+	for _, credential := range []string{
+		"Bearer sk-someones-real-token",
+		"sk-someones-real-token",
+		"Bearer bwsvc_wrong", // 前缀对但值不对：必须走网关分支并被 401，不能落回 TokenAuth
+	} {
+		t.Run(credential, func(t *testing.T) {
+			gin.SetMode(gin.TestMode)
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+			c.Request.Header.Set("Authorization", credential)
+			// 攻击面：调用方自己声明想记谁的账。
+			c.Request.Header.Set(AgentBillingSubjectHeader, "1")
+			c.Request.Header.Set(AgentBillingRunHeader, "run_forged")
+
+			func() {
+				defer func() { _ = recover() }() // 见函数注释：无 DB 的 TokenAuth 会 panic
+				RelayAuth()(c)
+			}()
+
+			assert.Nil(t, c.Keys[string(constant.ContextKeyAgentBilling)],
+				"没有正确的网关凭证就不该进入网关计费分支")
+			assert.Nil(t, c.Keys[string(constant.ContextKeyAgentRunId)],
+				"run 标签也只在网关分支里才落")
+			assert.Nil(t, c.Keys["id"],
+				"计费主体绝不能来自调用方声明的 subject 头")
+		})
+	}
+}
+
+// 反向对照：凭证对的时候，subject 头**必须**被采信——否则上面那条用例即使把整个网关分支
+// 删掉也会绿。
+func TestRelayAuthTrustsSubjectHeaderFromGatewayCredential(t *testing.T) {
+	t.Setenv("AGENT_BILLING_SERVICE_TOKEN", "bwsvc_right")
+	orig := lookupBillingSubject
+	lookupBillingSubject = func(id int) (*model.UserBase, error) {
+		return &model.UserBase{Id: id, Status: common.UserStatusEnabled, Group: "default"}, nil
+	}
+	defer func() { lookupBillingSubject = orig }()
+
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	c.Request.Header.Set("Authorization", "Bearer bwsvc_right")
+	c.Request.Header.Set(AgentBillingSubjectHeader, "37")
+	c.Request.Header.Set(AgentBillingRunHeader, "run_real")
+
+	RelayAuth()(c)
+
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	assert.Equal(t, true, c.Keys[string(constant.ContextKeyAgentBilling)])
+	assert.Equal(t, "run_real", c.Keys[string(constant.ContextKeyAgentRunId)])
+	assert.Equal(t, 37, c.Keys["id"])
+	assert.Equal(t, true, c.Keys[string(constant.ContextKeyTokenUnlimited)], "tokenless：token 层不设限")
 }
