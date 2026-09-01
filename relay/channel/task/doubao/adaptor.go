@@ -115,10 +115,43 @@ func (a *TaskAdaptor) Init(info *relaycommon.RelayInfo) {
 	a.apiKey = info.ApiKey
 }
 
-// ValidateRequestAndSetAction parses body, validates fields and sets default action.
+// ValidateRequestAndSetAction parses body, validates fields and sets the log
+// action from the submit shape (文生 / 图生 / 视频生). Billing still uses
+// HasVideoInputInMetadata separately.
 func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycommon.RelayInfo) (taskErr *dto.TaskError) {
-	// Accept only POST /v1/video/generations as "generate" action.
-	return relaycommon.ValidateBasicTaskRequest(c, info, constant.TaskActionGenerate)
+	if taskErr = relaycommon.ValidateBasicTaskRequest(c, info, constant.TaskActionGenerate); taskErr != nil {
+		return taskErr
+	}
+	req, err := relaycommon.GetTaskRequest(c)
+	if err != nil {
+		return service.TaskErrorWrapper(err, "get_task_request_failed", http.StatusBadRequest)
+	}
+	info.Action = inferDoubaoVideoAction(req)
+	return nil
+}
+
+func inferDoubaoVideoAction(req relaycommon.TaskSubmitReq) string {
+	if taskcommon.HasVideoInputInMetadata(req.Metadata) {
+		return constant.TaskActionVideoGenerate
+	}
+	if req.HasImage() {
+		return constant.TaskActionGenerate
+	}
+	if contentRaw, ok := req.Metadata["content"].([]interface{}); ok {
+		for _, item := range contentRaw {
+			itemMap, ok := item.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			if itemMap["type"] == "image_url" {
+				return constant.TaskActionGenerate
+			}
+			if _, has := itemMap["image_url"]; has {
+				return constant.TaskActionGenerate
+			}
+		}
+	}
+	return constant.TaskActionTextGenerate
 }
 
 // BuildRequestURL constructs the upstream URL.
