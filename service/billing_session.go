@@ -35,6 +35,17 @@ type BillingSession struct {
 	mu               sync.Mutex
 }
 
+// 令牌账本的两个写入口，做成变量而不是直接调 model 包，只为一个理由：
+// {@link BillingSession.skipsTokenLedger} 这道闸没法用真实实现测。`Refund` 跑在 gopool 的
+// goroutine 里，那里 panic 会直接带走测试进程，所以「没配 DB 就 panic」不能当断言用；而
+// 换成批量模式又落进 model 包的私有队列，service 包看不见。换成变量，测试就能记下到底调没调。
+//
+// 生产路径行为不变——它们就是 model 包那两个函数。
+var (
+	decreaseTokenQuota = model.DecreaseTokenQuota
+	increaseTokenQuota = model.IncreaseTokenQuota
+)
+
 // skipsTokenLedger 报告本次请求是否完全不碰令牌额度账本。
 //
 // 两条路都没有 token 行可动：Playground 从来就不扣，而蓝鲸网关代打（AgentBilling）是
@@ -72,9 +83,9 @@ func (s *BillingSession) Settle(actualQuota int) error {
 	var tokenErr error
 	if !s.skipsTokenLedger() {
 		if delta > 0 {
-			tokenErr = model.DecreaseTokenQuota(s.relayInfo.TokenId, s.relayInfo.TokenKey, delta)
+			tokenErr = decreaseTokenQuota(s.relayInfo.TokenId, s.relayInfo.TokenKey, delta)
 		} else {
-			tokenErr = model.IncreaseTokenQuota(s.relayInfo.TokenId, s.relayInfo.TokenKey, -delta)
+			tokenErr = increaseTokenQuota(s.relayInfo.TokenId, s.relayInfo.TokenKey, -delta)
 		}
 		if tokenErr != nil {
 			// 资金来源已提交，令牌调整失败只能记录日志；标记 settled 防止 Refund 误退资金
@@ -127,7 +138,7 @@ func (s *BillingSession) Refund(c *gin.Context) {
 		}
 		// 2) 退还令牌额度
 		if tokenConsumed > 0 && !skipsTokenLedger {
-			if err := model.IncreaseTokenQuota(tokenId, tokenKey, tokenConsumed); err != nil {
+			if err := increaseTokenQuota(tokenId, tokenKey, tokenConsumed); err != nil {
 				common.SysLog("error refunding token quota: " + err.Error())
 			}
 		}
@@ -224,7 +235,7 @@ func (s *BillingSession) preConsume(c *gin.Context, quota int) *types.NewAPIErro
 	if err := s.funding.PreConsume(effectiveQuota); err != nil {
 		// 预扣费失败，回滚令牌额度
 		if s.tokenConsumed > 0 && !s.skipsTokenLedger() {
-			if rollbackErr := model.IncreaseTokenQuota(s.relayInfo.TokenId, s.relayInfo.TokenKey, s.tokenConsumed); rollbackErr != nil {
+			if rollbackErr := increaseTokenQuota(s.relayInfo.TokenId, s.relayInfo.TokenKey, s.tokenConsumed); rollbackErr != nil {
 				common.SysLog(fmt.Sprintf("error rolling back token quota (userId=%d, tokenId=%d, amount=%d, fundingErr=%s): %s",
 					s.relayInfo.UserId, s.relayInfo.TokenId, s.tokenConsumed, err.Error(), rollbackErr.Error()))
 			}

@@ -1,11 +1,14 @@
 package middleware
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/model"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 )
@@ -99,5 +102,60 @@ func TestAgentBillingCredentialPrefixIsRoutable(t *testing.T) {
 	}
 	if strings.HasPrefix("sk-anything", AgentBillingCredentialPrefix) {
 		t.Fatal("前缀不得与普通 sk- token 冲突，否则用户 token 会被当成网关凭证")
+	}
+}
+
+// 库抖动和「这个用户被封了」是两件事，合成一个裸 403 会把排查带到完全错误的方向：
+// user cache 抖一下，所有在飞的 Run 都变成「模型调用失败」，而 403 读起来像「不该花钱」。
+// TokenAuth 一直是分开的（500 MsgDatabaseError / 403 MsgAuthUserBanned），这里对齐它。
+func TestAgentBillingSubjectLookupSeparatesOutageFromBan(t *testing.T) {
+	t.Setenv("AGENT_BILLING_SERVICE_TOKEN", "bwsvc_right")
+	headers := map[string]string{
+		"Authorization":           "bwsvc_right",
+		AgentBillingSubjectHeader: "37",
+	}
+
+	cases := []struct {
+		name       string
+		lookup     func(int) (*model.UserBase, error)
+		wantStatus int
+		wantBody   string
+	}{
+		{
+			name:       "查库失败是 500，不是 403——它不是「这个用户不该花钱」",
+			lookup:     func(int) (*model.UserBase, error) { return nil, errors.New("user cache down") },
+			wantStatus: http.StatusInternalServerError,
+			wantBody:   "database_error",
+		},
+		{
+			name: "用户被停用才是 403",
+			lookup: func(int) (*model.UserBase, error) {
+				return &model.UserBase{Id: 37, Status: common.UserStatusDisabled}, nil
+			},
+			wantStatus: http.StatusForbidden,
+			wantBody:   "user_banned",
+		},
+		{
+			name: "正常用户放行",
+			lookup: func(int) (*model.UserBase, error) {
+				return &model.UserBase{Id: 37, Status: common.UserStatusEnabled}, nil
+			},
+			wantStatus: http.StatusOK,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			orig := lookupBillingSubject
+			lookupBillingSubject = tc.lookup
+			defer func() { lookupBillingSubject = orig }()
+
+			recorder := agentBillingRequest(t, "/v1/chat/completions", headers)
+			assert.Equal(t, tc.wantStatus, recorder.Code)
+			if tc.wantBody != "" {
+				assert.Contains(t, recorder.Body.String(), tc.wantBody,
+					"错误码要能把两种成因分开，否则日志里看不出是哪一种")
+			}
+		})
 	}
 }

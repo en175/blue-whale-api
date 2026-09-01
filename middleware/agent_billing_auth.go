@@ -27,6 +27,10 @@ const AgentBillingSubjectHeader = "X-Bw-Subject-User-Id"
 // spend can be read back per Agent run. Nothing downstream trusts it.
 const AgentBillingRunHeader = "X-Bw-Agent-Run-Id"
 
+// 计费主体的查库入口，做成变量只为可测：库错与封号必须分成 500 / 403 两条路，而这两条路
+// 在真实实现下都要一个活着的 DB 才能走到。生产路径就是 model.GetUserCache。
+var lookupBillingSubject = model.GetUserCache
+
 func agentBillingCredential() string {
 	return strings.TrimSpace(os.Getenv("AGENT_BILLING_SERVICE_TOKEN"))
 }
@@ -98,7 +102,7 @@ func AgentBillingAuth(c *gin.Context, credential string) {
 		abortWithOpenAiMessage(c, http.StatusBadRequest, "Agent billing subject missing", "billing_subject_required")
 		return
 	}
-	user, err := model.GetUserCache(subjectUserId)
+	user, err := lookupBillingSubject(subjectUserId)
 	if err != nil {
 		// 查不到和被封是两件事，不能合成一个裸 403。user cache 抖一下会让所有在飞的 Run 变成
 		// 「模型调用失败」，而 403 读起来像「这个用户不该花钱」——排查会往完全错误的方向走。
