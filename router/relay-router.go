@@ -69,7 +69,7 @@ func SetRelayRouter(router *gin.Engine) {
 	relayV1Router := router.Group("/v1")
 	relayV1Router.Use(middleware.RouteTag("relay"))
 	relayV1Router.Use(middleware.SystemPerformanceCheck())
-	relayV1Router.Use(middleware.RunCapabilityOrTokenAuth())
+	relayV1Router.Use(middleware.RelayAuth())
 	relayV1Router.Use(middleware.ModelRequestRateLimit())
 	{
 		// WebSocket 路由（统一到 Relay）
@@ -83,7 +83,6 @@ func SetRelayRouter(router *gin.Engine) {
 		//http router
 		httpRouter := relayV1Router.Group("")
 		httpRouter.Use(middleware.Distribute())
-		httpRouter.Use(middleware.RunCapabilityInputBudget())
 
 		// claude related routes
 		httpRouter.POST("/messages", func(c *gin.Context) {

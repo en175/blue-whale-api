@@ -400,16 +400,6 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 		logger.LogError(ctx, "error settling billing: "+err.Error())
 	}
 
-	// Charge the settled usage against the Run Capability that authorized this call. Only knowable
-	// here — the pre-flight check can bound what one call asks for, never what it turns out to cost.
-	//
-	// `quota` is the same value settled above, deliberately: a capability minted with a spend bound
-	// is bounded by what the user is actually billed, not by raw token count, which prices cached
-	// input and completion identically and so runs 1.5x-8.7x high on cache-friendly traffic.
-	if relayInfo.RunCapabilityBilling {
-		RecordRunCapabilityUsage(ctx, relayInfo.RunCapabilityDigest, summary.TotalTokens, summary.Quota)
-	}
-
 
 	logModel := summary.ModelName
 	if strings.HasPrefix(logModel, "gpt-4-gizmo") {

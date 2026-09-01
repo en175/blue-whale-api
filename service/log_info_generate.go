@@ -164,13 +164,10 @@ func appendBillingInfo(relayInfo *relaycommon.RelayInfo, other map[string]interf
 	if relayInfo.AgentBilling {
 		other["billing_authority"] = "agent_gateway"
 		// Per-run spend read-back. The capability id used to be the only Run-level landing point,
-		// which tied "which run spent this" to a credential that is going away.
+		// which tied "which run spent this" to a credential that no longer exists.
 		if relayInfo.AgentRunId != "" {
 			other["agent_run_id"] = relayInfo.AgentRunId
 		}
-	} else if relayInfo.RunCapabilityBilling {
-		other["billing_authority"] = "run_capability"
-		other["run_capability_id"] = relayInfo.RunCapabilityId
 	}
 	if relayInfo.UserSetting.BillingPreference != "" {
 		other["billing_preference"] = relayInfo.UserSetting.BillingPreference

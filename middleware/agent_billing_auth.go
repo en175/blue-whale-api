@@ -81,10 +81,9 @@ func AgentBillingAuth(c *gin.Context, credential string) {
 	common.SetContextKey(c, constant.ContextKeyUsingGroup, user.Group)
 	common.SetContextKey(c, constant.ContextKeyTokenGroup, "")
 	common.SetContextKey(c, constant.ContextKeyTokenUnlimited, true)
-	// Reuses the capability flag purely for its tokenless-billing meaning (skip token pre-consume
-	// and token quota decrement). The name outlives the capability by one ticket: IKCGEF deletes
-	// the capability and renames it to what it has always actually meant.
-	common.SetContextKey(c, constant.ContextKeyRunCapabilityBilling, true)
+	// Tokenless: no token row exists, so token-level pre-consume and quota decrement are skipped
+	// and the user's balance is settled directly. The user-level balance gate in NewBillingSession
+	// still runs — a gateway call from an account with no money is refused like any other.
 	common.SetContextKey(c, constant.ContextKeyAgentBilling, true)
 	if runId := strings.TrimSpace(c.GetHeader(AgentBillingRunHeader)); runId != "" {
 		common.SetContextKey(c, constant.ContextKeyAgentRunId, runId)
