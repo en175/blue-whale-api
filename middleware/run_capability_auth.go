@@ -18,6 +18,13 @@ func RunCapabilityOrTokenAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authorization := c.GetHeader("Authorization")
 		value := strings.TrimSpace(strings.TrimPrefix(authorization, "Bearer "))
+		// The Blue Whale model gateway relays Agent traffic under its own service credential and
+		// names the billing subject in a header. Routed here on prefix, before the capability
+		// branch, because it is what that branch is being replaced by (IKCGE2).
+		if strings.HasPrefix(value, AgentBillingCredentialPrefix) {
+			AgentBillingAuth(c, value)
+			return
+		}
 		if !strings.HasPrefix(value, "bwcap_") {
 			TokenAuth()(c)
 			return

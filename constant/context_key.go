@@ -23,6 +23,10 @@ const (
 	ContextKeyRunCapabilityDigest    ContextKey = "run_capability_digest"
 	ContextKeyRunCapabilityId        ContextKey = "run_capability_id"
 	ContextKeyRunCapabilityMaxInput  ContextKey = "run_capability_max_input_tokens"
+	// Set when the Blue Whale model gateway relayed this call and named the billing subject itself.
+	ContextKeyAgentBilling ContextKey = "agent_billing"
+	// Ledger label only: which Agent run a gateway-relayed call belongs to. Never an auth input.
+	ContextKeyAgentRunId ContextKey = "agent_run_id"
 
 	/* channel related keys */
 	ContextKeyChannelId                ContextKey = "channel_id"

@@ -96,9 +96,14 @@ type RelayInfo struct {
 	RunCapabilityBilling bool
 	RunCapabilityDigest  string
 	RunCapabilityId      string
-	StartTime            time.Time
-	FirstResponseTime    time.Time
-	isFirstResponse      bool
+	// AgentBilling marks a call the Blue Whale model gateway relayed, with the billing subject
+	// resolved by the gateway rather than declared by the Agent runtime.
+	AgentBilling bool
+	// AgentRunId is the Blue Whale Agent run this call belongs to, for per-run spend read-back.
+	AgentRunId        string
+	StartTime         time.Time
+	FirstResponseTime time.Time
+	isFirstResponse   bool
 	//SendLastReasoningResponse bool
 	IsStream               bool
 	IsGeminiBatchEmbedding bool
@@ -487,6 +492,8 @@ func genBaseRelayInfo(c *gin.Context, request dto.Request) *RelayInfo {
 		RunCapabilityBilling: common.GetContextKeyBool(c, constant.ContextKeyRunCapabilityBilling),
 		RunCapabilityDigest:  common.GetContextKeyString(c, constant.ContextKeyRunCapabilityDigest),
 		RunCapabilityId:      common.GetContextKeyString(c, constant.ContextKeyRunCapabilityId),
+		AgentBilling:         common.GetContextKeyBool(c, constant.ContextKeyAgentBilling),
+		AgentRunId:           common.GetContextKeyString(c, constant.ContextKeyAgentRunId),
 		TokenGroup:           tokenGroup,
 
 		isFirstResponse: true,
