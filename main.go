@@ -303,6 +303,9 @@ func InitResources() error {
 	// 加载环境变量
 	common.InitEnv()
 
+	// 蓝鲸网关代打的凭证在这里查，不留到第一个请求才发现（IKCGE2）。
+	middleware.ValidateAgentBillingConfig()
+
 	logger.SetupLogger()
 
 	// 初始化火山引擎 TLS 日志 Producer（读 TLS_ENDPOINT/TLS_AK/TLS_SK/TLS_TOPIC_ID 环境变量，

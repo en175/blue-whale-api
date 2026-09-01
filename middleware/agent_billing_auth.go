@@ -31,6 +31,33 @@ func agentBillingCredential() string {
 	return strings.TrimSpace(os.Getenv("AGENT_BILLING_SERVICE_TOKEN"))
 }
 
+// ValidateAgentBillingConfig checks the gateway credential at boot instead of at request time.
+//
+// Both failure modes were silent before, and both look like a model outage from the browser:
+//
+//   - **Unset.** Every gateway call 401s. Nothing is logged at startup, so the first sign is users
+//     reporting that the Agent stopped answering.
+//   - **Set without the `bwsvc_` prefix.** Worse, because it looks configured. `RelayAuth` routes
+//     on the prefix, so a prefix-less credential never reaches this middleware at all — it falls
+//     through to `TokenAuth`, fails to find a token row, and dies as an ordinary 401.
+//
+// Fatal on the second: the operator plainly meant to enable agent billing and it would silently
+// not work. Only a log line on the first, because a deployment that does not run the Blue Whale
+// Agent is legitimate and must still boot.
+func ValidateAgentBillingConfig() {
+	credential := agentBillingCredential()
+	if credential == "" {
+		common.SysLog("AGENT_BILLING_SERVICE_TOKEN 未配置：蓝鲸网关代打不可用，/v1/chat/completions 上的网关调用会一律 401")
+		return
+	}
+	if !strings.HasPrefix(credential, AgentBillingCredentialPrefix) {
+		common.FatalLog("AGENT_BILLING_SERVICE_TOKEN 必须以 " + AgentBillingCredentialPrefix +
+			" 开头：relay 入口按前缀分流，不带前缀的凭证永远走不到网关分支，会以普通 401 静默失败")
+		return
+	}
+	common.SysLog("蓝鲸网关代打已启用（AGENT_BILLING_SERVICE_TOKEN 已配置）")
+}
+
 // authorizedAgentBillingService reports whether `supplied` is the configured gateway credential.
 // Constant-time: this credential authorizes billing any user in the system, so a timing oracle on
 // it is worth more to an attacker than one on an ordinary token.
@@ -72,8 +99,15 @@ func AgentBillingAuth(c *gin.Context, credential string) {
 		return
 	}
 	user, err := model.GetUserCache(subjectUserId)
-	if err != nil || user.Status != common.UserStatusEnabled {
-		abortWithOpenAiMessage(c, http.StatusForbidden, "Agent billing subject unavailable")
+	if err != nil {
+		// 查不到和被封是两件事，不能合成一个裸 403。user cache 抖一下会让所有在飞的 Run 变成
+		// 「模型调用失败」，而 403 读起来像「这个用户不该花钱」——排查会往完全错误的方向走。
+		// `TokenAuth` 一直是分开的（500 MsgDatabaseError / 403 MsgAuthUserBanned），这里对齐它。
+		abortWithOpenAiMessage(c, http.StatusInternalServerError, "Agent billing subject lookup failed", "database_error")
+		return
+	}
+	if user.Status != common.UserStatusEnabled {
+		abortWithOpenAiMessage(c, http.StatusForbidden, "Agent billing subject is not enabled", "user_banned")
 		return
 	}
 	c.Set("id", subjectUserId)
