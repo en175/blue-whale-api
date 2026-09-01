@@ -31,10 +31,6 @@ const AgentBillingRunHeader = "X-Bw-Agent-Run-Id"
 // 在真实实现下都要一个活着的 DB 才能走到。生产路径就是 model.GetUserCache。
 var lookupBillingSubject = model.GetUserCache
 
-func agentBillingCredential() string {
-	return strings.TrimSpace(os.Getenv("AGENT_BILLING_SERVICE_TOKEN"))
-}
-
 // ValidateAgentBillingConfig checks the gateway credential at boot instead of at request time.
 //
 // Both failure modes were silent before, and both look like a model outage from the browser:
@@ -49,7 +45,7 @@ func agentBillingCredential() string {
 // not work. Only a log line on the first, because a deployment that does not run the Blue Whale
 // Agent is legitimate and must still boot.
 func ValidateAgentBillingConfig() {
-	credential := agentBillingCredential()
+	credential := strings.TrimSpace(os.Getenv("AGENT_BILLING_SERVICE_TOKEN"))
 	if credential == "" {
 		common.SysLog("AGENT_BILLING_SERVICE_TOKEN 未配置：蓝鲸网关代打不可用，/v1/chat/completions 上的网关调用会一律 401")
 		return
@@ -66,7 +62,7 @@ func ValidateAgentBillingConfig() {
 // Constant-time: this credential authorizes billing any user in the system, so a timing oracle on
 // it is worth more to an attacker than one on an ordinary token.
 func authorizedAgentBillingService(supplied string) bool {
-	expected := agentBillingCredential()
+	expected := strings.TrimSpace(os.Getenv("AGENT_BILLING_SERVICE_TOKEN"))
 	if expected == "" || supplied == "" {
 		return false
 	}
