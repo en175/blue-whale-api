@@ -83,11 +83,14 @@ func resolveProcessIdentity() {
 		tlsHostIP = firstNonLoopbackAddress()
 		tlsEnv = os.Getenv("NODE_ENV")
 		if tlsEnv == "" {
-			// unknown，不是从前那个 local：生产容器里的 local 是一句读起来像事实的假话。
-			// 整个集群现在正处在这个状态——只有 agent 容器设了 NODE_ENV，本服务和
-			// blue-whale-backend 在同一套栈里都自报 local。写 unknown 至少看得见这个洞。
-			// 三仓同一个缺省（IKB29O D2）。
-			tlsEnv = "unknown"
+			// 没设就当 production，三仓同一个缺省（IKB29O D2）。
+			//
+			// 敢这么默认，是因为这个字段只在火山控制台里被读到，而一行日志要进控制台，得由一个
+			// 拿着 TLS 凭证的进程发出去——也就是一套真实部署。开发机什么都不上报，在那儿叫
+			// production 不花任何人的钱。默认值在唯一会读到它的地方就是对的。
+			// 前两版缺省 local，结果集群里只有 agent 容器设了 NODE_ENV，本服务和
+			// blue-whale-backend 在同一套栈里都自报 local，而修复寄托在有人记得配变量上。
+			tlsEnv = "production"
 		}
 	})
 }
