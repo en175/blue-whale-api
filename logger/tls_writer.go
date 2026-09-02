@@ -156,18 +156,33 @@ var logRecordFieldOrder = []string{
 	"code_file_path", "code_line_number", "code_function_name", "body",
 }
 
+// serviceVersion 版本号，未注入时为 "unknown"。
+//
+// 空串不行：另外两个仓写的是 "unknown"，而 D2 要求缺省值三仓一致——一个空串一个 "unknown"，
+// 「不知道版本」这件事就要按两种写法各查一次。
+func serviceVersion() string {
+	if common.Version == "" {
+		return "unknown"
+	}
+	return common.Version
+}
+
 func logRecord(level string, t time.Time, requestID, traceID, callerFile string, callerLine int, funcName, msg string) map[string]any {
 	return map[string]any{
 		// 小写。此前 Go 打 INFO/WARN/ERR 而 Node 打 info/warn/error，在 TLS 上按
 		// severity_text: error 过滤，搜不到本仓的任何错误日志。
 		"severity_text": strings.ToLower(level),
-		// ISO 8601 带毫秒带时区。此前是 "2006-01-02 15:04:05"，无毫秒无时区——跨服务按时间
+		// ISO 8601、带毫秒、UTC。此前是 "2006-01-02 15:04:05"，无毫秒无时区——跨服务按时间
 		// 排序时毫秒级先后关系丢失，而待排查的延迟正在几十到几百毫秒量级。
-		"timestamp":                   t.Format("2006-01-02T15:04:05.000Z07:00"),
+		//
+		// 必须是 UTC 而不是本地时区偏移。Node 两侧走 toISOString()，写的是 Z；这边若写
+		// +08:00，两者按字符串排序时 +08:00 那条会排到 Z 那条后面，尽管它实际更早——
+		// 恰好把本条要保住的东西毁掉。本地实测发现（2026-09-02）。
+		"timestamp":                   t.UTC().Format("2006-01-02T15:04:05.000Z"),
 		"service_name":                tlsContainer,
 		"service_instance_id":         tlsInstanceID,
 		"deployment_environment_name": tlsEnv,
-		"service_version":             common.Version,
+		"service_version":             serviceVersion(),
 		"request_id":                  requestID,
 		// 空串，不是此前的 "-"。三仓统一：一个填 "-" 一个填 "" 的话，「没有链路标识」
 		// 这件事要按两种写法各查一次。
