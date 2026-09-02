@@ -35,6 +35,29 @@ type BillingSession struct {
 	mu               sync.Mutex
 }
 
+// 令牌账本的两个写入口，做成变量而不是直接调 model 包，只为一个理由：
+// {@link BillingSession.skipsTokenLedger} 这道闸没法用真实实现测。`Refund` 跑在 gopool 的
+// goroutine 里，那里 panic 会直接带走测试进程，所以「没配 DB 就 panic」不能当断言用；而
+// 换成批量模式又落进 model 包的私有队列，service 包看不见。换成变量，测试就能记下到底调没调。
+//
+// 生产路径行为不变——它们就是 model 包那两个函数。
+var (
+	decreaseTokenQuota = model.DecreaseTokenQuota
+	increaseTokenQuota = model.IncreaseTokenQuota
+)
+
+// skipsTokenLedger 报告本次请求是否完全不碰令牌额度账本。
+//
+// 两条路都没有 token 行可动：Playground 从来就不扣，而蓝鲸网关代打（AgentBilling）是
+// tokenless 的——`PreConsumeTokenQuota` 对它直接返回，`TokenId` 为 0、`TokenKey` 为空串。
+//
+// 不判这一条的后果不是「多扣一笔」而是更隐蔽的东西：DB 侧 `WHERE id = 0` 空转看不出问题，
+// 但 Redis 侧 `cacheIncrTokenQuota("")` 会对 `GenerateHMAC("")` 这个固定值 HINCRBY——
+// 每一次网关调用都写同一个没有 TTL 的垃圾 hash，只增不减，还是个全局热键。
+func (s *BillingSession) skipsTokenLedger() bool {
+	return s.relayInfo.IsPlayground || s.relayInfo.AgentBilling
+}
+
 // Settle 根据实际消耗额度进行结算。
 // 资金来源和令牌额度分两步提交：若资金来源已提交但令牌调整失败，
 // 会标记 fundingSettled 防止 Refund 对已提交的资金来源执行退款。
@@ -58,11 +81,11 @@ func (s *BillingSession) Settle(actualQuota int) error {
 	}
 	// 2) 调整令牌额度
 	var tokenErr error
-	if !s.relayInfo.IsPlayground {
+	if !s.skipsTokenLedger() {
 		if delta > 0 {
-			tokenErr = model.DecreaseTokenQuota(s.relayInfo.TokenId, s.relayInfo.TokenKey, delta)
+			tokenErr = decreaseTokenQuota(s.relayInfo.TokenId, s.relayInfo.TokenKey, delta)
 		} else {
-			tokenErr = model.IncreaseTokenQuota(s.relayInfo.TokenId, s.relayInfo.TokenKey, -delta)
+			tokenErr = increaseTokenQuota(s.relayInfo.TokenId, s.relayInfo.TokenKey, -delta)
 		}
 		if tokenErr != nil {
 			// 资金来源已提交，令牌调整失败只能记录日志；标记 settled 防止 Refund 误退资金
@@ -97,7 +120,7 @@ func (s *BillingSession) Refund(c *gin.Context) {
 	// 复制需要的值到闭包中
 	tokenId := s.relayInfo.TokenId
 	tokenKey := s.relayInfo.TokenKey
-	isPlayground := s.relayInfo.IsPlayground
+	skipsTokenLedger := s.skipsTokenLedger()
 	tokenConsumed := s.tokenConsumed
 	extraReserved := s.extraReserved
 	subscriptionId := s.relayInfo.SubscriptionId
@@ -114,8 +137,8 @@ func (s *BillingSession) Refund(c *gin.Context) {
 			}
 		}
 		// 2) 退还令牌额度
-		if tokenConsumed > 0 && !isPlayground {
-			if err := model.IncreaseTokenQuota(tokenId, tokenKey, tokenConsumed); err != nil {
+		if tokenConsumed > 0 && !skipsTokenLedger {
+			if err := increaseTokenQuota(tokenId, tokenKey, tokenConsumed); err != nil {
 				common.SysLog("error refunding token quota: " + err.Error())
 			}
 		}
@@ -200,14 +223,19 @@ func (s *BillingSession) preConsume(c *gin.Context, quota int) *types.NewAPIErro
 		if err := PreConsumeTokenQuota(s.relayInfo, effectiveQuota); err != nil {
 			return types.NewErrorWithStatusCode(err, types.ErrorCodePreConsumeTokenQuotaFailed, http.StatusForbidden, types.ErrOptionWithSkipRetry(), types.ErrOptionWithNoRecordErrorLog())
 		}
+		// tokenless 的路（Playground / 网关代打）上面那一步什么都没扣，这里却照样记上。
+		// **这是有意的，别"顺手"改成条件赋值**：`needsRefundLocked` 拿 `tokenConsumed > 0`
+		// 当"有没有预扣要退"的判据，钱包资金来源没有别的标记。清零会让失败时钱包预扣永远
+		// 不退——一个比多写一次 Redis 严重得多的错误。真正该判 tokenless 的是动账本的那三处，
+		// 见 `skipsTokenLedger`。
 		s.tokenConsumed = effectiveQuota
 	}
 
 	// ---- 2) 预扣资金来源 ----
 	if err := s.funding.PreConsume(effectiveQuota); err != nil {
 		// 预扣费失败，回滚令牌额度
-		if s.tokenConsumed > 0 && !s.relayInfo.IsPlayground {
-			if rollbackErr := model.IncreaseTokenQuota(s.relayInfo.TokenId, s.relayInfo.TokenKey, s.tokenConsumed); rollbackErr != nil {
+		if s.tokenConsumed > 0 && !s.skipsTokenLedger() {
+			if rollbackErr := increaseTokenQuota(s.relayInfo.TokenId, s.relayInfo.TokenKey, s.tokenConsumed); rollbackErr != nil {
 				common.SysLog(fmt.Sprintf("error rolling back token quota (userId=%d, tokenId=%d, amount=%d, fundingErr=%s): %s",
 					s.relayInfo.UserId, s.relayInfo.TokenId, s.tokenConsumed, err.Error(), rollbackErr.Error()))
 			}
@@ -269,7 +297,7 @@ func (s *BillingSession) rollbackFundingReserve(delta int) {
 }
 
 func (s *BillingSession) reserveToken(delta int) error {
-	if delta <= 0 || s.relayInfo.IsPlayground {
+	if delta <= 0 || s.skipsTokenLedger() {
 		return nil
 	}
 	if err := PreConsumeTokenQuota(s.relayInfo, delta); err != nil {
