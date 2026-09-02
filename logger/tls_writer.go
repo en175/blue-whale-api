@@ -83,9 +83,11 @@ func resolveProcessIdentity() {
 		tlsHostIP = firstNonLoopbackAddress()
 		tlsEnv = os.Getenv("NODE_ENV")
 		if tlsEnv == "" {
-			// local，不是 dev：同一套部署里两个服务自报不同 env，按环境过滤就会漏。
-			// 三仓统一为 local（IKB29O D2）。
-			tlsEnv = "local"
+			// unknown，不是从前那个 local：生产容器里的 local 是一句读起来像事实的假话。
+			// 整个集群现在正处在这个状态——只有 agent 容器设了 NODE_ENV，本服务和
+			// blue-whale-backend 在同一套栈里都自报 local。写 unknown 至少看得见这个洞。
+			// 三仓同一个缺省（IKB29O D2）。
+			tlsEnv = "unknown"
 		}
 	})
 }
