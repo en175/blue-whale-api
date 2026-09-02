@@ -150,6 +150,16 @@ func tlsDispatchLoop() {
 // 三仓逐字相同，改一边要改三边——留下任何一个旧名，跨服务查询就要为那个仓写特例。
 // logRecordFieldOrder 投递给 TLS 时的字段顺序。map 的遍历顺序随机，而 TLS 控制台按顺序
 // 展示——同一条链路的日志每行字段排列不同，人眼对比时会以为是不同结构。
+// logTimeZone 日志时间戳的固定时区：+08:00，三仓共用的那一个墙上时钟。
+//
+// **FixedZone 而不是 LoadLocation("Asia/Shanghai")**：后者要读容器里的 tzdata，镜像没装或裁掉
+// 时会失败，届时只能退回 UTC——而跨服务按字符串排序只在三家偏移**完全一致**时成立，一个容器
+// 退回 UTC 就把排序静默毁掉。那正是本轮修过一次的 bug（Go 写 +08:00、Node 写 Z，+08:00 排在
+// Z 后面尽管实际更早）。固定偏移不依赖任何外部数据，和原来的 UTC 一样确定。
+//
+// 中国不实行夏令时，固定 +08:00 全年成立。
+var logTimeZone = time.FixedZone("UTC+8", 8*60*60)
+
 var logRecordFieldSet = func() map[string]bool {
 	set := make(map[string]bool, len(logRecordFieldOrder))
 	for _, key := range logRecordFieldOrder {
@@ -180,13 +190,9 @@ func logRecord(level string, t time.Time, requestID, traceID, callerFile string,
 		// 小写。此前 Go 打 INFO/WARN/ERR 而 Node 打 info/warn/error，在 TLS 上按
 		// severity_text: error 过滤，搜不到本仓的任何错误日志。
 		"severity_text": strings.ToLower(level),
-		// ISO 8601、带毫秒、UTC。此前是 "2006-01-02 15:04:05"，无毫秒无时区——跨服务按时间
-		// 排序时毫秒级先后关系丢失，而待排查的延迟正在几十到几百毫秒量级。
-		//
-		// 必须是 UTC 而不是本地时区偏移。Node 两侧走 toISOString()，写的是 Z；这边若写
-		// +08:00，两者按字符串排序时 +08:00 那条会排到 Z 那条后面，尽管它实际更早——
-		// 恰好把本条要保住的东西毁掉。本地实测发现（2026-09-02）。
-		"timestamp":                   t.UTC().Format("2006-01-02T15:04:05.000Z"),
+		// ISO 8601、带毫秒、恒为 +08:00。此前是 "2006-01-02 15:04:05"，无毫秒无时区——跨服务
+		// 按时间排序时毫秒级先后关系丢失，而待排查的延迟正在几十到几百毫秒量级。
+		"timestamp":                   t.In(logTimeZone).Format("2006-01-02T15:04:05.000-07:00"),
 		"service_name":                tlsContainer,
 		"service_instance_id":         tlsInstanceID,
 		"deployment_environment_name": tlsEnv,
@@ -224,8 +230,11 @@ func sendLogToTLS(record map[string]any) {
 			contents = append(contents, &pb.LogContent{Key: key, Value: fmt.Sprintf("%v", value)})
 		}
 	}
+	// 投递时刻从记录自己的 timestamp 反解，两者必须同一个布局串：写 +08:00 却按 Z 解析会每条
+	// 都失败并静默退回 time.Now()，于是 TLS 的时间轴与字段值差出批量投递的那点延迟，而且不报错。
+	// RFC3339Nano 认任意偏移，改偏移不必再改这里。
 	timestamp, _ := record["timestamp"].(string)
-	at, err := time.Parse("2006-01-02T15:04:05.000Z", timestamp)
+	at, err := time.Parse(time.RFC3339Nano, timestamp)
 	if err != nil {
 		at = time.Now()
 	}

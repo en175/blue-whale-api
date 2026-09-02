@@ -10,20 +10,41 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// 验收标准：timestamp 必须是 UTC 的 ISO 8601（IKB29O D2）。
+// 验收标准：timestamp 恒为 +08:00 的 ISO 8601，带毫秒（IKB29O D2）。
 //
-// 本条是本轮实测出来的：Go 侧一度写本地时区偏移（+08:00），而 Node 两侧走 toISOString()
-// 写的是 Z。两者按字符串排序时 +08:00 那条会排到 Z 那条后面，尽管它实际更早——恰好把 D2
-// 改时间格式想保住的毫秒级先后关系毁掉。
-func TestLogRecord_TimestampIsUTCWithMillis(t *testing.T) {
-	shanghai, err := time.LoadLocation("Asia/Shanghai")
-	assert.NoError(t, err)
-	at := time.Date(2026, 9, 2, 16, 10, 42, 575_000_000, shanghai)
+// 关键不在「+8」而在「固定」：跨服务按字符串排序只在三家偏移**完全一致**时成立。本轮修过一次
+// 混合偏移的 bug（这边写 +08:00、Node 两侧写 Z，+08:00 排在 Z 后面尽管实际更早）。偏移写死之后
+// 它和当初的 UTC 一样确定，而人读日志不必再心算减八小时。
+func TestLogRecord_TimestampIsPlusEightWithMillis(t *testing.T) {
+	// 源时刻用 UTC 给，确保断言检验的是换算而不是"原样打印"。
+	at := time.Date(2026, 9, 2, 8, 10, 42, 575_000_000, time.UTC)
 
 	record := logRecord("INFO", at, "req-1", "trace-12345678", "logger/logger.go", 42, "logHelper", "起来了")
 
-	assert.Equal(t, "2026-09-02T08:10:42.575Z", record["timestamp"],
-		"必须换算到 UTC 并以 Z 结尾，才能和 Node 侧按字符串一起排序")
+	assert.Equal(t, "2026-09-02T16:10:42.575+08:00", record["timestamp"])
+}
+
+// 验收标准：偏移不依赖容器时区。LoadLocation 要读 tzdata，镜像裁掉就会失败并退回 UTC，
+// 一个容器退回就把跨服务排序静默毁掉。
+func TestLogRecord_TimestampOffsetIsFixed(t *testing.T) {
+	at := time.Date(2026, 9, 2, 8, 10, 42, 575_000_000, time.UTC)
+	for _, loc := range []*time.Location{time.UTC, time.FixedZone("UTC-5", -5*3600)} {
+		record := logRecord("INFO", at.In(loc), "", "", "", 0, "", "")
+		assert.Equal(t, "2026-09-02T16:10:42.575+08:00", record["timestamp"],
+			"源时刻所在时区不应影响输出：%v", loc)
+	}
+}
+
+// 验收标准：字典序与时间先后一致，且解析回去等于源时刻——偏移不是贴上去的假标签。
+func TestLogRecord_TimestampSortsAndParses(t *testing.T) {
+	at := time.Date(2026, 9, 2, 8, 10, 42, 575_000_000, time.UTC)
+	earlier := logRecord("INFO", at, "", "", "", 0, "", "")["timestamp"].(string)
+	later := logRecord("INFO", at.Add(time.Millisecond), "", "", "", 0, "", "")["timestamp"].(string)
+	assert.Less(t, earlier, later, "字典序必须与时间先后一致")
+
+	parsed, err := time.Parse(time.RFC3339Nano, earlier)
+	assert.NoError(t, err)
+	assert.True(t, parsed.Equal(at), "解析回去应等于源时刻")
 }
 
 // 验收标准：severity_text 小写。此前 Go 打 INFO/WARN/ERR 而 Node 打 info/warn/error，
@@ -104,4 +125,17 @@ func TestLogRecordFieldSet_MatchesOrder(t *testing.T) {
 	for _, key := range logRecordFieldOrder {
 		assert.True(t, logRecordFieldSet[key], "顺序表里的 %q 不在集合里", key)
 	}
+}
+
+// 验收标准：投递时刻能从记录自己的 timestamp 反解出来。
+//
+// 写 +08:00 却按 "…Z" 的布局串解析，会每条都失败并静默退回 time.Now()——TLS 的时间轴与字段值
+// 从此差出批量投递的那点延迟，而且不报错。改偏移时最容易漏掉的就是这处。
+func TestLogRecord_TimestampRoundTripsForDelivery(t *testing.T) {
+	at := time.Date(2026, 9, 2, 8, 10, 42, 575_000_000, time.UTC)
+	record := logRecord("INFO", at, "", "", "", 0, "", "")
+
+	parsed, err := time.Parse(time.RFC3339Nano, record["timestamp"].(string))
+	assert.NoError(t, err, "sendLogToTLS 用同一个布局串反解")
+	assert.Equal(t, at.UnixMilli(), parsed.UnixMilli())
 }
