@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"net"
 	"os"
 	"regexp"
 	"strings"
@@ -56,6 +57,37 @@ func newTraceId() string {
 	return fmt.Sprintf("%d-%s", time.Now().UnixMilli(), hex.EncodeToString(buf))
 }
 
+// ipv4Pattern / ipv6Pattern 一个地址串能不能写进日志。
+//
+// 不合形状就丢掉，而不是原样写进去——有人读到 client_address 时会当它是事实，而
+// X-Forwarded-For 是客户端可控输入。三仓同一条口径。
+var (
+	ipv4Pattern = regexp.MustCompile(`^\d{1,3}(?:\.\d{1,3}){3}$`)
+	ipv6Pattern = regexp.MustCompile(`^[0-9a-fA-F:]{2,45}$`)
+)
+
+func sanitizeAddress(value string) string {
+	text := strings.TrimSpace(value)
+	if text == "" || len(text) > 45 {
+		return ""
+	}
+	// Go 在双栈监听下把 IPv4 报成 ::ffff:10.0.0.1，剥掉前缀，和另外两个仓写出同一种值。
+	text = strings.TrimPrefix(text, "::ffff:")
+	if ipv4Pattern.MatchString(text) || ipv6Pattern.MatchString(text) {
+		return text
+	}
+	return ""
+}
+
+// peerHost 从 RemoteAddr（host:port）里取出 host。IPv6 是 [::1]:1234，所以不能按冒号切。
+func peerHost(remoteAddr string) string {
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		return remoteAddr
+	}
+	return host
+}
+
 func RequestId() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		id := common.NewRequestId()
@@ -72,6 +104,22 @@ func RequestId() func(c *gin.Context) {
 		if clientTraceId != "" {
 			c.Set(common.ClientTraceIdKey, clientTraceId)
 			ctx = context.WithValue(ctx, common.ClientTraceIdKey, clientTraceId)
+		}
+
+		// 调用方地址（IKB29O）。放进 context 而不是只在访问日志那一行读 gin.Context——
+		// 工单要的是「错误场景能看到是哪个 IP 出的问题」，而出错的从来不是你预先标注好的那一行。
+		//
+		// c.ClientIP() 按 gin 配置的可信代理解析 X-Forwarded-For；peer 直接取连接对端，
+		// 两者并存：伪造的 XFF 只能添一个声称，抹不掉连接的事实。
+		clientAddress := sanitizeAddress(c.ClientIP())
+		peerAddress := sanitizeAddress(peerHost(c.Request.RemoteAddr))
+		if clientAddress != "" {
+			c.Set(common.ClientAddressKey, clientAddress)
+			ctx = context.WithValue(ctx, common.ClientAddressKey, clientAddress)
+		}
+		if peerAddress != "" {
+			c.Set(common.PeerAddressKey, peerAddress)
+			ctx = context.WithValue(ctx, common.PeerAddressKey, peerAddress)
 		}
 
 		c.Request = c.Request.WithContext(ctx)

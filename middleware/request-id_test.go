@@ -113,3 +113,23 @@ func TestNewTraceId_MatchesSharedShape(t *testing.T) {
 	assert.Regexp(t, traceIdPattern, id, "自己生成的值必须过自己的校验")
 	assert.NotEqual(t, newTraceId(), newTraceId(), "每次不同")
 }
+
+// 验收标准（IKB29O）：不是地址就丢掉，而不是原样写进日志——有人读到 client_address 时
+// 会当它是事实，而 X-Forwarded-For 是客户端可控输入。
+func TestSanitizeAddress(t *testing.T) {
+	assert.Equal(t, "10.0.1.7", sanitizeAddress("10.0.1.7"))
+	// Go 在双栈监听下把 IPv4 报成 ::ffff:10.0.1.7；剥掉前缀，三仓写出同一种值。
+	assert.Equal(t, "10.0.1.7", sanitizeAddress("::ffff:10.0.1.7"))
+	assert.Equal(t, "2001:db8::1", sanitizeAddress("2001:db8::1"))
+	assert.Equal(t, "", sanitizeAddress("not an ip; DROP TABLE"))
+	assert.Equal(t, "", sanitizeAddress(strings.Repeat("x", 200)))
+	assert.Equal(t, "", sanitizeAddress(""))
+}
+
+// IPv6 的 RemoteAddr 是 [::1]:1234，按冒号切会切错。
+func TestPeerHost(t *testing.T) {
+	assert.Equal(t, "10.0.0.1", peerHost("10.0.0.1:54321"))
+	assert.Equal(t, "::1", peerHost("[::1]:54321"))
+	// 拿不到端口时原样返回，总比丢掉强。
+	assert.Equal(t, "10.0.0.1", peerHost("10.0.0.1"))
+}

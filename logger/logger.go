@@ -97,8 +97,24 @@ func LogDebug(ctx context.Context, msg string, args ...any) {
 }
 
 func logHelper(ctx context.Context, level string, msg string) {
+	logWithFields(ctx, level, msg, nil, 4)
+}
+
+// LogWithFields 带结构化字段的一行日志（IKB29O）。
+//
+// 此前只有 msg 一个参数，于是「方法、路径、状态码、耗时」这类要被机器过滤和聚合的东西，
+// 只能拼进正文里再靠正则捞出来。字段进字段，正文进正文。
+//
+// skip 由调用方语义决定，这里固定为「调用 LogWithFields 的那一行」。
+func LogWithFields(ctx context.Context, level string, msg string, fields map[string]any) {
+	// skip=3：callerInfo -> logWithFields -> LogWithFields -> 调用点。比 logHelper 少一层，
+	// 因为它不经过 LogInfo/LogWarn 那一跳。
+	logWithFields(ctx, level, msg, fields, 3)
+}
+
+func logWithFields(ctx context.Context, level string, msg string, fields map[string]any, skip int) {
 	var id any = "SYSTEM"
-	var traceId, clientTraceId string
+	var traceId, clientTraceId, clientAddress, peerAddress string
 	if ctx != nil {
 		if requestID := ctx.Value(common.RequestIdKey); requestID != nil {
 			id = requestID
@@ -115,12 +131,24 @@ func logHelper(ctx context.Context, level string, msg string) {
 				clientTraceId = s
 			}
 		}
+		// 调用方地址，逐行带（IKB29O）。RequestId 中间件放进 context；取不到就不写这两个键，
+		// 不写空串——后台任务本来就没有地址，写成空串会让人以为是采集失败。
+		if addr := ctx.Value(common.ClientAddressKey); addr != nil {
+			if s, ok := addr.(string); ok {
+				clientAddress = s
+			}
+		}
+		if addr := ctx.Value(common.PeerAddressKey); addr != nil {
+			if s, ok := addr.(string); ok {
+				peerAddress = s
+			}
+		}
 	}
 	now := time.Now()
 	// 调用位置现在两条通道都要（stdout 也是结构化的了），不再只在 TLS 启用时计算。
 	// 代价是每条日志约 1µs，另外两个仓一直在付同样的价钱。
-	// skip=3：callerInfo -> logHelper -> LogInfo/LogWarn/LogError/LogDebug -> 业务调用点
-	callerFile, callerLine, funcName := callerInfo(3)
+	// skip 从调用方传进来：callerInfo -> logWithFields -> logHelper/LogWithFields -> 调用点。
+	callerFile, callerLine, funcName := callerInfo(skip)
 	requestID := fmt.Sprintf("%v", id)
 
 	// stdout 输出单行 JSON（IKB29O D1），字段与投递给 TLS 的完全一致。
@@ -129,6 +157,23 @@ func logHelper(ctx context.Context, level string, msg string) {
 	record := logRecord(level, now, requestID, traceId, callerFile, callerLine, funcName, msg)
 	if clientTraceId != "" {
 		record[common.ClientTraceIdKey] = clientTraceId
+	}
+	if clientAddress != "" {
+		record[common.ClientAddressKey] = clientAddress
+	}
+	if peerAddress != "" {
+		record[common.PeerAddressKey] = peerAddress
+	}
+	for key, value := range fields {
+		// 附加字段不许顶掉基础字段——一个调用方传进来的 body 或 trace_id 会让整条链断在这里。
+		if logRecordFieldSet[key] {
+			continue
+		}
+		if text, ok := value.(string); ok {
+			record[key] = redactLogField(key, text)
+		} else {
+			record[key] = value
+		}
 	}
 	line, err := json.Marshal(record)
 	if err != nil {

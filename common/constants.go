@@ -182,6 +182,13 @@ const (
 	TraceparentKey = "traceparent"
 	// ClientTraceIdKey 入站 trace id 不合规时，原值记在这里，不丢线索。
 	ClientTraceIdKey = "client_trace_id"
+	// ClientAddressKey 调用方地址（OTel client.address），取 X-Forwarded-For 首项或直连对端。
+	// 工单 IKB29O 要求「错误场景能看到是哪个 IP 出的问题」，而地址只在请求这一层存在——
+	// service_name / service_instance_id / host_ip 都是进程级字段，回答不了「谁发起的」。
+	ClientAddressKey = "client_address"
+	// PeerAddressKey socket 对端（OTel network.peer.address），客户端伪造不了。
+	// 与 ClientAddressKey 并存：伪造的 X-Forwarded-For 只能添一个声称，抹不掉连接的事实。
+	PeerAddressKey = "network_peer_address"
 )
 
 const (

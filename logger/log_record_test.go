@@ -60,7 +60,7 @@ func TestLogRecord_SeverityIsLowerCase(t *testing.T) {
 func TestLogRecord_FieldSetMatchesDecision(t *testing.T) {
 	record := logRecord("INFO", time.Now(), "req", "trace", "f.go", 1, "fn", "msg")
 	want := []string{
-		"severity_text", "timestamp", "service_name", "service_instance_id",
+		"severity_text", "timestamp", "service_name", "service_instance_id", "host_ip",
 		"deployment_environment_name", "service_version", "request_id", "trace_id",
 		"code_file_path", "code_line_number", "code_function_name", "body",
 	}
@@ -138,4 +138,27 @@ func TestLogRecord_TimestampRoundTripsForDelivery(t *testing.T) {
 	parsed, err := time.Parse(time.RFC3339Nano, record["timestamp"].(string))
 	assert.NoError(t, err, "sendLogToTLS 用同一个布局串反解")
 	assert.Equal(t, at.UnixMilli(), parsed.UnixMilli())
+}
+
+// 验收标准（IKB29O）：进程身份与 TLS 是否启用无关。
+//
+// 此前 service_name / service_instance_id / deployment_environment_name 是在 InitTLSWriter 里
+// 赋值的，而那个函数在缺 TLS_* 环境变量时提前 return——于是没配 TLS 的部署（开发机、任何一台
+// 还没发凭证的机器）写出来的 stdout JSON 里这三个字段全是空串。stdout 是结构化日志的主通道，
+// 它不该依赖上报通道有没有配起来。
+func TestLogRecord_IdentityResolvedWithoutTLS(t *testing.T) {
+	record := logRecord("INFO", time.Now(), "req", "trace", "f.go", 1, "fn", "msg")
+	assert.NotEmpty(t, record["service_name"])
+	assert.NotEmpty(t, record["service_instance_id"])
+	assert.NotEmpty(t, record["deployment_environment_name"])
+	// host_ip 允许为空：没有外部网卡的容器是合法状态。字段本身必须在。
+	assert.Contains(t, record, "host_ip")
+}
+
+// 验收标准（D9）：脱敏挂在 logRecord 上，因为 stdout 与 TLS 两条通道都从这一处取字段——
+// 挂在任一条上都只覆盖一半。
+func TestLogRecord_BodyIsRedacted(t *testing.T) {
+	record := logRecord("INFO", time.Now(), "", "", "", 0, "",
+		"下载失败 https://bucket.example.com/x.mp4?sig=secret")
+	assert.Equal(t, "下载失败 https://bucket.example.com/x.mp4?…", record["body"])
 }

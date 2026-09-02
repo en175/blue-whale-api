@@ -2,10 +2,12 @@ package logger
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -41,7 +43,85 @@ var (
 	tlsEnv        string
 	tlsContainer  string
 	tlsInstanceID string
+	tlsHostIP     string
+
+	// identityOnce 进程身份只解析一次，且**与 TLS 是否启用无关**。
+	//
+	// 此前这四个值是在 InitTLSWriter 里赋的，而那个函数在缺 TLS_* 环境变量时提前 return——
+	// 于是没配 TLS 的部署（开发机、任何一台还没发凭证的机器）写出来的 stdout JSON 里
+	// service_name / deployment_environment_name / service_instance_id 全是空串。
+	// stdout 是结构化日志的主通道，它不该依赖上报通道有没有配起来。
+	identityOnce sync.Once
 )
+
+// resolveProcessIdentity 解析服务名、实例、环境、本机地址。幂等，随便谁先调用。
+func resolveProcessIdentity() {
+	identityOnce.Do(func() {
+		// service_name 标识服务：优先 CONTAINER_NAME 环境变量（如 blue-whale-api），
+		// 未配置时用 NodeName（Docker 下=容器名，本地=hostname）兜底
+		tlsContainer = os.Getenv("CONTAINER_NAME")
+		if tlsContainer == "" {
+			tlsContainer = common.NodeName
+		}
+		// common.NodeName 由 common 包的启动初始化赋值，而日志可能在那之前就被调用——
+		// 那时它是空串，于是 service_name 空着。自己再兜一次主机名：这个字段的值不该
+		// 取决于另一个包的初始化顺序。
+		if tlsContainer == "" {
+			tlsContainer, _ = os.Hostname()
+		}
+		// service_instance_id 回答「哪个副本报的错」。此前这个概念只存在于 TLS 保留字段
+		// __source__ 里，不是一个可检索的普通字段；IKB29O D2 把它提为正式字段。
+		tlsInstanceID = os.Getenv("SERVICE_INSTANCE_ID")
+		if tlsInstanceID == "" {
+			node := common.NodeName
+			if node == "" {
+				node, _ = os.Hostname()
+			}
+			tlsInstanceID = fmt.Sprintf("%s-%d", node, os.Getpid())
+		}
+		// host_ip 回答「哪个 IP 报的错」。service_instance_id 在 k8s 里的主机名那一半是 Pod 名，
+		// 有用，但跟抓包、防火墙日志对不起来。HOST_IP 优先（downward API 的 status.podIP，
+		// 那是权威的），留空则扫第一块非环回网卡。
+		tlsHostIP = os.Getenv("HOST_IP")
+		if tlsHostIP == "" {
+			tlsHostIP = firstNonLoopbackAddress()
+		}
+		tlsEnv = os.Getenv("ENV")
+		if tlsEnv == "" {
+			tlsEnv = os.Getenv("NODE_ENV")
+		}
+		if tlsEnv == "" {
+			// local，不是 dev：同一套部署里两个服务自报不同 env，按环境过滤就会漏。
+			// 三仓统一为 local（IKB29O D2）。
+			tlsEnv = "local"
+		}
+	})
+}
+
+// firstNonLoopbackAddress 本机第一块非环回网卡的地址，IPv4 优先。
+//
+// 取不到就是空串，那是合法状态（没有外部网卡的容器），不值得为它报一条错——而且这里报错
+// 会在日志初始化阶段递归回日志。
+func firstNonLoopbackAddress() string {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return ""
+	}
+	var fallback string
+	for _, addr := range addrs {
+		ipNet, ok := addr.(*net.IPNet)
+		if !ok || ipNet.IP.IsLoopback() || ipNet.IP.IsUnspecified() {
+			continue
+		}
+		if v4 := ipNet.IP.To4(); v4 != nil {
+			return v4.String()
+		}
+		if fallback == "" {
+			fallback = ipNet.IP.String()
+		}
+	}
+	return fallback
+}
 
 // InitTLSWriter 初始化 TLS 日志 Producer。
 // 需同时配置 TLS_ENDPOINT / TLS_AK / TLS_SK / TLS_TOPIC_ID 四个环境变量才启用，
@@ -82,29 +162,9 @@ func InitTLSWriter() {
 
 	tlsLogChan = make(chan *pb.Log, tlsLogChanSize)
 	tlsTopicID = topicID
-	// service_name 标识服务：优先 CONTAINER_NAME 环境变量（如 blue-whale-api），
-	// 未配置时用 NodeName（Docker 下=容器名，本地=hostname）兜底
-	tlsContainer = os.Getenv("CONTAINER_NAME")
-	if tlsContainer == "" {
-		tlsContainer = common.NodeName
-	}
-	// service_instance_id 回答「哪个副本报的错」。此前这个概念只存在于 TLS 保留字段
-	// __source__ 里，不是一个可检索的普通字段；IKB29O D2 把它提为正式字段。
-	tlsInstanceID = os.Getenv("SERVICE_INSTANCE_ID")
-	if tlsInstanceID == "" {
-		tlsInstanceID = fmt.Sprintf("%s-%d", common.NodeName, os.Getpid())
-	}
+	resolveProcessIdentity()
 	// __source__（TLS 保留字段）仍用实例标识，与 service_instance_id 同值。
 	tlsSource = common.NodeName
-	tlsEnv = os.Getenv("ENV")
-	if tlsEnv == "" {
-		tlsEnv = os.Getenv("NODE_ENV")
-	}
-	if tlsEnv == "" {
-		// local，不是 dev：同一套部署里两个服务自报不同 env，按环境过滤就会漏。
-		// 三仓统一为 local（IKB29O D2）。
-		tlsEnv = "local"
-	}
 	tlsProducer = producer.NewProducer(cfg)
 	tlsProducer.Start()
 	gopool.Go(tlsDispatchLoop)
@@ -169,7 +229,7 @@ var logRecordFieldSet = func() map[string]bool {
 }()
 
 var logRecordFieldOrder = []string{
-	"severity_text", "timestamp", "service_name", "service_instance_id",
+	"severity_text", "timestamp", "service_name", "service_instance_id", "host_ip",
 	"deployment_environment_name", "service_version", "request_id", "trace_id",
 	"code_file_path", "code_line_number", "code_function_name", "body",
 }
@@ -186,6 +246,8 @@ func serviceVersion() string {
 }
 
 func logRecord(level string, t time.Time, requestID, traceID, callerFile string, callerLine int, funcName, msg string) map[string]any {
+	// 身份与 TLS 是否启用无关：没配 TLS 的部署照样要写出完整的 stdout JSON。
+	resolveProcessIdentity()
 	return map[string]any{
 		// 小写。此前 Go 打 INFO/WARN/ERR 而 Node 打 info/warn/error，在 TLS 上按
 		// severity_text: error 过滤，搜不到本仓的任何错误日志。
@@ -195,6 +257,7 @@ func logRecord(level string, t time.Time, requestID, traceID, callerFile string,
 		"timestamp":                   t.In(logTimeZone).Format("2006-01-02T15:04:05.000-07:00"),
 		"service_name":                tlsContainer,
 		"service_instance_id":         tlsInstanceID,
+		"host_ip":                     tlsHostIP,
 		"deployment_environment_name": tlsEnv,
 		"service_version":             serviceVersion(),
 		"request_id":                  requestID,
@@ -204,7 +267,8 @@ func logRecord(level string, t time.Time, requestID, traceID, callerFile string,
 		"code_file_path":     callerFile,
 		"code_line_number":   callerLine,
 		"code_function_name": funcName,
-		"body":               msg,
+		// 截断与脱敏（D9）在这里，因为 stdout 与 TLS 两条通道都从这一处取字段。
+		"body": redactLogBody(msg),
 	}
 }
 
