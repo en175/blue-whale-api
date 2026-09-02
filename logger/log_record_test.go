@@ -155,6 +155,19 @@ func TestLogRecord_IdentityResolvedWithoutTLS(t *testing.T) {
 	assert.Contains(t, record, "host_ip")
 }
 
+// 验收标准（IKB29O 二轮）：服务名是常量，没有环境变量能改它。
+//
+// CONTAINER_NAME 没了。它带三层兜底，每一层都写得出一个看起来很像真的值，而配错时没有一层会红。
+func TestLogRecord_ServiceNameIsAConstant(t *testing.T) {
+	t.Setenv("CONTAINER_NAME", "whatever")
+	t.Setenv("SERVICE_INSTANCE_ID", "pinned")
+	t.Setenv("HOST_IP", "9.9.9.9")
+	record := logRecord("INFO", time.Now(), "req", "trace", "f.go", 1, "fn", "msg")
+	assert.Equal(t, "blue-whale-api", record["service_name"])
+	assert.NotEqual(t, "pinned", record["service_instance_id"])
+	assert.NotEqual(t, "9.9.9.9", record["host_ip"])
+}
+
 // 验收标准（D9）：脱敏挂在 logRecord 上，因为 stdout 与 TLS 两条通道都从这一处取字段——
 // 挂在任一条上都只覆盖一半。
 func TestLogRecord_BodyIsRedacted(t *testing.T) {
