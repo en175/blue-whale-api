@@ -182,6 +182,7 @@ export const TASK_ACTIONS = {
   // Video generation (camelCase)
   GENERATE: 'generate', // 图生视频
   TEXT_GENERATE: 'textGenerate', // 文生视频
+  VIDEO_GENERATE: 'videoGenerate', // 视频生视频
   FIRST_TAIL_GENERATE: 'firstTailGenerate', // 首尾生视频
   REFERENCE_GENERATE: 'referenceGenerate', // 参照生视频
   REMIX_GENERATE: 'remixGenerate', // 视频 Remix
@@ -288,6 +289,7 @@ export const TASK_ACTION_MAPPINGS: Record<string, StatusMapping> = {
   [TASK_ACTIONS.LYRICS]: { label: 'Generate Lyrics', variant: 'pink' },
   [TASK_ACTIONS.GENERATE]: { label: 'Image to Video', variant: 'blue' },
   [TASK_ACTIONS.TEXT_GENERATE]: { label: 'Text to Video', variant: 'blue' },
+  [TASK_ACTIONS.VIDEO_GENERATE]: { label: 'Video to Video', variant: 'blue' },
   [TASK_ACTIONS.FIRST_TAIL_GENERATE]: {
     label: 'First/Last Frame to Video',
     variant: 'blue',
