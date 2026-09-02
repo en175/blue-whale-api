@@ -112,7 +112,7 @@ func InitTLSWriter() {
 	// skip=3：业务调用点 -> common.SysLog -> hook 闭包 -> callerInfo
 	common.TLSLogHook = func(level string, t time.Time, msg string) {
 		callerFile, callerLine, funcName := callerInfo(3)
-		sendLogToTLS(level, t, "SYSTEM", "", callerFile, callerLine, funcName, msg)
+		sendLogToTLS(logRecord(level, t, "SYSTEM", "", callerFile, callerLine, funcName, msg))
 	}
 	common.SysLog("TLS log writer enabled, endpoint: " + endpoint + ", topic: " + topicID)
 }
@@ -150,6 +150,14 @@ func tlsDispatchLoop() {
 // 三仓逐字相同，改一边要改三边——留下任何一个旧名，跨服务查询就要为那个仓写特例。
 // logRecordFieldOrder 投递给 TLS 时的字段顺序。map 的遍历顺序随机，而 TLS 控制台按顺序
 // 展示——同一条链路的日志每行字段排列不同，人眼对比时会以为是不同结构。
+var logRecordFieldSet = func() map[string]bool {
+	set := make(map[string]bool, len(logRecordFieldOrder))
+	for _, key := range logRecordFieldOrder {
+		set[key] = true
+	}
+	return set
+}()
+
 var logRecordFieldOrder = []string{
 	"severity_text", "timestamp", "service_name", "service_instance_id",
 	"deployment_environment_name", "service_version", "request_id", "trace_id",
@@ -194,27 +202,35 @@ func logRecord(level string, t time.Time, requestID, traceID, callerFile string,
 	}
 }
 
-// sendLogToTLS 组装结构化键值对投递到 TLS（平铺下划线命名，跨系统统一）。
+// sendLogToTLS 把一条已经组装好的记录投递到 TLS。
 //
-// 字段名对齐 OpenTelemetry 语义约定，点号平铺为下划线（IKB29O D2，supersede 本仓
-// ADR-0002 D4 的字段表）：severity_text, timestamp, service_name, service_instance_id,
-// deployment_environment_name, service_version, request_id, trace_id, code_file_path,
-// code_line_number, code_function_name, body。
+// 收 record 而不是自己再组装一遍：两条通道各组各的，正是「stdout 有这个字段、TLS 没有」
+// 这类差异的来源，而这种差异只会在最需要它的那一刻被发现。client_trace_id 就是现成的例子——
+// 它是条件字段，只在入站 trace id 被拒时出现。
 //
-// 三仓逐字相同，改一边要改三边——留下任何一个旧名，跨服务查询就要为那个仓写特例。
 // 通道满时直接丢弃，绝不阻塞调用方。
-func sendLogToTLS(level string, t time.Time, requestID, traceID, callerFile string, callerLine int, funcName, msg string) {
+func sendLogToTLS(record map[string]any) {
 	logChan := tlsLogChan
 	if logChan == nil {
 		return
 	}
-	record := logRecord(level, t, requestID, traceID, callerFile, callerLine, funcName, msg)
 	contents := make([]*pb.LogContent, 0, len(record))
 	for _, key := range logRecordFieldOrder {
 		contents = append(contents, &pb.LogContent{Key: key, Value: fmt.Sprintf("%v", record[key])})
 	}
+	// 顺序表之外的条件字段（目前只有 client_trace_id）附在后面，不因为不在表里就被丢掉。
+	for key, value := range record {
+		if !logRecordFieldSet[key] {
+			contents = append(contents, &pb.LogContent{Key: key, Value: fmt.Sprintf("%v", value)})
+		}
+	}
+	timestamp, _ := record["timestamp"].(string)
+	at, err := time.Parse("2006-01-02T15:04:05.000Z", timestamp)
+	if err != nil {
+		at = time.Now()
+	}
 	logItem := &pb.Log{
-		Time:     t.UnixMilli(),
+		Time:     at.UnixMilli(),
 		Contents: contents,
 	}
 	select {

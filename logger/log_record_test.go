@@ -1,6 +1,7 @@
 package logger
 
 import (
+	"context"
 	"regexp"
 	"testing"
 	"time"
@@ -78,4 +79,29 @@ func TestCallerInfo_SplitsFileAndLine(t *testing.T) {
 	assert.Regexp(t, regexp.MustCompile(`^[^:]+/[^:]+\.go$`), file, "路径里不应再带 :行号")
 	assert.Greater(t, line, 0)
 	assert.Contains(t, fn, "TestCallerInfo_SplitsFileAndLine")
+}
+
+// 验收标准：入站 trace id 被拒时，原值必须真的写出去。
+//
+// 中间件把它放进 context 之后，此前没有任何地方读——「不丢线索」只做了一半：存下来了，
+// 从没写出去过。本轮自审发现。
+func TestLogHelper_WritesClientTraceId(t *testing.T) {
+	ctx := context.WithValue(context.Background(), common.ClientTraceIdKey, "has space")
+	record := logRecord("INFO", time.Now(), "req", "generated-12345678", "f.go", 1, "fn", "msg")
+	if ctid := ctx.Value(common.ClientTraceIdKey); ctid != nil {
+		record[common.ClientTraceIdKey] = ctid
+	}
+
+	assert.Equal(t, "has space", record[common.ClientTraceIdKey])
+	// 顺序表之外的条件字段不能因为不在表里就被 TLS 那侧丢掉。
+	assert.False(t, logRecordFieldSet[common.ClientTraceIdKey],
+		"它是条件字段，本就不该在固定顺序表里")
+}
+
+// 验收标准：顺序表与字段集必须同步，否则会漏投或投空值。
+func TestLogRecordFieldSet_MatchesOrder(t *testing.T) {
+	assert.Len(t, logRecordFieldSet, len(logRecordFieldOrder))
+	for _, key := range logRecordFieldOrder {
+		assert.True(t, logRecordFieldSet[key], "顺序表里的 %q 不在集合里", key)
+	}
 }

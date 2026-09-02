@@ -98,7 +98,7 @@ func LogDebug(ctx context.Context, msg string, args ...any) {
 
 func logHelper(ctx context.Context, level string, msg string) {
 	var id any = "SYSTEM"
-	var traceId string
+	var traceId, clientTraceId string
 	if ctx != nil {
 		if requestID := ctx.Value(common.RequestIdKey); requestID != nil {
 			id = requestID
@@ -106,6 +106,13 @@ func logHelper(ctx context.Context, level string, msg string) {
 		if tid := ctx.Value(common.TraceIdKey); tid != nil {
 			if s, ok := tid.(string); ok {
 				traceId = s
+			}
+		}
+		// 入站 trace id 被拒时的原值。中间件把它放进 context，但此前没有任何地方读——
+		// 那等于「不丢线索」只做了一半：存下来了，从没写出去过。
+		if ctid := ctx.Value(common.ClientTraceIdKey); ctid != nil {
+			if s, ok := ctid.(string); ok {
+				clientTraceId = s
 			}
 		}
 	}
@@ -119,7 +126,11 @@ func logHelper(ctx context.Context, level string, msg string) {
 	// stdout 输出单行 JSON（IKB29O D1），字段与投递给 TLS 的完全一致。
 	// 此前是竖线分隔文本：值里含竖线或空格就破坏切分，而且机器解析不了。
 	// 代价是 docker logs 不再适合肉眼直接扫，用 jq。
-	line, err := json.Marshal(logRecord(level, now, requestID, traceId, callerFile, callerLine, funcName, msg))
+	record := logRecord(level, now, requestID, traceId, callerFile, callerLine, funcName, msg)
+	if clientTraceId != "" {
+		record[common.ClientTraceIdKey] = clientTraceId
+	}
+	line, err := json.Marshal(record)
 	if err != nil {
 		// 序列化失败也必须留下这一行——丢掉它才是真的损失。
 		line = []byte(fmt.Sprintf("{\"severity_text\":%q,\"body\":%q}", strings.ToLower(level), msg))
@@ -131,7 +142,7 @@ func logHelper(ctx context.Context, level string, msg string) {
 	}
 	_, _ = fmt.Fprintf(writer, "%s\n", line)
 	common.LogWriterMu.RUnlock()
-	sendLogToTLS(level, now, requestID, traceId, callerFile, callerLine, funcName, msg)
+	sendLogToTLS(record)
 	logCount++ // we don't need accurate count, so no lock here
 	if logCount > maxLogCount && !setupLogWorking {
 		logCount = 0
