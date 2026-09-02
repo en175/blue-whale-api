@@ -177,6 +177,11 @@ const (
 	// TraceIdKey 跨系统链路标识，与 RequestIdKey 并存、职责分离：
 	// request_id 标识单次网关请求，trace_id 贯穿多系统全链路（透传优先，缺省生成）
 	TraceIdKey = "X-Trace-Id"
+	// TraceparentKey W3C Trace Context。没有 X-Trace-Id 时取其 trace-id 段（IKB29O D4）——
+	// 廉价保险，不代表引入 OpenTelemetry SDK。
+	TraceparentKey = "traceparent"
+	// ClientTraceIdKey 入站 trace id 不合规时，原值记在这里，不丢线索。
+	ClientTraceIdKey = "client_trace_id"
 )
 
 const (

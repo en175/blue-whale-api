@@ -34,12 +34,13 @@ const (
 )
 
 var (
-	tlsProducer  producer.Producer
-	tlsTopicID   string
-	tlsSource    string
-	tlsLogChan   chan *pb.Log
-	tlsEnv       string
-	tlsContainer string
+	tlsProducer   producer.Producer
+	tlsTopicID    string
+	tlsSource     string
+	tlsLogChan    chan *pb.Log
+	tlsEnv        string
+	tlsContainer  string
+	tlsInstanceID string
 )
 
 // InitTLSWriter 初始化 TLS 日志 Producer。
@@ -81,21 +82,28 @@ func InitTLSWriter() {
 
 	tlsLogChan = make(chan *pb.Log, tlsLogChanSize)
 	tlsTopicID = topicID
-	// container 标识服务/容器：优先 CONTAINER_NAME 环境变量（如 blue-whale-api），
+	// service_name 标识服务：优先 CONTAINER_NAME 环境变量（如 blue-whale-api），
 	// 未配置时用 NodeName（Docker 下=容器名，本地=hostname）兜底
 	tlsContainer = os.Getenv("CONTAINER_NAME")
 	if tlsContainer == "" {
 		tlsContainer = common.NodeName
 	}
-	// __source__（TLS 保留字段）用实例标识（Docker 下为容器名/ID，本地为主机名），
-	// 与 container 字段（服务名）语义区分，便于分辨同一服务的多实例
+	// service_instance_id 回答「哪个副本报的错」。此前这个概念只存在于 TLS 保留字段
+	// __source__ 里，不是一个可检索的普通字段；IKB29O D2 把它提为正式字段。
+	tlsInstanceID = os.Getenv("SERVICE_INSTANCE_ID")
+	if tlsInstanceID == "" {
+		tlsInstanceID = fmt.Sprintf("%s-%d", common.NodeName, os.Getpid())
+	}
+	// __source__（TLS 保留字段）仍用实例标识，与 service_instance_id 同值。
 	tlsSource = common.NodeName
 	tlsEnv = os.Getenv("ENV")
 	if tlsEnv == "" {
 		tlsEnv = os.Getenv("NODE_ENV")
 	}
 	if tlsEnv == "" {
-		tlsEnv = "dev"
+		// local，不是 dev：同一套部署里两个服务自报不同 env，按环境过滤就会漏。
+		// 三仓统一为 local（IKB29O D2）。
+		tlsEnv = "local"
 	}
 	tlsProducer = producer.NewProducer(cfg)
 	tlsProducer.Start()
@@ -103,8 +111,8 @@ func InitTLSWriter() {
 	// 注册系统日志钩子：common.SysLog/SysError 也进 TLS（回调注入，避免循环依赖）。
 	// skip=3：业务调用点 -> common.SysLog -> hook 闭包 -> callerInfo
 	common.TLSLogHook = func(level string, t time.Time, msg string) {
-		caller, funcName := callerInfo(3)
-		sendLogToTLS(level, t, "SYSTEM", "", caller, funcName, msg)
+		callerFile, callerLine, funcName := callerInfo(3)
+		sendLogToTLS(level, t, "SYSTEM", "", callerFile, callerLine, funcName, msg)
 	}
 	common.SysLog("TLS log writer enabled, endpoint: " + endpoint + ", topic: " + topicID)
 }
@@ -133,28 +141,66 @@ func tlsDispatchLoop() {
 	}
 }
 
+// logRecord 一条日志的共用字段集，stdout 与 TLS 两条通道都从这里取（IKB29O D2）。
+//
+// 一处定义而不是两份：两条通道各写各的，是「stdout 有这个字段、TLS 没有」这类差异的来源，
+// 而这种差异只会在排障时、最需要它的那一刻被发现。
+//
+// 字段名对齐 OpenTelemetry 语义约定，点号平铺为下划线（supersede 本仓 ADR-0002 D4 的字段表）。
+// 三仓逐字相同，改一边要改三边——留下任何一个旧名，跨服务查询就要为那个仓写特例。
+// logRecordFieldOrder 投递给 TLS 时的字段顺序。map 的遍历顺序随机，而 TLS 控制台按顺序
+// 展示——同一条链路的日志每行字段排列不同，人眼对比时会以为是不同结构。
+var logRecordFieldOrder = []string{
+	"severity_text", "timestamp", "service_name", "service_instance_id",
+	"deployment_environment_name", "service_version", "request_id", "trace_id",
+	"code_file_path", "code_line_number", "code_function_name", "body",
+}
+
+func logRecord(level string, t time.Time, requestID, traceID, callerFile string, callerLine int, funcName, msg string) map[string]any {
+	return map[string]any{
+		// 小写。此前 Go 打 INFO/WARN/ERR 而 Node 打 info/warn/error，在 TLS 上按
+		// severity_text: error 过滤，搜不到本仓的任何错误日志。
+		"severity_text": strings.ToLower(level),
+		// ISO 8601 带毫秒带时区。此前是 "2006-01-02 15:04:05"，无毫秒无时区——跨服务按时间
+		// 排序时毫秒级先后关系丢失，而待排查的延迟正在几十到几百毫秒量级。
+		"timestamp":                   t.Format("2006-01-02T15:04:05.000Z07:00"),
+		"service_name":                tlsContainer,
+		"service_instance_id":         tlsInstanceID,
+		"deployment_environment_name": tlsEnv,
+		"service_version":             common.Version,
+		"request_id":                  requestID,
+		// 空串，不是此前的 "-"。三仓统一：一个填 "-" 一个填 "" 的话，「没有链路标识」
+		// 这件事要按两种写法各查一次。
+		"trace_id":           traceID,
+		"code_file_path":     callerFile,
+		"code_line_number":   callerLine,
+		"code_function_name": funcName,
+		"body":               msg,
+	}
+}
+
 // sendLogToTLS 组装结构化键值对投递到 TLS（平铺下划线命名，跨系统统一）。
-// 字段集：level, time, container, env, version, request_id, trace_id, caller, func, message。
+//
+// 字段名对齐 OpenTelemetry 语义约定，点号平铺为下划线（IKB29O D2，supersede 本仓
+// ADR-0002 D4 的字段表）：severity_text, timestamp, service_name, service_instance_id,
+// deployment_environment_name, service_version, request_id, trace_id, code_file_path,
+// code_line_number, code_function_name, body。
+//
+// 三仓逐字相同，改一边要改三边——留下任何一个旧名，跨服务查询就要为那个仓写特例。
 // 通道满时直接丢弃，绝不阻塞调用方。
-func sendLogToTLS(level string, t time.Time, requestID, traceID, caller, funcName, msg string) {
+func sendLogToTLS(level string, t time.Time, requestID, traceID, callerFile string, callerLine int, funcName, msg string) {
 	logChan := tlsLogChan
 	if logChan == nil {
 		return
 	}
+	record := logRecord(level, t, requestID, traceID, callerFile, callerLine, funcName, msg)
+	contents := make([]*pb.LogContent, 0, len(record))
+	for _, key := range logRecordFieldOrder {
+		contents = append(contents, &pb.LogContent{Key: key, Value: fmt.Sprintf("%v", record[key])})
+	}
 	logItem := &pb.Log{
-		Time: t.UnixMilli(),
-		Contents: []*pb.LogContent{
-			{Key: "level", Value: level},
-			{Key: "time", Value: t.Format("2006-01-02 15:04:05")},
-			{Key: "container", Value: tlsContainer},
-			{Key: "env", Value: tlsEnv},
-			{Key: "version", Value: common.Version},
-			{Key: "request_id", Value: requestID},
-			{Key: "trace_id", Value: traceID},
-			{Key: "caller", Value: caller},
-			{Key: "func", Value: funcName},
-			{Key: "message", Value: msg},
-		},
+		Time:     t.UnixMilli(),
+		Contents: contents,
 	}
 	select {
 	case logChan <- logItem:
@@ -163,16 +209,19 @@ func sendLogToTLS(level string, t time.Time, requestID, traceID, caller, funcNam
 	}
 }
 
-// callerInfo 返回调用位置的 caller（目录/文件:行号，如 "logger/logger.go:110"）
+// callerInfo 返回调用位置的文件路径（目录/文件，如 "logger/logger.go"）、行号，
 // 与函数名（模块内相对名，如 "logger.LogInfo"）。仅在 TLS 启用时调用，开销约 1µs。
-func callerInfo(skip int) (caller, funcName string) {
+//
+// 文件与行号分开返回（IKB29O D2）：此前拼成 "logger/logger.go:110" 一个字符串，
+// 那样既不能按行号排序，也不能只按文件过滤。
+func callerInfo(skip int) (callerFile string, callerLine int, funcName string) {
 	pc, file, line, ok := runtime.Caller(skip)
 	if !ok {
-		return "", ""
+		return "", 0, ""
 	}
 	if f := runtime.FuncForPC(pc); f != nil {
 		funcName = strings.TrimPrefix(f.Name(), modulePrefix)
 	}
-	caller = fmt.Sprintf("%s/%s:%d", filepath.Base(filepath.Dir(file)), filepath.Base(file), line)
-	return caller, funcName
+	callerFile = fmt.Sprintf("%s/%s", filepath.Base(filepath.Dir(file)), filepath.Base(file))
+	return callerFile, line, funcName
 }

@@ -2,7 +2,13 @@
 
 本文档记录 Blue-Whale 多系统（blue-whale-api / blue-whale-pay / blue-whale-ai）的跨系统链路追踪（`X-Trace-Id`）设计，以及将日志接入火山引擎日志服务（Torch Log Service，TLS）的方案。
 
-**Status:** proposed
+**Status:** proposed（D4 字段表已于 2026-08-26 被 supersede，见下）
+
+> **D4 字段表已失效。**跨三仓统一日志字段的决策见
+> `blue-whale-agent/docs/decisions/2026-08-26-cross-repo-log-schema-and-error-codes.md`。
+> 该决策把字段名对齐 OpenTelemetry 语义约定（`container` → `service_name` + `service_instance_id`、
+> `level` → `severity_text`、`message` → `body` 等），并统一了级别值域、时间格式与缺省值。
+> **新代码不要按本文 D4 的字段表写。**D1/D2/D3/D5 仍然有效。
 
 ## 背景
 
@@ -41,7 +47,10 @@ Blue-Whale 已由单服务演化为多系统：
 - 理由：日志量可控，改动集中于 `logger` 包；不引入额外部署组件；Producer 异步 + 失败静默降级，对请求链路零影响。
 - 备选方案 B（filebeat/LogCollector 采集 stdout）与 C（docker logging driver）因引入组件 / 支持弱而放弃。
 
-### D4：TLS 日志结构化（键值对 + 索引）
+### D4：TLS 日志结构化（键值对 + 索引）—— 字段表已被 supersede
+
+> 本节字段表保留作历史记录。现行字段表见
+> `blue-whale-agent/docs/decisions/2026-08-26-cross-repo-log-schema-and-error-codes.md` D2。
 
 - 所有经 `logger` 包的日志（业务日志 + 经 `TLSLogHook` 注入的系统日志 `SysLog`/`SysError`）发送时组装统一键值对（平铺下划线命名，跨系统 pay/ai 对齐）：
   `{level, time, container, env, version, request_id, trace_id, caller, func, message}`

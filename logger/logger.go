@@ -2,11 +2,13 @@ package logger
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -108,24 +110,28 @@ func logHelper(ctx context.Context, level string, msg string) {
 		}
 	}
 	now := time.Now()
-	traceField := traceId
-	if traceField == "" {
-		traceField = "-"
-	}
-	// 仅 TLS 启用时计算调用位置（runtime.Caller 有微小开销）。
+	// 调用位置现在两条通道都要（stdout 也是结构化的了），不再只在 TLS 启用时计算。
+	// 代价是每条日志约 1µs，另外两个仓一直在付同样的价钱。
 	// skip=3：callerInfo -> logHelper -> LogInfo/LogWarn/LogError/LogDebug -> 业务调用点
-	var caller, funcName string
-	if tlsLogChan != nil {
-		caller, funcName = callerInfo(3)
+	callerFile, callerLine, funcName := callerInfo(3)
+	requestID := fmt.Sprintf("%v", id)
+
+	// stdout 输出单行 JSON（IKB29O D1），字段与投递给 TLS 的完全一致。
+	// 此前是竖线分隔文本：值里含竖线或空格就破坏切分，而且机器解析不了。
+	// 代价是 docker logs 不再适合肉眼直接扫，用 jq。
+	line, err := json.Marshal(logRecord(level, now, requestID, traceId, callerFile, callerLine, funcName, msg))
+	if err != nil {
+		// 序列化失败也必须留下这一行——丢掉它才是真的损失。
+		line = []byte(fmt.Sprintf("{\"severity_text\":%q,\"body\":%q}", strings.ToLower(level), msg))
 	}
 	common.LogWriterMu.RLock()
 	writer := gin.DefaultErrorWriter
 	if level == loggerINFO {
 		writer = gin.DefaultWriter
 	}
-	_, _ = fmt.Fprintf(writer, "[%s] %v | %s | %s | %s \n", level, now.Format("2006/01/02 - 15:04:05"), id, traceField, msg)
+	_, _ = fmt.Fprintf(writer, "%s\n", line)
 	common.LogWriterMu.RUnlock()
-	sendLogToTLS(level, now, fmt.Sprintf("%v", id), traceId, caller, funcName, msg)
+	sendLogToTLS(level, now, requestID, traceId, callerFile, callerLine, funcName, msg)
 	logCount++ // we don't need accurate count, so no lock here
 	if logCount > maxLogCount && !setupLogWorking {
 		logCount = 0

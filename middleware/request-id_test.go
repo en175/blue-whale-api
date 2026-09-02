@@ -3,6 +3,7 @@ package middleware
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -63,4 +64,40 @@ func TestRequestId_GenerateTraceIdWhenAbsent(t *testing.T) {
 	assert.Equal(t, traceId, ginTraceId)
 	assert.NotEmpty(t, w.Header().Get(common.RequestIdKey))
 	assert.NotEqual(t, w.Header().Get(common.RequestIdKey), traceId)
+}
+
+// 验收标准：入站 X-Trace-Id 必须匹配 ^[A-Za-z0-9_-]{8,64}$，否则另生成，原值留在 client_trace_id
+// （IKB29O D6）。此前本仓完全不校验——任何字节都能进入这个每一条跨服务查询都要用的键。
+func TestResolveTraceId_RejectsDirtyInput(t *testing.T) {
+	for _, dirty := range []string{"has space", "abc", "quote\"inside", "../../etc/passwd", strings.Repeat("x", 65)} {
+		traceId, clientTraceId := resolveTraceId(dirty, "")
+		assert.NotEqual(t, dirty, traceId, "不合规入参不应被沿用：%q", dirty)
+		assert.Equal(t, dirty, clientTraceId, "原值应留在 client_trace_id：%q", dirty)
+		assert.Regexp(t, `^[A-Za-z0-9_-]{8,64}$`, traceId, "生成的值必须满足自己强制的规则")
+	}
+}
+
+func TestResolveTraceId_PassesThroughValidInput(t *testing.T) {
+	traceId, clientTraceId := resolveTraceId("  1756800000000-a1b2c3d4  ", "")
+	assert.Equal(t, "1756800000000-a1b2c3d4", traceId, "两端空白 trim 后沿用")
+	assert.Empty(t, clientTraceId, "沿用时不记 client_trace_id")
+}
+
+// 验收标准：没有 X-Trace-Id 时认 traceparent 的 trace-id 段（D4 的廉价保险）。
+func TestResolveTraceId_FallsBackToTraceparent(t *testing.T) {
+	traceId, _ := resolveTraceId("", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
+	assert.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", traceId)
+
+	for _, bad := range []string{"garbage", "00-short-00f067aa0ba902b7-01", ""} {
+		generated, _ := resolveTraceId("", bad)
+		assert.Regexp(t, `^[A-Za-z0-9_-]{8,64}$`, generated, "traceparent 不合规时应生成：%q", bad)
+	}
+}
+
+// 验收标准：X-Trace-Id 发了但不合规，不落到 traceparent。两个头都发、第一个写错的调用方，
+// 应该看到一个明确是新生成的 id，而不是被悄悄换到另一条链上。
+func TestResolveTraceId_MalformedHeaderDoesNotFallThrough(t *testing.T) {
+	traceId, clientTraceId := resolveTraceId("bad id", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
+	assert.NotEqual(t, "4bf92f3577b34da6a3ce929d0e0e4736", traceId)
+	assert.Equal(t, "bad id", clientTraceId)
 }
