@@ -101,3 +101,15 @@ func TestResolveTraceId_MalformedHeaderDoesNotFallThrough(t *testing.T) {
 	assert.NotEqual(t, "4bf92f3577b34da6a3ce929d0e0e4736", traceId)
 	assert.Equal(t, "bad id", clientTraceId)
 }
+
+// 验收标准：生成格式三仓统一（IKB29O D6）——毫秒时间戳 + 8 字节随机 hex，
+// 且必须满足自己强制的校验规则。
+//
+// 此前这里复用 common.NewRequestId()，那是网关单次请求的标识，形状和 Node 两侧完全不同：
+// 看到一个 id 得先知道是谁生成的才能判断它正不正常。
+func TestNewTraceId_MatchesSharedShape(t *testing.T) {
+	id := newTraceId()
+	assert.Regexp(t, `^\d{13}-[0-9a-f]{16}$`, id, "三仓同一形状：<毫秒>-<8字节hex>")
+	assert.Regexp(t, traceIdPattern, id, "自己生成的值必须过自己的校验")
+	assert.NotEqual(t, newTraceId(), newTraceId(), "每次不同")
+}

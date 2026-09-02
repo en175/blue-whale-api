@@ -2,8 +2,13 @@ package middleware
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
+	"os"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/gin-gonic/gin"
@@ -29,12 +34,26 @@ func resolveTraceId(headerValue, traceparent string) (traceId, clientTraceId str
 		if traceIdPattern.MatchString(candidate) {
 			return candidate, ""
 		}
-		return common.NewRequestId(), candidate
+		return newTraceId(), candidate
 	}
 	if m := traceparentPattern.FindStringSubmatch(strings.TrimSpace(traceparent)); m != nil {
 		return m[1], ""
 	}
-	return common.NewRequestId(), ""
+	return newTraceId(), ""
+}
+
+// newTraceId 生成缺省 trace_id：毫秒时间戳 + 8 字节随机 hex（IKB29O D6）。
+//
+// 不复用 common.NewRequestId()：那是网关**单次请求**的标识，与贯穿多系统的 trace_id 是两个
+// 概念，而且它的形状（时间串+前缀+随机）和 Node 两侧的不一样。D6 要求生成格式三仓统一——
+// 看到一个 id 不必先知道是谁生成的。三处逐字相同，改一处会重新造出它替掉的那种分歧。
+func newTraceId() string {
+	buf := make([]byte, 8)
+	if _, err := rand.Read(buf); err != nil {
+		// 熵源不可用不该让请求失败：退回时间戳加进程号，仍满足 traceIdPattern。
+		return fmt.Sprintf("%d-%08x", time.Now().UnixMilli(), os.Getpid())
+	}
+	return fmt.Sprintf("%d-%s", time.Now().UnixMilli(), hex.EncodeToString(buf))
 }
 
 func RequestId() func(c *gin.Context) {
