@@ -1,10 +1,13 @@
 package model
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
+	"gorm.io/gorm/utils/tests"
 )
 
 // TestUserMaterialGroupCRUD 覆盖归属表的 upsert / 按用户查询 / 删除。
@@ -96,4 +99,90 @@ func TestGetMaterialGroups_queryFilters(t *testing.T) {
 	require.NoError(t, DeleteUserMaterialGroup("tokenhub", "g_admin_1"))
 	require.NoError(t, DeleteUserMaterialGroup("tokenhub", "g_user_1"))
 	require.NoError(t, DeleteUserMaterialGroup("tokenhub", "g_user_2"))
+}
+
+// TestGetMaterialGroupsPaged 覆盖分页：总条数、每页条数、id 降序、跨页不重不漏、越界页为空，
+// 以及 name 过滤（组名/组 id 均可匹配、LIKE 通配符转义）。
+func TestGetMaterialGroupsPaged(t *testing.T) {
+	require.NoError(t, DB.AutoMigrate(&UserMaterialGroup{}))
+	for i := 1; i <= 5; i++ {
+		require.NoError(t, AddUserMaterialGroup(1, "tokenhub", fmt.Sprintf("page_g%d", i), fmt.Sprintf("page-name-%d", i), "AIGC"))
+	}
+	t.Cleanup(func() {
+		for i := 1; i <= 5; i++ {
+			_ = DeleteUserMaterialGroup("tokenhub", fmt.Sprintf("page_g%d", i))
+		}
+	})
+
+	t.Run("分页不重不漏且按 id 降序", func(t *testing.T) {
+		total, p1, err := GetMaterialGroupsPaged(1, "tokenhub", "", "", 1, 2)
+		require.NoError(t, err)
+		assert.EqualValues(t, 5, total)
+		require.Len(t, p1, 2)
+		assert.Greater(t, p1[0].Id, p1[1].Id) // id DESC
+
+		_, p2, err := GetMaterialGroupsPaged(1, "tokenhub", "", "", 2, 2)
+		require.NoError(t, err)
+		require.Len(t, p2, 2)
+
+		_, p3, err := GetMaterialGroupsPaged(1, "tokenhub", "", "", 3, 2)
+		require.NoError(t, err)
+		require.Len(t, p3, 1) // 最后一页不满
+
+		// 越界页返回空但不报错
+		_, p4, err := GetMaterialGroupsPaged(1, "tokenhub", "", "", 99, 2)
+		require.NoError(t, err)
+		assert.Len(t, p4, 0)
+
+		// 三页合并是全集（不重不漏）
+		all := append(append(p1, p2...), p3...)
+		seen := make(map[string]bool, len(all))
+		for _, g := range all {
+			seen[g.SeedanceAssetGroupId] = true
+		}
+		assert.Len(t, seen, 5)
+	})
+
+	t.Run("name 过滤组名与组 id", func(t *testing.T) {
+		total, groups, err := GetMaterialGroupsPaged(0, "", "", "page-name-3", 1, 20)
+		require.NoError(t, err)
+		require.Len(t, groups, 1)
+		assert.EqualValues(t, 1, total)
+		assert.Equal(t, "page_g3", groups[0].SeedanceAssetGroupId)
+
+		total, groups, err = GetMaterialGroupsPaged(0, "", "", "page_g2", 1, 20)
+		require.NoError(t, err)
+		assert.EqualValues(t, 1, total)
+		assert.Equal(t, "page_g2", groups[0].SeedanceAssetGroupId)
+	})
+
+	t.Run("name 与类型过滤叠加", func(t *testing.T) {
+		total, groups, err := GetMaterialGroupsPaged(0, "", "LivenessFace", "page-name", 1, 20)
+		require.NoError(t, err)
+		assert.EqualValues(t, 0, total)
+		assert.Len(t, groups, 0)
+	})
+
+	t.Run("LIKE 通配符被转义为字面量", func(t *testing.T) {
+		// 输入 % 应只匹配字面 %（当前数据无含 % 的组），转义后 0 条；不转义会误匹配全部。
+		total, groups, err := GetMaterialGroupsPaged(0, "", "", "%", 1, 20)
+		require.NoError(t, err)
+		assert.EqualValues(t, 0, total)
+		assert.Len(t, groups, 0)
+	})
+}
+
+// TestMaterialNameLikeEscape 验证组名搜索的 LIKE ESCAPE 跨库契约：用 ! 而非 \ 作 ESCAPE。
+// SQLite 测试库对 ESCAPE '\' 也能跑通（单引号内反斜杠不转义），只有 MySQL 会因反斜杠
+// 转义掉闭合引号而语法错误（1064），故用 DryRun 捕获 SQL 文本断言，防回归到 \。
+func TestMaterialNameLikeEscape(t *testing.T) {
+	dummyDB, err := gorm.Open(tests.DummyDialector{}, &gorm.Config{DryRun: true})
+	require.NoError(t, err)
+
+	// Find 触发 DryRun 构建 SQL（同 locking_test 范式），断言 ESCAPE 契约文本。
+	var rows []UserMaterialGroup
+	query := applyMaterialNameLike(dummyDB.Model(&UserMaterialGroup{}), "测试")
+	sql := query.Find(&rows).Statement.SQL.String()
+	assert.Contains(t, sql, "ESCAPE '!'")
+	assert.NotContains(t, sql, `ESCAPE '\`)
 }

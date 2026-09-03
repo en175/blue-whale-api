@@ -19,10 +19,13 @@ const (
 	ContextKeyTokenModelLimitEnabled ContextKey = "token_model_limit_enabled"
 	ContextKeyTokenModelLimit        ContextKey = "token_model_limit"
 	ContextKeyTokenCrossGroupRetry   ContextKey = "token_cross_group_retry"
-	ContextKeyRunCapabilityBilling   ContextKey = "run_capability_billing"
-	ContextKeyRunCapabilityDigest    ContextKey = "run_capability_digest"
-	ContextKeyRunCapabilityId        ContextKey = "run_capability_id"
-	ContextKeyRunCapabilityMaxInput  ContextKey = "run_capability_max_input_tokens"
+	// Set when the Blue Whale model gateway relayed this call and named the billing subject itself.
+	// Implies there is no token row: token-level pre-consume and quota decrement are skipped, and
+	// the user's balance is settled directly. (The four `run_capability_*` keys this replaces went
+	// with the capability itself — IKCGEF.)
+	ContextKeyAgentBilling ContextKey = "agent_billing"
+	// Ledger label only: which Agent run a gateway-relayed call belongs to. Never an auth input.
+	ContextKeyAgentRunId ContextKey = "agent_run_id"
 
 	/* channel related keys */
 	ContextKeyChannelId                ContextKey = "channel_id"

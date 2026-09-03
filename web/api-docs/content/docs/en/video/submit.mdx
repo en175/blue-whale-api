@@ -57,18 +57,35 @@ For per-model supported metadata options, see [Models](../models).
 - **Reference materials** (reference image / video / audio): always use `metadata.content` with `role:"reference_*"`; do not mix with top-level `images` (when both are present, `metadata.content` overrides `images`)
 - **Duration**: always use top-level `seconds` (string); do not use top-level `duration`
 
+## V2V Task Type and Parameter Rules (Important)
+
+> **⚠️ On 2.5, edit-style prompts must use `seconds=-1`** — otherwise the task ends in `FAILURE`.
+
+Seedance 2.5 (`doubao-seedance-2-5-260628`) **auto-detects the task type** from the prompt semantics: when the prompt is an instruction to **modify video content** (e.g. "turn the cream red"), the task is treated as a **video-edit** task rather than reference-video generation. The output of a video-edit task is a rework of a model-selected input video, so **its duration and aspect ratio must follow that input video and cannot be specified by you**.
+
+- **`seconds` must be `-1`** (meaning "follow the input video"); the input video must be **4–30s** long.
+- Passing a concrete duration (e.g. `5`) violates this constraint → parameter validation fails → the task ends in `FAILURE`.
+- **2.0 / fast / mini are unaffected**: they always process as video generation and accept a concrete `seconds` (e.g. `5` / `10`).
+
+| Scenario | Task type | `seconds` | `ratio` | Input video | Models |
+| --- | --- | --- | --- | --- | --- |
+| Reference-video-guided generation | Video generation | concrete value (`5`/`10`) | concrete value (`16:9` etc.) | optional | 2.0 / fast / mini |
+| Modifying video content | Video edit | `-1` (follow input) | follows input video | required, 4–30s | 2.5 (auto-detected) |
+
+Verified with prompt "turn the cream red": 2.5 + `seconds=5` → ❌ `FAILURE`; 2.5 + `seconds=-1` → ✅ `SUCCESS`; 2.0 / fast / mini + `seconds=5` → ✅ `SUCCESS`.
+
 ## Examples
 
 ### Text-to-Video
 
 ```bash
-BASE_URL="https://api.bluewhale.ai"   # Placeholder; the official domain will be announced separately
+BASE_URL="https://yunjizi.cn"   # Domestic; overseas use https://api.yunjizi.cn
 
 curl "$BASE_URL/v1/video/generations" \
   -H "Authorization: Bearer sk-YOUR-KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "doubao-seedance-2-0-260128",
+    "model": "dreamina-seedance-2-0-260128",
     "prompt": "A blue whale leaping out of the ocean, slow motion, cinematic look",
     "seconds": "5",
     "metadata": {
@@ -86,7 +103,7 @@ curl "$BASE_URL/v1/video/generations" \
   -H "Authorization: Bearer sk-YOUR-KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "doubao-seedance-2-0-260128",
+    "model": "dreamina-seedance-2-0-260128",
     "prompt": "The camera slowly pushes in; the cup in the frame wobbles gently",
     "images": ["https://example.com/first-frame.jpg"],
     "seconds": "5",
@@ -105,7 +122,7 @@ curl "$BASE_URL/v1/video/generations" \
   -H "Authorization: Bearer sk-YOUR-KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "doubao-seedance-2-0-260128",
+    "model": "dreamina-seedance-2-0-260128",
     "prompt": "Keep the first-person perspective of video 1 throughout, with audio 1 as the background music. A first-person fruit tea commercial for the seedance-brand \"Ping Ping An An\" apple fruit tea limited edition; frame 1 is image 1: your hand picks a dewy Aksu red apple with a crisp crunch; 2-4s: quick cut, you drop apple chunks into a shaker, add ice and tea base, shake hard, the clinking of ice syncing with a light beat, voiceover: \"fresh-cut and freshly shaken\"; 4-6s: first-person close-up of the finished drink, layered fruit tea poured into a clear cup, your hand squeezes milk cap on top, a pink label is stuck on the cup, the camera zooms in on the layering; 6-8s: first-person handheld toast, you raise the drink from image 2 toward the camera (as if handing it to the viewer), the label clearly visible, voiceover: \"have a fresh sip\", and the last frame freezes on image 2. Background voice: female throughout.",
     "seconds": "11",
     "metadata": {
@@ -131,7 +148,7 @@ curl "$BASE_URL/v1/video/generations" \
   -H "Authorization: Bearer sk-YOUR-KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "doubao-seedance-2-0-260128",
+    "model": "dreamina-seedance-2-0-260128",
     "prompt": "Using image 1 as the visual reference and audio 1 as the background music: a sunrise by the sea, waves gently lapping the shore, the camera slowly pushes in toward a lighthouse in the morning light, calm and healing.",
     "seconds": "5",
     "metadata": {
@@ -155,7 +172,7 @@ curl "$BASE_URL/v1/video/generations" \
   -H "Authorization: Bearer sk-YOUR-KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "doubao-seedance-2-0-260128",
+    "model": "dreamina-seedance-2-0-260128",
     "prompt": "A blue whale leaping out of the ocean, slow motion, cinematic look",
     "images": ["https://example.com/first-frame.png"],
     "seconds": "5",
@@ -183,7 +200,7 @@ The endpoint returns an OpenAI-compatible video object; `id` (same as `task_id`)
   "id": "task_9f3a2b7c",
   "task_id": "task_9f3a2b7c",
   "object": "video",
-  "model": "doubao-seedance-2-0-260128",
+  "model": "dreamina-seedance-2-0-260128",
   "status": "queued",
   "progress": 0,
   "created_at": 1786344639

@@ -1,0 +1,166 @@
+---
+title: 素材
+description: 素材的上传、列出、查询、编辑与删除（CreateAsset / ListAssets / GetAsset / UpdateAsset / DeleteAsset）
+---
+
+素材是挂靠在素材组下的具体文件（图片/视频/音频）。上传前请先创建素材组（见[素材组](../material/groups)）。以下 5 个 Action 均为 **CRUD 信封**响应格式。素材状态枚举：`Active`（就绪）、`Processing`（处理中）、`Failed`（失败）。
+
+## CreateAsset — 上传素材
+
+向素材组内上传素材（URL 直传，异步注册）。
+
+### 请求
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `GroupId` | string | 是 | 目标素材组 id（须属当前 API Key，否则 404） |
+| `URL` | string | 是 | 素材公网可访问地址 |
+| `Name` | string | 是 | 素材名称（≤255 字符、不含 `<`/`>`，否则 400） |
+| `AssetType` | string | 是 | `Image` / `Video` / `Audio` |
+
+```bash
+BASE_URL="https://yunjizi.cn"   # 国内；国外用 https://api.yunjizi.cn
+
+curl "$BASE_URL/api/material/CreateAsset" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"GroupId":"group-xxx","URL":"https://example.com/image.jpg","Name":"素材1","AssetType":"Image"}'
+```
+
+### 响应
+
+```json
+{
+  "ResponseMetadata": { "RequestId": "req_xxx", "Action": "CreateAsset", "Version": "2024-01-01", "Service": "ark", "Region": "cn-beijing" },
+  "Result": { "Id": "Asset-xxx" }
+}
+```
+
+创建后为异步注册，状态通过 `ListAssets` 或 `GetAsset` 查询。
+
+## ListAssets — 列出素材
+
+按素材组列出素材。**`Filter.GroupIds` 与 `Filter.GroupType` 均必填**——为空/缺失时网关直接返回 `400 InvalidParameter`，防止越权列出共享账号下全部素材。
+
+### 请求
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `Filter.GroupIds` | []string | 是 | 素材组 id 列表（须全部属当前 API Key，否则 404） |
+| `Filter.GroupType` | string | 是 | 组类型过滤（当前 `AIGC` / `LivenessFace`） |
+| `Filter.Statuses` | []string | 否 | `Active` / `Processing` / `Failed` |
+| `Filter.Name` | string | 否 | 名称模糊匹配 |
+| `PageNumber` | int | 是 | 页码（缺失返回 400 `MissingParameter.PageNumber`） |
+| `PageSize` | int | 是 | 每页数量（默认 `20`，范围 1–100；与 `PageNumber` 同必填） |
+
+```bash
+BASE_URL="https://yunjizi.cn"   # 国内；国外用 https://api.yunjizi.cn
+
+curl "$BASE_URL/api/material/ListAssets" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"Filter":{"GroupIds":["group-xxx"],"GroupType":"AIGC"},"PageNumber":1,"PageSize":10}'
+```
+
+### 响应
+
+```json
+{
+  "ResponseMetadata": { "RequestId": "req_xxx", "Action": "ListAssets", "Version": "2024-01-01", "Service": "ark", "Region": "cn-beijing" },
+  "Result": {
+    "TotalCount": 1,
+    "Items": [
+      { "Id": "Asset-xxx", "Name": "素材1", "URL": "https://example.com/image.jpg", "GroupId": "group-xxx", "AssetType": "Image", "Status": "Active", "CreateTime": "2026-08-19T02:10:00Z", "UpdateTime": "2026-08-19T02:10:00Z" }
+    ],
+    "PageNumber": 1,
+    "PageSize": 10
+  }
+}
+```
+
+## GetAsset — 获取素材详情
+
+按 `Id` 查询单个素材的完整信息（含 `Status`、`URL`、`Error`）。
+
+### 请求
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `Id` | string | 是 | 素材 id（`Asset-...`） |
+
+```bash
+BASE_URL="https://yunjizi.cn"   # 国内；国外用 https://api.yunjizi.cn
+
+curl "$BASE_URL/api/material/GetAsset" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"Id":"Asset-xxx"}'
+```
+
+### 响应
+
+```json
+{
+  "ResponseMetadata": { "RequestId": "req_xxx", "Action": "GetAsset", "Version": "2024-01-01", "Service": "ark", "Region": "cn-beijing" },
+  "Result": { "Id": "Asset-xxx", "Name": "素材1", "URL": "https://example.com/image.jpg", "GroupId": "group-xxx", "AssetType": "Image", "Status": "Active", "Error": null }
+}
+```
+
+## UpdateAsset — 编辑素材
+
+按 `Id` 改名。
+
+### 请求
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `Id` | string | 是 | 素材 id |
+| `Name` | string | 否 | 新名称（≤255 字符、不含 `<`/`>`，否则 400） |
+
+```bash
+BASE_URL="https://yunjizi.cn"   # 国内；国外用 https://api.yunjizi.cn
+
+curl "$BASE_URL/api/material/UpdateAsset" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"Id":"Asset-xxx","Name":"新名称"}'
+```
+
+### 响应
+
+```json
+{
+  "ResponseMetadata": { "RequestId": "req_xxx", "Action": "UpdateAsset", "Version": "2024-01-01", "Service": "ark", "Region": "cn-beijing" },
+  "Result": {}
+}
+```
+
+## DeleteAsset — 删除素材
+
+按 `Id` 删除单个素材。
+
+### 请求
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `Id` | string | 是 | 素材 id |
+
+```bash
+BASE_URL="https://yunjizi.cn"   # 国内；国外用 https://api.yunjizi.cn
+
+curl "$BASE_URL/api/material/DeleteAsset" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"Id":"Asset-xxx"}'
+```
+
+### 响应
+
+```json
+{
+  "ResponseMetadata": { "RequestId": "req_xxx", "Action": "DeleteAsset", "Version": "2024-01-01", "Service": "ark", "Region": "cn-beijing" },
+  "Result": {}
+}
+```
+
+> 归属说明：`GetAsset` / `DeleteAsset` 按素材 ID 操作，**当前未校验归属**（素材不落归属表，需「素材→组」映射，为已知限制，见 ADR-0007）。请确保素材 ID 与生成任务使用同一账号。

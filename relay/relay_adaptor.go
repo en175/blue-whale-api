@@ -17,7 +17,9 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel/coze"
 	"github.com/QuantumNous/new-api/relay/channel/deepseek"
 	"github.com/QuantumNous/new-api/relay/channel/dify"
+	doubaoaudio "github.com/QuantumNous/new-api/relay/channel/doubaoaudio"
 	"github.com/QuantumNous/new-api/relay/channel/gemini"
+	"github.com/QuantumNous/new-api/relay/channel/highwayapi"
 	"github.com/QuantumNous/new-api/relay/channel/jimeng"
 	"github.com/QuantumNous/new-api/relay/channel/jina"
 	"github.com/QuantumNous/new-api/relay/channel/minimax"
@@ -44,7 +46,6 @@ import (
 	taskvertex "github.com/QuantumNous/new-api/relay/channel/task/vertex"
 	taskVidu "github.com/QuantumNous/new-api/relay/channel/task/vidu"
 	taskxfai "github.com/QuantumNous/new-api/relay/channel/task/xfai"
-	doubaoaudio "github.com/QuantumNous/new-api/relay/channel/doubaoaudio"
 	"github.com/QuantumNous/new-api/relay/channel/tencent"
 	"github.com/QuantumNous/new-api/relay/channel/vertex"
 	"github.com/QuantumNous/new-api/relay/channel/volcengine"
@@ -129,6 +130,8 @@ func GetAdaptor(apiType int) channel.Adaptor {
 		return &advancedcustom.Adaptor{}
 	case constant.APITypeDoubaoAudio:
 		return &doubaoaudio.Adaptor{}
+	case constant.APITypeHighwayAPI:
+		return &highwayapi.Adaptor{}
 	}
 	return nil
 }

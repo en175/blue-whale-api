@@ -13,8 +13,10 @@ description: 从注册到第一条生成视频，5 分钟跑通全流程
 
 ## 2. 提交生成任务
 
+> **Base URL**：国内 `https://yunjizi.cn`；国外 `https://api.yunjizi.cn`。请按对接环境选择，下文示例中的 `BASE_URL` 即对应域名。
+
 ```bash
-BASE_URL="https://api.bluewhale.ai"   # 占位示意，正式域名以官方公告为准
+BASE_URL="https://yunjizi.cn"   # 国内；国外用 https://api.yunjizi.cn
 
 curl "$BASE_URL/v1/video/generations" \
   -H "Authorization: Bearer sk-YOUR-KEY" \

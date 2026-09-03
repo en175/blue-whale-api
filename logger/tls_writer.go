@@ -2,10 +2,12 @@ package logger
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -34,13 +36,89 @@ const (
 )
 
 var (
-	tlsProducer  producer.Producer
-	tlsTopicID   string
-	tlsSource    string
-	tlsLogChan   chan *pb.Log
-	tlsEnv       string
-	tlsContainer string
+	tlsProducer   producer.Producer
+	tlsTopicID    string
+	tlsSource     string
+	tlsLogChan    chan *pb.Log
+	tlsEnv        string
+	tlsInstanceID string
+	tlsHostIP     string
+
+	// identityOnce 进程身份只解析一次，且**与 TLS 是否启用无关**。
+	//
+	// 此前这几个值是在 InitTLSWriter 里赋的，而那个函数在缺 TLS_* 环境变量时提前 return——
+	// 于是没配 TLS 的部署（开发机、任何一台还没发凭证的机器）写出来的 stdout JSON 里
+	// deployment_environment_name / service_instance_id 全是空串。
+	// stdout 是结构化日志的主通道，它不该依赖上报通道有没有配起来。
+	identityOnce sync.Once
 )
+
+// serviceName 本仓报出去的服务名。
+//
+// 常量，不是环境变量。曾经是 CONTAINER_NAME，缺省回退 NodeName 再回退 hostname——三层兜底，
+// 每一层都写得出一个看起来很像真的值，而没有一层会在配错时红。服务名是代码的事实，不是机器上的
+// 一个空格，把它交给部署去填，就是把日志格式的正确性押在有人记得填。
+const serviceName = "blue-whale-api"
+
+// resolveProcessIdentity 解析实例、环境、本机地址。幂等，随便谁先调用。
+//
+// **这里没有一个值要配。** 早先版本读 CONTAINER_NAME / SERVICE_INSTANCE_ID / HOST_IP，
+// 每个都带兜底；漏配一个不会报错，只会安静地写出一个错值。下面每个值都从进程本来就确知的东西里
+// 直接得出。唯一的例外是 deployment_environment_name：这是哪一套部署，进程内部推不出来，
+// 只能由外面断言，读的是三仓同一个名字 NODE_ENV。
+func resolveProcessIdentity() {
+	identityOnce.Do(func() {
+		// service_instance_id 回答「哪个副本报的错」。此前这个概念只存在于 TLS 保留字段
+		// __source__ 里，不是一个可检索的普通字段；IKB29O D2 把它提为正式字段。
+		//
+		// NodeName 由 common 包的启动初始化赋值，而日志可能在那之前就被调用——那时它是空串。
+		// 自己再取一次主机名：这个字段的值不该取决于另一个包的初始化顺序。容器里主机名就是容器 id。
+		node := common.NodeName
+		if node == "" {
+			node, _ = os.Hostname()
+		}
+		tlsInstanceID = fmt.Sprintf("%s-%d", node, os.Getpid())
+		// host_ip 回答「哪个 IP 报的错」。service_instance_id 在 k8s 里的主机名那一半是 Pod 名，
+		// 有用，但跟抓包、防火墙日志对不起来。扫第一块非环回网卡得出，容器里拿到的就是容器自己的地址。
+		tlsHostIP = firstNonLoopbackAddress()
+		tlsEnv = os.Getenv("NODE_ENV")
+		if tlsEnv == "" {
+			// 没设就当 production，三仓同一个缺省（IKB29O D2）。
+			//
+			// 敢这么默认，是因为这个字段只在火山控制台里被读到，而一行日志要进控制台，得由一个
+			// 拿着 TLS 凭证的进程发出去——也就是一套真实部署。开发机什么都不上报，在那儿叫
+			// production 不花任何人的钱。默认值在唯一会读到它的地方就是对的。
+			// 前两版缺省 local，结果集群里只有 agent 容器设了 NODE_ENV，本服务和
+			// blue-whale-backend 在同一套栈里都自报 local，而修复寄托在有人记得配变量上。
+			tlsEnv = "production"
+		}
+	})
+}
+
+// firstNonLoopbackAddress 本机第一块非环回网卡的地址，IPv4 优先。
+//
+// 取不到就是空串，那是合法状态（没有外部网卡的容器），不值得为它报一条错——而且这里报错
+// 会在日志初始化阶段递归回日志。
+func firstNonLoopbackAddress() string {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return ""
+	}
+	var fallback string
+	for _, addr := range addrs {
+		ipNet, ok := addr.(*net.IPNet)
+		if !ok || ipNet.IP.IsLoopback() || ipNet.IP.IsUnspecified() {
+			continue
+		}
+		if v4 := ipNet.IP.To4(); v4 != nil {
+			return v4.String()
+		}
+		if fallback == "" {
+			fallback = ipNet.IP.String()
+		}
+	}
+	return fallback
+}
 
 // InitTLSWriter 初始化 TLS 日志 Producer。
 // 需同时配置 TLS_ENDPOINT / TLS_AK / TLS_SK / TLS_TOPIC_ID 四个环境变量才启用，
@@ -81,30 +159,17 @@ func InitTLSWriter() {
 
 	tlsLogChan = make(chan *pb.Log, tlsLogChanSize)
 	tlsTopicID = topicID
-	// container 标识服务/容器：优先 CONTAINER_NAME 环境变量（如 blue-whale-api），
-	// 未配置时用 NodeName（Docker 下=容器名，本地=hostname）兜底
-	tlsContainer = os.Getenv("CONTAINER_NAME")
-	if tlsContainer == "" {
-		tlsContainer = common.NodeName
-	}
-	// __source__（TLS 保留字段）用实例标识（Docker 下为容器名/ID，本地为主机名），
-	// 与 container 字段（服务名）语义区分，便于分辨同一服务的多实例
+	resolveProcessIdentity()
+	// __source__（TLS 保留字段）仍用实例标识，与 service_instance_id 同值。
 	tlsSource = common.NodeName
-	tlsEnv = os.Getenv("ENV")
-	if tlsEnv == "" {
-		tlsEnv = os.Getenv("NODE_ENV")
-	}
-	if tlsEnv == "" {
-		tlsEnv = "dev"
-	}
 	tlsProducer = producer.NewProducer(cfg)
 	tlsProducer.Start()
 	gopool.Go(tlsDispatchLoop)
 	// 注册系统日志钩子：common.SysLog/SysError 也进 TLS（回调注入，避免循环依赖）。
 	// skip=3：业务调用点 -> common.SysLog -> hook 闭包 -> callerInfo
 	common.TLSLogHook = func(level string, t time.Time, msg string) {
-		caller, funcName := callerInfo(3)
-		sendLogToTLS(level, t, "SYSTEM", "", caller, funcName, msg)
+		callerFile, callerLine, funcName := callerInfo(3)
+		sendLogToTLS(logRecord(level, t, "SYSTEM", "", callerFile, callerLine, funcName, msg))
 	}
 	common.SysLog("TLS log writer enabled, endpoint: " + endpoint + ", topic: " + topicID)
 }
@@ -133,28 +198,117 @@ func tlsDispatchLoop() {
 	}
 }
 
-// sendLogToTLS 组装结构化键值对投递到 TLS（平铺下划线命名，跨系统统一）。
-// 字段集：level, time, container, env, version, request_id, trace_id, caller, func, message。
+// logRecord 一条日志的共用字段集，stdout 与 TLS 两条通道都从这里取（IKB29O D2）。
+//
+// 一处定义而不是两份：两条通道各写各的，是「stdout 有这个字段、TLS 没有」这类差异的来源，
+// 而这种差异只会在排障时、最需要它的那一刻被发现。
+//
+// 字段名对齐 OpenTelemetry 语义约定，点号平铺为下划线（supersede 本仓 ADR-0002 D4 的字段表）。
+// 三仓逐字相同，改一边要改三边——留下任何一个旧名，跨服务查询就要为那个仓写特例。
+// logRecordFieldOrder 投递给 TLS 时的字段顺序。map 的遍历顺序随机，而 TLS 控制台按顺序
+// 展示——同一条链路的日志每行字段排列不同，人眼对比时会以为是不同结构。
+// logTimeZone 日志时间戳的时区：UTC，三仓共用的那一个墙上时钟。
+//
+// **time.UTC 而不是 LoadLocation / FixedZone**：前者要读容器里的 tzdata，镜像没装或裁掉时会
+// 失败；后者不依赖外部数据但要求三家写同一个偏移。跨服务按字符串排序只在三家写同一个时区时
+// 成立，一个容器换了时区就把排序静默毁掉——那正是本轮修过一次的 bug（Go 写 +08:00、Node 写
+// Z，+08:00 排在 Z 后面尽管实际更早）。time.UTC 是常量，不依赖任何外部数据。
+//
+// **2026-09-03 从 +08:00 改成 UTC，理由不是「UTC 更标准」。** 上一版写 +08:00 是因为看日志的人
+// 都在这个时区。那个论证只在「日志被单独读」时成立，而排查一定是把日志行、它写出的那条库记录、
+// 它返回的那个 API 响应放在一起看——那三样已经全是 UTC：agent 的 REST 响应是 `...Z`，
+// blue_whale / blue_whale_agent 的 datetime 存 UTC 墙钟，本仓自己的 logs.created_at 是
+// bigint 真 UTC epoch（实测 1788357317 = 2026-09-02 13:55:17 UTC，没有被 +8 偏移过）。
+// 日志曾是整个系统里唯一的例外，于是每一次交叉引用都要付八小时心算。
+var logTimeZone = time.UTC
+
+var logRecordFieldSet = func() map[string]bool {
+	set := make(map[string]bool, len(logRecordFieldOrder))
+	for _, key := range logRecordFieldOrder {
+		set[key] = true
+	}
+	return set
+}()
+
+var logRecordFieldOrder = []string{
+	"severity_text", "timestamp", "service_name", "service_instance_id", "host_ip",
+	"deployment_environment_name", "service_version", "request_id", "trace_id",
+	"code_file_path", "code_line_number", "code_function_name", "body",
+}
+
+// serviceVersion 版本号，未注入时为 "unknown"。
+//
+// 空串不行：另外两个仓写的是 "unknown"，而 D2 要求缺省值三仓一致——一个空串一个 "unknown"，
+// 「不知道版本」这件事就要按两种写法各查一次。
+func serviceVersion() string {
+	if common.Version == "" {
+		return "unknown"
+	}
+	return common.Version
+}
+
+func logRecord(level string, t time.Time, requestID, traceID, callerFile string, callerLine int, funcName, msg string) map[string]any {
+	// 身份与 TLS 是否启用无关：没配 TLS 的部署照样要写出完整的 stdout JSON。
+	resolveProcessIdentity()
+	return map[string]any{
+		// 小写。此前 Go 打 INFO/WARN/ERR 而 Node 打 info/warn/error，在 TLS 上按
+		// severity_text: error 过滤，搜不到本仓的任何错误日志。
+		"severity_text": strings.ToLower(level),
+		// ISO 8601、带毫秒、恒为 +08:00。此前是 "2006-01-02 15:04:05"，无毫秒无时区——跨服务
+		// 按时间排序时毫秒级先后关系丢失，而待排查的延迟正在几十到几百毫秒量级。
+		// Z07:00 在 UTC 下输出 "Z"，非 UTC 下输出偏移——配合上面的 time.UTC，结果恒为
+		// "2026-09-02T13:55:12.887Z"，与 Node 两仓的 toISOString() 逐字符相同。
+		"timestamp":                   t.In(logTimeZone).Format("2006-01-02T15:04:05.000Z07:00"),
+		"service_name":                serviceName,
+		"service_instance_id":         tlsInstanceID,
+		"host_ip":                     tlsHostIP,
+		"deployment_environment_name": tlsEnv,
+		"service_version":             serviceVersion(),
+		"request_id":                  requestID,
+		// 空串，不是此前的 "-"。三仓统一：一个填 "-" 一个填 "" 的话，「没有链路标识」
+		// 这件事要按两种写法各查一次。
+		"trace_id":           traceID,
+		"code_file_path":     callerFile,
+		"code_line_number":   callerLine,
+		"code_function_name": funcName,
+		// 截断与脱敏（D9）在这里，因为 stdout 与 TLS 两条通道都从这一处取字段。
+		"body": redactLogBody(msg),
+	}
+}
+
+// sendLogToTLS 把一条已经组装好的记录投递到 TLS。
+//
+// 收 record 而不是自己再组装一遍：两条通道各组各的，正是「stdout 有这个字段、TLS 没有」
+// 这类差异的来源，而这种差异只会在最需要它的那一刻被发现。client_trace_id 就是现成的例子——
+// 它是条件字段，只在入站 trace id 被拒时出现。
+//
 // 通道满时直接丢弃，绝不阻塞调用方。
-func sendLogToTLS(level string, t time.Time, requestID, traceID, caller, funcName, msg string) {
+func sendLogToTLS(record map[string]any) {
 	logChan := tlsLogChan
 	if logChan == nil {
 		return
 	}
+	contents := make([]*pb.LogContent, 0, len(record))
+	for _, key := range logRecordFieldOrder {
+		contents = append(contents, &pb.LogContent{Key: key, Value: fmt.Sprintf("%v", record[key])})
+	}
+	// 顺序表之外的条件字段（目前只有 client_trace_id）附在后面，不因为不在表里就被丢掉。
+	for key, value := range record {
+		if !logRecordFieldSet[key] {
+			contents = append(contents, &pb.LogContent{Key: key, Value: fmt.Sprintf("%v", value)})
+		}
+	}
+	// 投递时刻从记录自己的 timestamp 反解，两者必须同一个布局串：写 +08:00 却按 Z 解析会每条
+	// 都失败并静默退回 time.Now()，于是 TLS 的时间轴与字段值差出批量投递的那点延迟，而且不报错。
+	// RFC3339Nano 认任意偏移，改偏移不必再改这里。
+	timestamp, _ := record["timestamp"].(string)
+	at, err := time.Parse(time.RFC3339Nano, timestamp)
+	if err != nil {
+		at = time.Now()
+	}
 	logItem := &pb.Log{
-		Time: t.UnixMilli(),
-		Contents: []*pb.LogContent{
-			{Key: "level", Value: level},
-			{Key: "time", Value: t.Format("2006-01-02 15:04:05")},
-			{Key: "container", Value: tlsContainer},
-			{Key: "env", Value: tlsEnv},
-			{Key: "version", Value: common.Version},
-			{Key: "request_id", Value: requestID},
-			{Key: "trace_id", Value: traceID},
-			{Key: "caller", Value: caller},
-			{Key: "func", Value: funcName},
-			{Key: "message", Value: msg},
-		},
+		Time:     at.UnixMilli(),
+		Contents: contents,
 	}
 	select {
 	case logChan <- logItem:
@@ -163,16 +317,19 @@ func sendLogToTLS(level string, t time.Time, requestID, traceID, caller, funcNam
 	}
 }
 
-// callerInfo 返回调用位置的 caller（目录/文件:行号，如 "logger/logger.go:110"）
+// callerInfo 返回调用位置的文件路径（目录/文件，如 "logger/logger.go"）、行号，
 // 与函数名（模块内相对名，如 "logger.LogInfo"）。仅在 TLS 启用时调用，开销约 1µs。
-func callerInfo(skip int) (caller, funcName string) {
+//
+// 文件与行号分开返回（IKB29O D2）：此前拼成 "logger/logger.go:110" 一个字符串，
+// 那样既不能按行号排序，也不能只按文件过滤。
+func callerInfo(skip int) (callerFile string, callerLine int, funcName string) {
 	pc, file, line, ok := runtime.Caller(skip)
 	if !ok {
-		return "", ""
+		return "", 0, ""
 	}
 	if f := runtime.FuncForPC(pc); f != nil {
 		funcName = strings.TrimPrefix(f.Name(), modulePrefix)
 	}
-	caller = fmt.Sprintf("%s/%s:%d", filepath.Base(filepath.Dir(file)), filepath.Base(file), line)
-	return caller, funcName
+	callerFile = fmt.Sprintf("%s/%s", filepath.Base(filepath.Dir(file)), filepath.Base(file))
+	return callerFile, line, funcName
 }

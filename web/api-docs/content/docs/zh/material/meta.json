@@ -1,0 +1,5 @@
+{
+  "title": "素材库",
+  "icon": "Library",
+  "pages": ["index", "groups", "assets", "real-person"]
+}

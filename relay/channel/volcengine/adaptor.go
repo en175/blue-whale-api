@@ -154,28 +154,33 @@ func (a *Adaptor) convertImageEditRequest(c *gin.Context, request dto.ImageReque
 		Watermark:      request.Watermark,
 	}
 
-	mf := c.Request.MultipartForm
-	if mf == nil {
-		form, err := common.ParseMultipartFormReusable(c)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse multipart form: %w", err)
-		}
-		mf = form
-		c.Request.MultipartForm = form
-		c.Request.PostForm = url.Values(form.Value)
-	}
-
-	// multipart 图片文件（image / image[] / image[ 前缀）→ base64 data URI：
-	// 单图保持已验证的字符串 wire 格式，多图输出数组（ARK 多参考图协议）。
-	if mf != nil && mf.File != nil {
-		if imageFiles := imageEditFiles(mf.File); len(imageFiles) > 0 {
-			uris, err := imageFileDataURIs(imageFiles)
+	// 仅 multipart 请求可能携带参考图文件；JSON 请求的参考图走下方文本 image
+	// 字段兜底。此处必须按 Content-Type 守卫——JSON 请求没有 multipart boundary，
+	// 无守卫地解析会以 "multipart boundary not found" 误杀 JSON 图生图。
+	if strings.Contains(strings.ToLower(c.Request.Header.Get("Content-Type")), "multipart/form-data") {
+		mf := c.Request.MultipartForm
+		if mf == nil {
+			form, err := common.ParseMultipartFormReusable(c)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("failed to parse multipart form: %w", err)
 			}
-			req.Image, err = marshalImageField(uris)
-			if err != nil {
-				return nil, fmt.Errorf("failed to marshal image field: %w", err)
+			mf = form
+			c.Request.MultipartForm = form
+			c.Request.PostForm = url.Values(form.Value)
+		}
+
+		// multipart 图片文件（image / image[] / image[ 前缀）→ base64 data URI：
+		// 单图保持已验证的字符串 wire 格式，多图输出数组（ARK 多参考图协议）。
+		if mf.File != nil {
+			if imageFiles := imageEditFiles(mf.File); len(imageFiles) > 0 {
+				uris, err := imageFileDataURIs(imageFiles)
+				if err != nil {
+					return nil, err
+				}
+				req.Image, err = marshalImageField(uris)
+				if err != nil {
+					return nil, fmt.Errorf("failed to marshal image field: %w", err)
+				}
 			}
 		}
 	}

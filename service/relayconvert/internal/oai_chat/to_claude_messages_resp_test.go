@@ -204,6 +204,99 @@ func TestStreamResponseOpenAI2ClaudeClosesTextThinkingAndToolBlocks(t *testing.T
 	assert.Equal(t, "message_stop", finishResponses[2].Type)
 }
 
+// TestStreamResponseOpenAI2ClaudeFinishChunkWithoutUsage verifies that when the
+// final chunk carries finish_reason but usage is nil (e.g. Volcengine ARK),
+// the converter handles the closing events correctly (IKB10I regression).
+//
+// The bug: in the non-first-chunk path (SendResponseCount > 1), when the
+// finish_reason chunk has nil usage, the converter returns empty — deferring
+// for a usage-only chunk that Volcengine never sends. The fix injects
+// computed usage into the response in HandleFinalResponse before calling the
+// converter, so the deferred path is not triggered.
+func TestStreamResponseOpenAI2ClaudeFinishChunkWithoutUsage(t *testing.T) {
+	computedUsage := &dto.Usage{
+		PromptTokens:     42,
+		CompletionTokens: 17,
+		TotalTokens:      59,
+	}
+
+	// Scenario 1: finish_reason chunk with nil usage AND no pre-populated
+	// ClaudeConvertInfo.Usage → converter defers closing (existing behavior
+	// for upstreams that will send a separate usage-only chunk).
+	t.Run("no_usage_anywhere_defers_closing", func(t *testing.T) {
+		info := &relaycommon.RelayInfo{
+			ClaudeConvertInfo: &relaycommon.ClaudeConvertInfo{
+				LastMessagesType: relaycommon.LastMessageTypeText,
+				Index:            0,
+			},
+		}
+		// SendResponseCount > 1 skips the first-call path and enters the
+		// regular streaming branch where the deferral logic lives.
+		info.SendResponseCount = 2
+
+		responses := StreamResponseOpenAI2Claude(&dto.ChatCompletionsStreamResponse{
+			Id:    "chatcmpl_1",
+			Model: "deepseek-v3",
+			Choices: []dto.ChatCompletionsStreamResponseChoice{
+				{FinishReason: ptr("stop")},
+			},
+		}, info)
+		assert.Empty(t, responses, "converter defers closing when no usage is available")
+	})
+
+	// Scenario 2: HandleFinalResponse injects computed usage into the
+	// response before calling the converter. Even though the original
+	// upstream chunk had nil usage, the converter now sees non-nil usage
+	// and generates closing events.
+	t.Run("injected_usage_generates_closing_events", func(t *testing.T) {
+		info := &relaycommon.RelayInfo{
+			ClaudeConvertInfo: &relaycommon.ClaudeConvertInfo{
+				LastMessagesType: relaycommon.LastMessageTypeText,
+				Index:            0,
+				Usage:            computedUsage,
+			},
+		}
+		info.SendResponseCount = 2
+
+		// Simulate what HandleFinalResponse does: inject computed usage
+		// into the streamResponse before calling the converter.
+		streamResponse := &dto.ChatCompletionsStreamResponse{
+			Id:    "chatcmpl_1",
+			Model: "deepseek-v3",
+			Choices: []dto.ChatCompletionsStreamResponseChoice{
+				{FinishReason: ptr("stop")},
+			},
+			Usage: computedUsage, // injected by HandleFinalResponse
+		}
+
+		responses := StreamResponseOpenAI2Claude(streamResponse, info)
+		require.NotEmpty(t, responses, "closing events must be generated when usage is injected")
+
+		// Must contain content_block_stop, message_delta, message_stop
+		eventTypes := make([]string, 0, len(responses))
+		for _, r := range responses {
+			eventTypes = append(eventTypes, r.Type)
+		}
+		assert.Contains(t, eventTypes, "content_block_stop")
+		assert.Contains(t, eventTypes, "message_delta")
+		assert.Contains(t, eventTypes, "message_stop")
+
+		// Verify message_delta carries usage and stop_reason
+		var msgDelta *dto.ClaudeResponse
+		for _, r := range responses {
+			if r.Type == "message_delta" {
+				msgDelta = r
+				break
+			}
+		}
+		require.NotNil(t, msgDelta)
+		require.NotNil(t, msgDelta.Usage)
+		assert.Equal(t, 42, msgDelta.Usage.InputTokens)
+		assert.Equal(t, 17, msgDelta.Usage.OutputTokens)
+		assert.Equal(t, "end_turn", *msgDelta.Delta.StopReason)
+	})
+}
+
 func TestNormalizeCacheCreationSplit(t *testing.T) {
 	cache5m, cache1h := NormalizeCacheCreationSplit(10, 3, 2)
 	assert.Equal(t, 8, cache5m)

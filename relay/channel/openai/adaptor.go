@@ -238,7 +238,11 @@ func (a *Adaptor) ConvertOpenAIRequest(c *gin.Context, info *relaycommon.RelayIn
 	if request == nil {
 		return nil, errors.New("request is nil")
 	}
-	if info.ChannelType != constant.ChannelTypeOpenAI && info.ChannelType != constant.ChannelTypeAzure {
+	// Preserve StreamOptions for channels that declare support (e.g. Volcengine).
+	// ConvertClaudeRequest injects StreamOptions before calling this method;
+	// stripping it here would prevent upstreams from returning usage data,
+	// breaking billing for Claude-format clients relayed through this proxy.
+	if !info.SupportStreamOptions {
 		request.StreamOptions = nil
 	}
 	if info.ChannelType == constant.ChannelTypeOpenRouter {

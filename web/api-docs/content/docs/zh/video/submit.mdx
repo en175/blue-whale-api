@@ -57,12 +57,29 @@ description: 提交视频生成任务，获取 task_id
 - **参考素材**（参考图 / 参考视频 / 参考音频）：统一走 `metadata.content` + `role:"reference_*"`；不要与顶层 `images` 混用（混用时 `metadata.content` 会覆盖 `images`）
 - **时长**：统一用顶层 `seconds`（字符串），勿用顶层 `duration`
 
+## V2V 任务类型与参数规范（重要说明）
+
+> **⚠️ 2.5 视频编辑类 prompt 必须 `seconds=-1`**，否则任务 `FAILURE`。
+
+Seedance 2.5（`doubao-seedance-2-5-260628`）会根据 prompt 语义**智能识别任务类型**：当 prompt 是对**视频内容的修改指令**（如"奶油换成红色"）时，被识别为**视频编辑任务**，而非参考视频生成。视频编辑任务的输出是"基于模型选定的输入视频"改造而来，**输出时长与比例必须跟随输入视频，不能由用户指定**。
+
+- **`seconds` 必须传 `-1`**（表示跟随输入视频）；输入视频时长需在 **4~30s** 内。
+- 若传具体时长（如 `5`），违反该约束 → 参数校验失败 → 任务 `FAILURE`。
+- **2.0 / fast / mini 不受此限制**：始终按视频生成处理，接受具体 `seconds`（如 `5` / `10`）。
+
+| 场景 | 任务类型 | `seconds` | `ratio` | 输入视频 | 适用模型 |
+| --- | --- | --- | --- | --- | --- |
+| 参考视频引导生成 | 视频生成 | 具体值（`5`/`10`） | 具体值（`16:9` 等） | 可选 | 2.0 / fast / mini |
+| 修改视频内容 | 视频编辑 | `-1`（跟随输入） | 跟随输入视频 | 必填，4~30s | 2.5（智能识别） |
+
+测试实证（prompt「奶油换成红色」）：2.5 + `seconds=5` → ❌ `FAILURE`；2.5 + `seconds=-1` → ✅ `SUCCESS`；2.0 / fast / mini + `seconds=5` → ✅ `SUCCESS`。
+
 ## 示例
 
 ### 文生视频
 
 ```bash
-BASE_URL="https://api.bluewhale.ai"   # 占位示意，正式域名以官方公告为准
+BASE_URL="https://yunjizi.cn"   # 国内；国外用 https://api.yunjizi.cn
 
 curl "$BASE_URL/v1/video/generations" \
   -H "Authorization: Bearer sk-YOUR-KEY" \

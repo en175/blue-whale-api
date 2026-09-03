@@ -14,6 +14,7 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/gin-gonic/gin"
+	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -199,6 +200,71 @@ func TestConvertImageEditRequestMultipart(t *testing.T) {
 
 	t.Run("missing image errors", func(t *testing.T) {
 		c := newEditContext(t, nil, map[string]string{"model": "m", "prompt": "p"})
+		request := dto.ImageRequest{Model: "m", Prompt: "p"}
+
+		converted, err := convertEdit(c, request)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "image is required")
+		assert.Nil(t, converted)
+	})
+}
+
+// TestConvertImageEditRequestJSON 验证 IKB66R：JSON 图生图（image 走文本字段）不能被
+// multipart 解析误杀（回归前报 "multipart boundary not found"）。
+func TestConvertImageEditRequestJSON(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	newJSONContext := func(t *testing.T) *gin.Context {
+		t.Helper()
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = httptest.NewRequest(http.MethodPost, "/v1/images/edits", http.NoBody)
+		c.Request.Header.Set("Content-Type", "application/json")
+		return c
+	}
+
+	t.Run("single image URL converts", func(t *testing.T) {
+		c := newJSONContext(t)
+		request := dto.ImageRequest{
+			Model:  "doubao-seedream-5-0-pro-260628",
+			Prompt: "edit",
+			Size:   "2048x2048",
+			N:      lo.ToPtr(uint(2)),
+			Image:  json.RawMessage(`"https://cdn.test/ref.png"`),
+		}
+
+		converted, err := convertEdit(c, request)
+		require.NoError(t, err)
+		volcReq, ok := converted.(*volcImageGenerationRequest)
+		require.True(t, ok)
+
+		assert.Equal(t, "doubao-seedream-5-0-pro-260628", volcReq.Model)
+		assert.Equal(t, "2048x2048", volcReq.Size)
+		require.NotNil(t, volcReq.N)
+		assert.Equal(t, uint(2), *volcReq.N)
+		var imageURL string
+		require.NoError(t, common.Unmarshal(volcReq.Image, &imageURL))
+		assert.Equal(t, "https://cdn.test/ref.png", imageURL)
+	})
+
+	t.Run("image URL array converts", func(t *testing.T) {
+		c := newJSONContext(t)
+		request := dto.ImageRequest{
+			Model:  "m",
+			Prompt: "p",
+			Image:  json.RawMessage(`["https://cdn.test/a.png","https://cdn.test/b.png"]`),
+		}
+
+		converted, err := convertEdit(c, request)
+		require.NoError(t, err)
+		volcReq, ok := converted.(*volcImageGenerationRequest)
+		require.True(t, ok)
+		var urls []string
+		require.NoError(t, common.Unmarshal(volcReq.Image, &urls))
+		assert.Equal(t, []string{"https://cdn.test/a.png", "https://cdn.test/b.png"}, urls)
+	})
+
+	t.Run("missing image errors", func(t *testing.T) {
+		c := newJSONContext(t)
 		request := dto.ImageRequest{Model: "m", Prompt: "p"}
 
 		converted, err := convertEdit(c, request)

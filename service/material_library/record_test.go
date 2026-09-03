@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -171,6 +172,19 @@ func TestProxy_rewritesClientCallbackToGateway(t *testing.T) {
 	assert.Contains(t, rec.Body.String(), `"CallbackURL":"https://client.example.com/cb"`)
 	assert.NotContains(t, rec.Body.String(), `"CallbackURL":"https://gw.example.com/v1/material/h5-callback"`)
 
+	// 会话类响应为直接格式（无 Result 信封）：顶层 BytedToken/H5Link/CallbackURL。
+	var direct struct {
+		BytedToken  string `json:"BytedToken"`
+		H5Link      string `json:"H5Link"`
+		CallbackURL string `json:"CallbackURL"`
+		Result      any    `json:"Result"`
+	}
+	require.NoError(t, common.Unmarshal(rec.Body.Bytes(), &direct))
+	assert.Equal(t, "bt-rw", direct.BytedToken)
+	assert.Equal(t, "https://h5.example/rw", direct.H5Link)
+	assert.Equal(t, "https://client.example.com/cb", direct.CallbackURL)
+	assert.Nil(t, direct.Result) // 无信封，证明会话类直接格式
+
 	s, err := model.GetVisualValidateSessionByToken("bt-rw")
 	require.NoError(t, err)
 	assert.Equal(t, "https://client.example.com/cb", s.CustomCallback)
@@ -191,19 +205,21 @@ func TestProxy_listAssetGroupsLocalIsolation(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	var out struct {
-		TotalCount int `json:"TotalCount"`
-		Items []struct {
-			Id        string `json:"Id"`
-			Name      string `json:"Name"`
-			GroupType string `json:"GroupType"`
-		} `json:"Items"`
+		Result struct {
+			TotalCount int `json:"TotalCount"`
+			Items []struct {
+				Id        string `json:"Id"`
+				Name      string `json:"Name"`
+				GroupType string `json:"GroupType"`
+			} `json:"Items"`
+		} `json:"Result"`
 	}
 	require.NoError(t, common.Unmarshal(rec.Body.Bytes(), &out))
-	assert.Equal(t, 1, out.TotalCount)
-	require.Len(t, out.Items, 1)
-	assert.Equal(t, "g-user42", out.Items[0].Id)
-	assert.Equal(t, "组A", out.Items[0].Name)
-	assert.Equal(t, "AIGC", out.Items[0].GroupType)
+	assert.Equal(t, 1, out.Result.TotalCount)
+	require.Len(t, out.Result.Items, 1)
+	assert.Equal(t, "g-user42", out.Result.Items[0].Id)
+	assert.Equal(t, "组A", out.Result.Items[0].Name)
+	assert.Equal(t, "AIGC", out.Result.Items[0].GroupType)
 }
 
 // TestProxy_getVisualValidateResult_localCacheHit 验证对外查询认证结果：本地会话已结算
@@ -275,13 +291,11 @@ func TestProxy_getVisualValidateResult_userIsolation(t *testing.T) {
 	Proxy().ServeHTTP(rec, c.Request)
 
 	require.Equal(t, http.StatusOK, rec.Code)
-	var out struct {
-		Result struct {
-			GroupId string `json:"GroupId"`
-		} `json:"Result"`
+	var direct struct {
+		GroupId string `json:"GroupId"`
 	}
-	require.NoError(t, common.Unmarshal(rec.Body.Bytes(), &out))
-	assert.Equal(t, "", out.Result.GroupId) // 不泄露他人组
+	require.NoError(t, common.Unmarshal(rec.Body.Bytes(), &direct))
+	assert.Equal(t, "", direct.GroupId) // 不泄露他人组
 }
 
 // TestProxy_getVisualValidateResult_validatePending 验证火山认证未完成（ValidatePending）时
@@ -416,6 +430,85 @@ func TestProxy_nameXSSRejected(t *testing.T) {
 	rec2 := httptest.NewRecorder()
 	Proxy().ServeHTTP(rec2, c2.Request)
 	require.Equal(t, http.StatusBadRequest, rec2.Code)
+}
+
+// TestProxy_nameTooLongRejected 验证建组/真人会话名称超过 255 rune 被拒绝（防镜像表列宽溢出），
+// 且恰好 255 rune 的边界名放行（按 rune 计数而非 byte，多字节 UTF-8 不误伤）。
+func TestProxy_nameTooLongRejected(t *testing.T) {
+	model.DB = openMaterialRecordDB(t)
+
+	// 256 个中文字符 = 256 rune（每字 3 byte）
+	longName := strings.Repeat("中", 256)
+
+	// 代理 CreateAssetGroup 超长名 → 400
+	c := newRecordContext(t, "/api/material/CreateAssetGroup", fmt.Sprintf(`{"Name":%q,"GroupType":"AIGC"}`, longName))
+	rec := httptest.NewRecorder()
+	Proxy().ServeHTTP(rec, c.Request)
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+
+	// 代理 CreateVisualValidateSession 超长名 → 400
+	c2 := newRecordContext(t, "/api/material/CreateVisualValidateSession", fmt.Sprintf(`{"Name":%q,"CallbackURL":"https://gw.example/cb"}`, longName))
+	rec2 := httptest.NewRecorder()
+	Proxy().ServeHTTP(rec2, c2.Request)
+	require.Equal(t, http.StatusBadRequest, rec2.Code)
+
+	// 边界：恰好 255 rune 放行（转上游成功 → 200）
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ResponseMetadata":{},"Result":{"Id":"group-255"}}`))
+	}))
+	defer upstream.Close()
+	setConfig(t, fmt.Sprintf(`{"enabled":true,"ak":"pak_x","sk":"psk_y","base_url":%q}`, upstream.URL))
+
+	boundaryName := strings.Repeat("中", 255)
+	c3 := newRecordContext(t, "/api/material/CreateAssetGroup", fmt.Sprintf(`{"Name":%q,"GroupType":"AIGC"}`, boundaryName))
+	rec3 := httptest.NewRecorder()
+	Proxy().ServeHTTP(rec3, c3.Request)
+	require.Equal(t, http.StatusOK, rec3.Code)
+
+	// 边界名确实以完整 255 rune 落库（镜像表列宽安全的直接证据，非仅请求放行）
+	groups, err := model.GetUserMaterialGroups(42)
+	require.NoError(t, err)
+	require.Len(t, groups, 1)
+	assert.Equal(t, boundaryName, groups[0].Name)
+}
+
+// TestProxy_materialNameTooLongActions 验证代理层对超长名称（>255 rune）在全部 Name 动作上
+// 统一 400 拒绝（防镜像表列宽溢出，不把超长名透传上游触发 tokenhub 500）。
+// SQL 注入负载按产品决策不在网关拦截（注入防御在上游后端），故不在此断言。
+func TestProxy_materialNameTooLongActions(t *testing.T) {
+	model.DB = openMaterialRecordDB(t)
+	require.NoError(t, model.AddUserMaterialGroup(42, "tokenhub", "group-own", "g", "AIGC"))
+	setConfig(t, `{"enabled":true,"ak":"pak_x","sk":"psk_y","base_url":""}`)
+
+	longName := strings.Repeat("中", 256)
+
+	// CreateAssetGroup：超长名 → 400（校验在透传上游前），锁定 tokenhub 格式错误信封
+	rec := httptest.NewRecorder()
+	Proxy().ServeHTTP(rec, newRecordContext(t, "/api/material/CreateAssetGroup", fmt.Sprintf(`{"Name":%q,"GroupType":"AIGC"}`, longName)).Request)
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.JSONEq(t, `{"ResponseMetadata":{},"ResponseError":{"Code":"InvalidParameter","Message":"invalid parameter"}}`, rec.Body.String())
+
+	// CreateVisualValidateSession：超长名 → 400
+	rec2 := httptest.NewRecorder()
+	Proxy().ServeHTTP(rec2, newRecordContext(t, "/api/material/CreateVisualValidateSession", fmt.Sprintf(`{"Name":%q}`, longName)).Request)
+	require.Equal(t, http.StatusBadRequest, rec2.Code)
+
+	// CreateAsset：超长名 → 400（归属组有效，先过归属校验再拒绝名称）
+	rec3 := httptest.NewRecorder()
+	Proxy().ServeHTTP(rec3, newRecordContext(t, "/api/material/CreateAsset", fmt.Sprintf(`{"GroupId":"group-own","Name":%q,"URL":"https://e.com/a.jpg","AssetType":"Image"}`, longName)).Request)
+	require.Equal(t, http.StatusBadRequest, rec3.Code)
+
+	// UpdateAssetGroup：超长名 → 400（归属组有效）
+	rec5 := httptest.NewRecorder()
+	Proxy().ServeHTTP(rec5, newRecordContext(t, "/api/material/UpdateAssetGroup", fmt.Sprintf(`{"Id":"group-own","Name":%q}`, longName)).Request)
+	require.Equal(t, http.StatusBadRequest, rec5.Code)
+
+	// UpdateAsset：超长名 → 400
+	rec6 := httptest.NewRecorder()
+	Proxy().ServeHTTP(rec6, newRecordContext(t, "/api/material/UpdateAsset", fmt.Sprintf(`{"Id":"Asset-x","Name":%q}`, longName)).Request)
+	require.Equal(t, http.StatusBadRequest, rec6.Code)
 }
 
 // TestProxy_getVisualValidateResult_tokenhubInternalError 验证 tokenhub 未认证（上游 500 InternalError，

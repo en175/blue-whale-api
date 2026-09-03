@@ -270,6 +270,10 @@ func modelPriceHelperTiered(c *gin.Context, info *relaycommon.RelayInfo, promptT
 	if err != nil {
 		return types.PriceData{}, err
 	}
+	// Overlay validated billing parameters (image n/size/quality, multipart
+	// reference-image count) so param() sees the same values the relay bills
+	// with, instead of the raw body which may be empty or pre-normalization.
+	requestInput = NormalizeBillingRequestInput(c, requestInput, info.Request, meta)
 
 	rawCost, trace, err := billingexpr.RunExprWithRequest(exprStr, billingexpr.TokenParams{
 		P:   float64(promptTokens),

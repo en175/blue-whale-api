@@ -1,8 +1,10 @@
 package model
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
@@ -30,8 +32,23 @@ const (
 	PaymentMethodWaffo        = "waffo"
 	PaymentMethodWaffoPancake = "waffo_pancake"
 	PaymentMethodBlueWhalePay = "bluewhalepay"
+	PaymentMethodWxPay        = "wxpay"
+	PaymentMethodAlipay       = "alipay"
 	PaymentMethodBalance      = "balance"
 )
+
+// PaymentMethodFromWayCode 把付款码前缀收成支付方式（渠道族）。
+// WX_* → wxpay，ALI_* → alipay，其余（含空）→ bluewhalepay。
+func PaymentMethodFromWayCode(wayCode string) string {
+	switch {
+	case strings.HasPrefix(wayCode, "WX_"):
+		return PaymentMethodWxPay
+	case strings.HasPrefix(wayCode, "ALI_"):
+		return PaymentMethodAlipay
+	default:
+		return PaymentMethodBlueWhalePay
+	}
+}
 
 const (
 	PaymentProviderEpay         = "epay"
@@ -593,7 +610,8 @@ func RechargeWaffoPancake(tradeNo string) (err error) {
 // RechargeBlueWhalePay：bluewhalepay（blue-whale-pay）支付成功回调加额度。
 // pay confirmSuccess（notifyUrl 非空）→ PayMchNotifyMQ → GET 商户 notifyUrl，
 // BlueWhalePayNotify 验签后调本函数。TopUp.Amount 为充值额度（整数 quota）。
-func RechargeBlueWhalePay(tradeNo string, callerIp string) (err error) {
+// ifCode 为通知里已验签的渠道族；仅 wxpay/alipay 且与现值不同时，在 pending→success 覆盖 payment_method。
+func RechargeBlueWhalePay(ctx context.Context, tradeNo string, callerIp string, ifCode string) (err error) {
 	if tradeNo == "" {
 		return errors.New("未提供支付单号")
 	}
@@ -628,6 +646,13 @@ func RechargeBlueWhalePay(tradeNo string, callerIp string) (err error) {
 			return errors.New("无效的充值额度")
 		}
 
+		if ifCode == PaymentMethodWxPay || ifCode == PaymentMethodAlipay {
+			if topUp.PaymentMethod != ifCode {
+				logger.LogWarn(ctx, fmt.Sprintf("bluewhalepay 实际支付方式与订单不同 trade_no=%s order_payment_method=%s ifCode=%s", tradeNo, topUp.PaymentMethod, ifCode))
+				topUp.PaymentMethod = ifCode
+			}
+		}
+
 		topUp.CompleteTime = common.GetTimestamp()
 		topUp.Status = common.TopUpStatusSuccess
 		if err := tx.Save(topUp).Error; err != nil {
@@ -645,6 +670,12 @@ func RechargeBlueWhalePay(tradeNo string, callerIp string) (err error) {
 		common.SysError("bluewhalepay topup failed: " + err.Error())
 		return errors.New("充值失败，请稍后重试")
 	}
+
+	// 事务成功后失效用户 Redis 缓存，使 GET /api/usage/token 等查询立即读到新余额，
+	// 避免顶栏余额延迟到缓存 TTL（默认 60s）过期才更新。
+	go func() {
+		_ = InvalidateUserCache(topUp.UserId)
+	}()
 
 	RecordTopupLog(topUp.UserId, fmt.Sprintf("BlueWhalePay充值成功，充值额度: %v，支付金额：%.2f", logger.FormatQuota(int(quotaToAdd)), topUp.Money), callerIp, topUp.PaymentMethod, PaymentMethodBlueWhalePay)
 

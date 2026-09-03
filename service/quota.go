@@ -232,13 +232,6 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 		logger.LogError(ctx, "error settling billing: "+err.Error())
 	}
 
-	// Charge the settled tokens against the Run Capability that authorized this call. The capability
-	// bounds spend in tokens, which is only knowable here — the pre-flight check can bound what one
-	// call asks for, never what it turns out to cost.
-	if relayInfo.RunCapabilityBilling {
-		RecordRunCapabilityUsage(ctx, relayInfo.RunCapabilityDigest, totalTokens)
-	}
-
 
 	logModel := modelName
 	if extraContent != "" {
@@ -363,13 +356,6 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 		logger.LogError(ctx, "error settling billing: "+err.Error())
 	}
 
-	// Charge the settled tokens against the Run Capability that authorized this call. The capability
-	// bounds spend in tokens, which is only knowable here — the pre-flight check can bound what one
-	// call asks for, never what it turns out to cost.
-	if relayInfo.RunCapabilityBilling {
-		RecordRunCapabilityUsage(ctx, relayInfo.RunCapabilityDigest, totalTokens)
-	}
-
 
 	logModel := relayInfo.OriginModelName
 	if extraContent != "" {
@@ -407,7 +393,9 @@ func PreConsumeTokenQuota(relayInfo *relaycommon.RelayInfo, quota int) error {
 	if relayInfo.IsPlayground {
 		return nil
 	}
-	if relayInfo.RunCapabilityBilling {
+	// 网关代打没有 token 行，token 层的预扣与额度检查无从谈起（用户层的余额闸在
+	// NewBillingSession 里，那一层照常生效）。
+	if relayInfo.AgentBilling {
 		return nil
 	}
 	//if relayInfo.TokenUnlimited {
@@ -453,7 +441,7 @@ func PostConsumeQuota(relayInfo *relaycommon.RelayInfo, quota int, preConsumedQu
 		}
 	}
 
-	if !relayInfo.IsPlayground && !relayInfo.RunCapabilityBilling {
+	if !relayInfo.IsPlayground && !relayInfo.AgentBilling {
 		if quota > 0 {
 			err = model.DecreaseTokenQuota(relayInfo.TokenId, relayInfo.TokenKey, quota)
 		} else {

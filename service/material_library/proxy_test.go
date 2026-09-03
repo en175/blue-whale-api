@@ -53,7 +53,7 @@ func TestTokenhubProvider_usesConfiguredBaseURLAndKeepsClientQuery(t *testing.T)
 }
 
 // TestProxy_passesThroughRequestAndResponse 覆盖完整代理链路：Action 映射、凭证注入、
-// 请求体与上游响应（状态码/头/体）原样透传。
+// 请求体与上游响应（状态码/头/体）原样透传；CRUD 成功响应保留信封（tokenhub 本身信封）。
 func TestProxy_passesThroughRequestAndResponse(t *testing.T) {
 	var gotPath, gotQuery, gotAuth, gotBody string
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -83,11 +83,12 @@ func TestProxy_passesThroughRequestAndResponse(t *testing.T) {
 	assert.Equal(t, "Action=CreateAssetGroup&Version=2024-01-01", gotQuery)
 	assert.Equal(t, "Bearer pak_x:psk_y", gotAuth)
 	assert.Equal(t, body, gotBody)
-	assert.Equal(t, `{"Id":"group-abc"}`, rec.Body.String())
+	assert.Equal(t, `{"ResponseMetadata":{},"Result":{"Id":"group-abc"}}`, rec.Body.String())
 }
 
-// TestProxy_forwardsUpstreamErrorVerbatim 验证上游错误信封（状态码 + 体）原样透传。
-func TestProxy_forwardsUpstreamErrorVerbatim(t *testing.T) {
+// TestProxy_forwardsUpstreamErrorInTokenhubFormat 验证上游错误归一为 tokenhub 格式
+// （状态码 + {"ResponseMetadata":{},"ResponseError":{...}}），CRUD 渠道不影响错误格式。
+func TestProxy_forwardsUpstreamErrorInTokenhubFormat(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusForbidden)
@@ -103,30 +104,90 @@ func TestProxy_forwardsUpstreamErrorVerbatim(t *testing.T) {
 	Proxy().ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusForbidden, rec.Code)
-	assert.JSONEq(t, `{"ResponseError":{"Code":"Forbidden","Message":"feature not enabled"}}`, rec.Body.String())
+	// tokenhub 错误本身带 ResponseMetadata + ResponseError，归一化按 tokenhub 格式原样透传。
+	assert.JSONEq(t, `{"ResponseMetadata":{},"ResponseError":{"Code":"Forbidden","Message":"feature not enabled"}}`, rec.Body.String())
 }
 
-// TestNormalizeUpstreamResponse 表驱动验证响应归一化（统一 tokenhub 直接格式）。
+// TestProxy_volcengineCRUDKeepsEnvelope 验证火山渠道 CRUD 成功响应保留信封
+// （与 tokenhub 一致的对外格式，符合已外发接口文档），并证明确实走了火山渠道
+// provider（/ark 路径 + SigV4 签名 Authorization 头）。
+func TestProxy_volcengineCRUDKeepsEnvelope(t *testing.T) {
+	var gotPath, gotAuth string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ResponseMetadata":{"RequestId":"req-1"},"Result":{"Id":"group-volc"}}`))
+	}))
+	defer upstream.Close()
+	setConfig(t, fmt.Sprintf(`{"enabled":true,"provider":"volcengine","volcengine_access_key":"ak","volcengine_secret_key":"sk","volcengine_base_url":%q}`, upstream.URL))
+	defer setConfig(t, `{"enabled":true,"provider":"tokenhub","ak":"pak_x","sk":"psk_y","base_url":""}`)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/material/CreateAssetGroup", strings.NewReader(`{"Name":"g","GroupType":"AIGC"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	Proxy().ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.JSONEq(t, `{"ResponseMetadata":{"RequestId":"req-1"},"Result":{"Id":"group-volc"}}`, rec.Body.String())
+	// 证明走了火山渠道 provider：基础路径为 /（火山管控面根，tokenhub 才是 /ark）+ SigV4 签名头
+	assert.Equal(t, "/", gotPath)
+	assert.NotEmpty(t, gotAuth)
+}
+
+// TestNormalizeUpstreamResponse 表驱动验证响应归一化（火山渠道兼容 tokenhub 实际格式）：
+// CRUD 保留信封、会话类去信封、火山错误转 tokenhub 错误、tokenhub 直接/错误原样透传。
 func TestNormalizeUpstreamResponse(t *testing.T) {
 	cases := []struct {
-		name string
-		in   string
-		want string
+		name   string
+		action string
+		in     string
+		want   string
 	}{
-		{"tokenhub 直接原样", `{"GroupId":"g1"}`, `{"GroupId":"g1"}`},
-		{"火山成功去信封", `{"ResponseMetadata":{},"Result":{"Id":"g2"}}`, `{"Id":"g2"}`},
-		{"火山错误转 ResponseError", `{"ResponseMetadata":{"Error":{"Code":"NotFound","Message":"x"}}}`, `{"ResponseError":{"Code":"NotFound","Message":"x"}}`},
-		{"空 ResponseMetadata + ResponseError 剥信封", `{"ResponseMetadata":{},"ResponseError":{"Code":"Forbidden","Message":"f"}}`, `{"ResponseError":{"Code":"Forbidden","Message":"f"}}`},
-		{"非 JSON 原样", `not-json`, `not-json`},
+		{"tokenhub 直接原样", "GetVisualValidateResult", `{"GroupId":"g1"}`, `{"GroupId":"g1"}`},
+		{"CRUD 成功保留信封", "CreateAssetGroup", `{"ResponseMetadata":{},"Result":{"Id":"g2"}}`, `{"ResponseMetadata":{},"Result":{"Id":"g2"}}`},
+		{"会话类成功去信封", "GetVisualValidateResult", `{"ResponseMetadata":{},"Result":{"GroupId":"g3"}}`, `{"GroupId":"g3"}`},
+		{"会话类大整数保精度", "GetVisualValidateResult", `{"ResponseMetadata":{},"Result":{"GroupId":"g","ExpireAt":9007199254740993}}`, `{"GroupId":"g","ExpireAt":9007199254740993}`},
+		{"火山错误转 tokenhub 错误", "CreateAssetGroup", `{"ResponseMetadata":{"Error":{"Code":"NotFound","Message":"x"}}}`, `{"ResponseMetadata":{},"ResponseError":{"Code":"NotFound","Message":"x"}}`},
+		{"tokenhub 错误原样", "CreateAssetGroup", `{"ResponseMetadata":{},"ResponseError":{"Code":"Forbidden","Message":"f"}}`, `{"ResponseMetadata":{},"ResponseError":{"Code":"Forbidden","Message":"f"}}`},
+		{"裸 tokenhub 错误补空信封", "CreateAssetGroup", `{"ResponseError":{"Code":"InternalError","Message":"e"}}`, `{"ResponseMetadata":{},"ResponseError":{"Code":"InternalError","Message":"e"}}`},
+		{"非 JSON 原样", "CreateAssetGroup", `not-json`, `not-json`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := normalizeUpstreamResponse([]byte(tc.in))
+			got := normalizeUpstreamResponse(tc.action, []byte(tc.in))
 			if tc.name == "非 JSON 原样" {
 				assert.Equal(t, tc.want, string(got))
 			} else {
 				assert.JSONEq(t, tc.want, string(got))
 			}
+		})
+	}
+}
+
+// TestMaterialNameInvalid 表驱动验证名称校验规则：超长（>255 rune）与 HTML 危险字符 < >
+// 判非法；正常中文/英文/数字名、255 边界、以及 SQL 注入负载（网关不拦、透传上游）放行。
+// 超长拒绝防镜像表列宽溢出（tokenhub 对超长名回 500）；SQL 注入防御在上游后端，网关不代劳。
+func TestMaterialNameInvalid(t *testing.T) {
+	cases := []struct {
+		label string
+		in    string
+		want  bool
+	}{
+		{"正常中文名", "我的素材组", false},
+		{"正常英文数字", "AssetGroup-2024", false},
+		{"255 边界放行", strings.Repeat("中", 255), false},
+		{"256 超长拒绝", strings.Repeat("中", 256), true},
+		{"HTML < 拒绝", "a<b", true},
+		{"HTML > 拒绝", "a>b", true},
+		{"SQL 负载放行", `Robert'); DROP TABLE user_material_groups;--`, false},
+		{"单引号放行", "O'Brien", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.label, func(t *testing.T) {
+			got := MaterialNameInvalid(tc.in)
+			assert.Equal(t, tc.want, got, "MaterialNameInvalid(%q) = %v, want %v", tc.in, got, tc.want)
 		})
 	}
 }

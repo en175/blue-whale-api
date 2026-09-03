@@ -189,6 +189,19 @@ export const CHANNEL_TYPE_CONFIGS: Record<number, ChannelTypeConfig> = {
         '请求体按上游 seed-audio 协议透传（text_prompt/references/audio_config/watermark），响应返回 {url,...}',
     },
   },
+  63: {
+    id: 63,
+    name: CHANNEL_TYPES[63],
+    icon: 'openai',
+    defaultBaseUrl: 'https://api.highwayapi.ai/v3',
+    hints: {
+      baseUrl: 'Default: https://api.highwayapi.ai/v3',
+      key: 'Upstream API Key (Bearer)',
+      models: 'gpt-image-2-text-to-image, gpt-image-2-light-text-to-image',
+      other:
+        '模型名拼接在请求路径上（{base}/{model}）；prompt/n/size/quality/background/moderation/output_format/output_compression 及未知字段透传上游，响应 {images:[...]} 转为 OpenAI 图像格式',
+    },
+  },
 }
 
 /**

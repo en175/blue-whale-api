@@ -3,9 +3,11 @@ package material_library
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -85,9 +87,18 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	// 对外组操作/素材写入：校验 API key 用户归属（防 IDOR，只能操作自己归属的组）。
 	switch action {
-	case "GetAssetGroup", "UpdateAssetGroup", "DeleteAssetGroup":
+	case "GetAssetGroup", "DeleteAssetGroup":
 		if !groupOwnedByCurrentUser(r, body) {
 			writeMaterialNotFound(w)
+			return
+		}
+	case "UpdateAssetGroup":
+		if !groupOwnedByCurrentUser(r, body) {
+			writeMaterialNotFound(w)
+			return
+		}
+		if materialNameInvalid(body) {
+			writeMaterialBadRequest(w)
 			return
 		}
 	case "ListAssets":
@@ -106,9 +117,19 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 			writeMaterialNotFound(w)
 			return
 		}
+		if materialNameInvalid(body) {
+			writeMaterialBadRequest(w)
+			return
+		}
+	case "UpdateAsset":
+		if materialNameInvalid(body) {
+			writeMaterialBadRequest(w)
+			return
+		}
 	case "CreateAssetGroup", "CreateVisualValidateSession":
-		// 建组/真人会话：名称含 HTML 危险字符（<>）拒绝，防 XSS 存储。
-		if createAssetGroupNameInvalid(r, body) {
+		// 建组/真人会话：名称非法（超长/HTML 危险字符）拒绝，
+		// 防镜像表列宽溢出与 XSS 存储。
+		if materialNameInvalid(body) {
 			writeMaterialBadRequest(w)
 			return
 		}
@@ -125,8 +146,9 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	if customCallback != "" {
 		resp.Body = restoreClientCallback(resp.Body, customCallback)
 	}
-	// 统一返回 tokenhub 直接格式（去掉火山 ResponseMetadata/Result 信封），客户端只解析一种格式。
-	resp.Body = normalizeUpstreamResponse(resp.Body)
+	// 统一返回 tokenhub 实际格式（火山渠道兼容 tokenhub）：CRUD 保留信封、
+	// 会话类直接、错误统一 ResponseError。客户端只解析一种格式。
+	resp.Body = normalizeUpstreamResponse(action, resp.Body)
 	for k, vs := range resp.Header {
 		if k == "Content-Length" {
 			continue // 响应体已改写，旧 Content-Length 失效，交由 Go 按实际长度重算（防截断）
@@ -263,8 +285,18 @@ func handleLocalAssetGroups(w http.ResponseWriter, r *http.Request, body []byte)
 			UpdateTime: time.Unix(g.UpdatedAt, 0).UTC().Format(time.RFC3339),
 		})
 	}
-	// 统一返回 tokenhub 直接格式（无信封）：TotalCount/Items/PageNumber/PageSize 顶层。
-	data, err := common.Marshal(ListAssetGroupsResult{TotalCount: total, Items: items, PageNumber: page, PageSize: pageSize})
+	// 保持 ARK 信封格式返回（与列表接口一致）：Result 内为 TotalCount/Items/PageNumber/PageSize。
+	envelope := map[string]any{
+		"ResponseMetadata": map[string]any{
+			"RequestId": "req_local_" + strconv.Itoa(userID) + "_" + strconv.Itoa(page),
+			"Action":    "ListAssetGroups",
+			"Version":   arkVersion,
+			"Service":   "ark",
+			"Region":    material_setting.GetConfig().VolcengineRegion,
+		},
+		"Result": ListAssetGroupsResult{TotalCount: total, Items: items, PageNumber: page, PageSize: pageSize},
+	}
+	data, err := common.Marshal(envelope)
 	if err != nil {
 		http.Error(w, "list asset groups failed", http.StatusInternalServerError)
 		return
@@ -343,10 +375,9 @@ func writeVisualValidateResult(w http.ResponseWriter, provider, groupId string) 
 	_, _ = w.Write(buildVisualValidateResult(provider, groupId))
 }
 
-// buildVisualValidateResult 构造与上游一致的结果格式：
-// 火山带 ResponseMetadata/Result 信封；tokenhub 直接返回 {"GroupId": "..."}。
+// buildVisualValidateResult 构造对外 GetVisualValidateResult 结果：
+// 会话类动作 tokenhub 本身即直接格式，火山渠道兼容对齐（统一返回 {"GroupId": ...}）。
 func buildVisualValidateResult(_ string, groupId string) []byte {
-	// 统一返回 tokenhub 直接格式 {"GroupId": ...}（不分渠道），客户端只解析一种格式。
 	data, _ := common.Marshal(map[string]any{"GroupId": groupId})
 	return data
 }
@@ -413,10 +444,11 @@ func createAssetGroupOwned(r *http.Request, body []byte) bool {
 	return owned
 }
 
-// writeMaterialNotFound 返回上游风格 404 错误信封（不区分不存在/无权，避免探测）。
+// writeMaterialNotFound 返回 tokenhub 风格 404 错误（不区分不存在/无权，避免探测）。
 func writeMaterialNotFound(w http.ResponseWriter) {
 	envelope := map[string]any{
-		"ResponseError": map[string]any{"Code": "NotFound", "Message": "resource not found"},
+		"ResponseMetadata": map[string]any{},
+		"ResponseError":    map[string]any{"Code": "NotFound", "Message": "resource not found"},
 	}
 	data, _ := common.Marshal(envelope)
 	w.Header().Set("Content-Type", "application/json")
@@ -424,10 +456,11 @@ func writeMaterialNotFound(w http.ResponseWriter) {
 	_, _ = w.Write(data)
 }
 
-// writeMaterialBadRequest 返回上游风格 400 错误信封（请求参数非法，如 ListAssets 空 GroupIds）。
+// writeMaterialBadRequest 返回 tokenhub 风格 400 错误（请求参数非法，如 ListAssets 空 GroupIds）。
 func writeMaterialBadRequest(w http.ResponseWriter) {
 	envelope := map[string]any{
-		"ResponseError": map[string]any{"Code": "InvalidParameter", "Message": "invalid parameter"},
+		"ResponseMetadata": map[string]any{},
+		"ResponseError":    map[string]any{"Code": "InvalidParameter", "Message": "invalid parameter"},
 	}
 	data, _ := common.Marshal(envelope)
 	w.Header().Set("Content-Type", "application/json")
@@ -476,9 +509,7 @@ func observeOwnership(ctx context.Context, resp *Response) {
 		projectName, _ := ctx.Value(ctxProjectName).(string)
 		customCallback, _ := ctx.Value(ctxCustomCallback).(string)
 		name, _ := ctx.Value(ctxGroupName).(string)
-		if utf8.RuneCountInString(name) > 255 {
-			name = string([]rune(name)[:255]) // 按字符截断，避免切坏多字节 UTF-8 导致落库失败
-		}
+		// 组名 ≤255 rune 由 materialNameInvalid 在请求层保证（见 ADR 0007），此处不再截断。
 		// 组名取请求体 Name（调用方可选传入，上游忽略但不报错），认证后用作归属组名；无则留空。
 		// callbackURL 是发给上游的网关回调；customCallback 是客户自定义原回调（认证后 302 到它）。
 		if err := model.AddVisualValidateSession(userID, material_setting.GetConfig().Provider, name, bytedToken, h5Link, callbackURL, projectName, customCallback); err != nil {
@@ -498,9 +529,7 @@ func observeOwnership(ctx context.Context, resp *Response) {
 			return
 		}
 		name, _ := ctx.Value(ctxGroupName).(string)
-		if utf8.RuneCountInString(name) > 255 {
-			name = string([]rune(name)[:255]) // 按字符截断，避免切坏多字节 UTF-8 导致落库失败
-		}
+		// 组名 ≤255 rune 由 materialNameInvalid 在请求层保证（见 ADR 0007），此处不再截断。
 		if err := model.AddUserMaterialGroup(userID, material_setting.GetConfig().Provider, out.Result.Id, name, groupType); err != nil {
 			logger.LogError(ctx, "material library record group failed: "+err.Error())
 		}
@@ -573,39 +602,69 @@ func readJSONBodyField(c *gin.Context, field string) string {
 	return readJSONBodyFields(c, field)[field]
 }
 
-// createAssetGroupNameInvalid 判断建组名称含 HTML 危险字符（< >），拒绝防 XSS 存储。
-func createAssetGroupNameInvalid(r *http.Request, body []byte) bool {
+// MaterialNameInvalid 判断名称字段非法（对外代理与管理端共用）：
+//   - 超过 255 rune：防镜像表列宽溢出；超长透传上游 tokenhub 会 500（未优雅拒绝）
+//   - 含 HTML 危险字符 < >：防 XSS 存储
+// SQL 注入负载不在此校验：网关是透明代理，注入防御在上游后端，网关照常透传（错误统一归一化处理）。
+func MaterialNameInvalid(name string) bool {
+	return utf8.RuneCountInString(name) > 255 || strings.ContainsAny(name, "<>")
+}
+
+// materialNameInvalid 读取请求体 Name 字段并判非法，供对外代理在透传上游前拒绝。
+func materialNameInvalid(body []byte) bool {
 	var req struct {
 		Name string `json:"Name"`
 	}
 	_ = common.Unmarshal(body, &req)
-	return strings.ContainsAny(req.Name, "<>")
+	return MaterialNameInvalid(req.Name)
 }
 
-// normalizeUpstreamResponse 把上游响应统一成 tokenhub 直接格式（去掉火山 ResponseMetadata/Result 信封），
-// 使对外接口不分渠道返回同一种格式：
-// - 无 ResponseMetadata（tokenhub 直接）→ 原样
-// - 火山错误（ResponseMetadata.Error）→ 转 tokenhub 错误格式 ResponseError
-// - 火山成功（Result）→ 直接返回 Result 内容
-func normalizeUpstreamResponse(body []byte) []byte {
-	var m map[string]any
-	if err := common.Unmarshal(body, &m); err != nil {
+// normalizeUpstreamResponse 把上游响应归一成与 tokenhub 一致的对外格式（火山渠道兼容 tokenhub）：
+// - 无 ResponseMetadata（tokenhub 直接成功，如会话类 {"GroupId":...}）→ 原样
+// - 裸 tokenhub 错误（顶层 ResponseError、无 ResponseMetadata）→ 补空 ResponseMetadata，统一错误格式
+// - 火山错误（ResponseMetadata.Error）→ 转 tokenhub 错误格式 {"ResponseMetadata":{},"ResponseError":{...}}
+// - 会话类成功（CreateVisualValidateSession/GetVisualValidateResult 的 Result）→ 直接返回 Result 原字节（tokenhub 会话类即直接格式）
+// - CRUD 成功（Result）→ 保留信封（tokenhub CRUD 本身也返回信封，两渠道一致）
+// 其余（如空 ResponseMetadata + 顶层 ResponseError）视为 tokenhub 格式原样透传。
+// 分类约定：仅会话类动作剥壳，其余（CRUD）默认保留信封——新增直接格式动作时需同步此规则。
+// Result/ResponseError 以 json.RawMessage 保留原字节，避免 map 重 marshal 的 float64 精度损失。
+func normalizeUpstreamResponse(action string, body []byte) []byte {
+	var parsed struct {
+		ResponseMetadata map[string]any  `json:"ResponseMetadata"`
+		ResponseError    json.RawMessage `json:"ResponseError"`
+		Result           json.RawMessage `json:"Result"`
+	}
+	if err := common.Unmarshal(body, &parsed); err != nil {
 		return body
 	}
-	meta, ok := m["ResponseMetadata"].(map[string]any)
-	if !ok {
+	if parsed.ResponseMetadata == nil {
+		// 无信封：tokenhub 直接成功或裸错误。
+		if len(parsed.ResponseError) > 0 {
+			// 裸 tokenhub 错误补空 ResponseMetadata，对齐文档错误契约。
+			data, _ := common.Marshal(map[string]any{
+				"ResponseMetadata": map[string]any{},
+				"ResponseError":    parsed.ResponseError,
+			})
+			return data
+		}
 		return body // 已是 tokenhub 直接格式
 	}
-	if e, ok := meta["Error"].(map[string]any); ok {
-		data, _ := common.Marshal(map[string]any{"ResponseError": e})
+	if e, ok := parsed.ResponseMetadata["Error"].(map[string]any); ok {
+		// 火山错误 → tokenhub 错误格式。
+		data, _ := common.Marshal(map[string]any{
+			"ResponseMetadata": map[string]any{},
+			"ResponseError":    e,
+		})
 		return data
 	}
-	if result, ok := m["Result"].(map[string]any); ok {
-		data, _ := common.Marshal(result)
-		return data
+	if len(parsed.Result) > 0 {
+		if action == "CreateVisualValidateSession" || action == "GetVisualValidateResult" {
+			// 会话类：直接返回 Result 原字节（避免 float64 精度损失）。
+			// GetVisualValidateResult 在 proxyHandler 提前返回，此处主要被单测/未来重构触达。
+			return parsed.Result
+		}
+		// CRUD：tokenhub 也返回信封，原样保留。
+		return body
 	}
-	// ResponseMetadata 存在但无 Error/Result（如空 {} + 顶层 ResponseError）：剥掉信封残留，保留其余字段。
-	delete(m, "ResponseMetadata")
-	data, _ := common.Marshal(m)
-	return data
+	return body
 }

@@ -48,25 +48,117 @@ func RunExprByHashWithRequest(exprStr, hash string, params TokenParams, request 
 	return runProgram(prog, params, request)
 }
 
+// numericArg converts any Go numeric value to float64. The expr vm calls env
+// functions through reflection without argument conversion, so integer operands
+// (e.g. a `param("n") ?? 1` fallback) used to abort billing with
+// "reflect: Call using int as type float64"; accepting all numeric types keeps
+// those expressions working.
+func numericArg(value interface{}) (float64, error) {
+	switch n := value.(type) {
+	case float64:
+		return n, nil
+	case float32:
+		return float64(n), nil
+	case int:
+		return float64(n), nil
+	case int8:
+		return float64(n), nil
+	case int16:
+		return float64(n), nil
+	case int32:
+		return float64(n), nil
+	case int64:
+		return float64(n), nil
+	case uint:
+		return float64(n), nil
+	case uint8:
+		return float64(n), nil
+	case uint16:
+		return float64(n), nil
+	case uint32:
+		return float64(n), nil
+	case uint64:
+		return float64(n), nil
+	default:
+		return 0, fmt.Errorf("expected a number, got %T", value)
+	}
+}
+
+// Tolerant math helpers shared by the compile-time prototype (compile.go) and
+// the runtime environment below; their Go types must stay identical in both
+// places because the expr vm matches env functions against the compiled
+// program's expectations.
+func mathMax(a, b interface{}) (float64, error) {
+	x, err := numericArg(a)
+	if err != nil {
+		return 0, fmt.Errorf("max: %w", err)
+	}
+	y, err := numericArg(b)
+	if err != nil {
+		return 0, fmt.Errorf("max: %w", err)
+	}
+	return math.Max(x, y), nil
+}
+
+func mathMin(a, b interface{}) (float64, error) {
+	x, err := numericArg(a)
+	if err != nil {
+		return 0, fmt.Errorf("min: %w", err)
+	}
+	y, err := numericArg(b)
+	if err != nil {
+		return 0, fmt.Errorf("min: %w", err)
+	}
+	return math.Min(x, y), nil
+}
+
+func mathAbs(value interface{}) (float64, error) {
+	v, err := numericArg(value)
+	if err != nil {
+		return 0, fmt.Errorf("abs: %w", err)
+	}
+	return math.Abs(v), nil
+}
+
+func mathCeil(value interface{}) (float64, error) {
+	v, err := numericArg(value)
+	if err != nil {
+		return 0, fmt.Errorf("ceil: %w", err)
+	}
+	return math.Ceil(v), nil
+}
+
+func mathFloor(value interface{}) (float64, error) {
+	v, err := numericArg(value)
+	if err != nil {
+		return 0, fmt.Errorf("floor: %w", err)
+	}
+	return math.Floor(v), nil
+}
+
 func runProgram(prog *vm.Program, params TokenParams, request RequestInput) (float64, TraceResult, error) {
 	trace := TraceResult{}
 	headers := normalizeHeaders(request.Headers)
 
 	env := map[string]interface{}{
-		"p":    params.P,
-		"c":    params.C,
-		"len":  params.Len,
-		"cr":   params.CR,
-		"cc":   params.CC,
-		"cc1h": params.CC1h,
-		"img":  params.Img,
+		"p":     params.P,
+		"c":     params.C,
+		"len":   params.Len,
+		"cr":    params.CR,
+		"cc":    params.CC,
+		"cc1h":  params.CC1h,
+		"img":   params.Img,
 		"img_o": params.ImgO,
-		"ai":   params.AI,
-		"ao":   params.AO,
-		"tier": func(name string, value float64) float64 {
+		"ai":    params.AI,
+		"ao":    params.AO,
+		"tier": func(name string, value interface{}) (float64, error) {
+			v, err := numericArg(value)
+			if err != nil {
+				return 0, fmt.Errorf("tier(%s): %w", name, err)
+			}
 			trace.MatchedTier = name
-			trace.Cost = value
-			return value
+			trace.Cost = v
+			return v, nil
 		},
 		"header": func(key string) string {
 			return headers[strings.ToLower(strings.TrimSpace(key))]
@@ -93,11 +185,11 @@ func runProgram(prog *vm.Program, params TokenParams, request RequestInput) (flo
 		"weekday": func(tz string) int { return int(timeInZone(tz).Weekday()) },
 		"month":   func(tz string) int { return int(timeInZone(tz).Month()) },
 		"day":     func(tz string) int { return timeInZone(tz).Day() },
-		"max":     math.Max,
-		"min":   math.Min,
-		"abs":   math.Abs,
-		"ceil":  math.Ceil,
-		"floor": math.Floor,
+		"max":     mathMax,
+		"min":     mathMin,
+		"abs":     mathAbs,
+		"ceil":    mathCeil,
+		"floor":   mathFloor,
 	}
 
 	out, err := expr.Run(prog, env)

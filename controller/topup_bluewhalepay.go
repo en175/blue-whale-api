@@ -63,7 +63,7 @@ func RequestBlueWhalePayPay(c *gin.Context) {
 		Amount:          amount,   // 美元额度数量（N，加 quota = N × QuotaPerUnit）
 		Money:           payMoney, // 实付金额（元，getPayMoney 算）
 		TradeNo:         tradeNo,
-		PaymentMethod:   model.PaymentMethodBlueWhalePay,
+		PaymentMethod:   model.PaymentMethodFromWayCode(wayCode),
 		PaymentProvider: model.PaymentProviderBlueWhalePay,
 		CreateTime:      time.Now().Unix(),
 		Status:          common.TopUpStatusPending,
@@ -138,7 +138,7 @@ func BlueWhalePayNotify(c *gin.Context) {
 
 	LockOrder(mchOrderNo)
 	defer UnlockOrder(mchOrderNo)
-	if err := model.RechargeBlueWhalePay(mchOrderNo, c.ClientIP()); err != nil {
+	if err := model.RechargeBlueWhalePay(c.Request.Context(), mchOrderNo, c.ClientIP(), params["ifCode"]); err != nil {
 		common.SysError("bluewhalepay notify 加额度失败 mchOrderNo=" + mchOrderNo + " err=" + err.Error())
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return

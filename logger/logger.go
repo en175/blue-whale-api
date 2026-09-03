@@ -2,11 +2,13 @@ package logger
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -95,8 +97,24 @@ func LogDebug(ctx context.Context, msg string, args ...any) {
 }
 
 func logHelper(ctx context.Context, level string, msg string) {
+	logWithFields(ctx, level, msg, nil, 4)
+}
+
+// LogWithFields 带结构化字段的一行日志（IKB29O）。
+//
+// 此前只有 msg 一个参数，于是「方法、路径、状态码、耗时」这类要被机器过滤和聚合的东西，
+// 只能拼进正文里再靠正则捞出来。字段进字段，正文进正文。
+//
+// skip 由调用方语义决定，这里固定为「调用 LogWithFields 的那一行」。
+func LogWithFields(ctx context.Context, level string, msg string, fields map[string]any) {
+	// skip=3：callerInfo -> logWithFields -> LogWithFields -> 调用点。比 logHelper 少一层，
+	// 因为它不经过 LogInfo/LogWarn 那一跳。
+	logWithFields(ctx, level, msg, fields, 3)
+}
+
+func logWithFields(ctx context.Context, level string, msg string, fields map[string]any, skip int) {
 	var id any = "SYSTEM"
-	var traceId string
+	var traceId, clientTraceId, clientAddress, peerAddress string
 	if ctx != nil {
 		if requestID := ctx.Value(common.RequestIdKey); requestID != nil {
 			id = requestID
@@ -106,26 +124,70 @@ func logHelper(ctx context.Context, level string, msg string) {
 				traceId = s
 			}
 		}
+		// 入站 trace id 被拒时的原值。中间件把它放进 context，但此前没有任何地方读——
+		// 那等于「不丢线索」只做了一半：存下来了，从没写出去过。
+		if ctid := ctx.Value(common.ClientTraceIdKey); ctid != nil {
+			if s, ok := ctid.(string); ok {
+				clientTraceId = s
+			}
+		}
+		// 调用方地址，逐行带（IKB29O）。RequestId 中间件放进 context；取不到就不写这两个键，
+		// 不写空串——后台任务本来就没有地址，写成空串会让人以为是采集失败。
+		if addr := ctx.Value(common.ClientAddressKey); addr != nil {
+			if s, ok := addr.(string); ok {
+				clientAddress = s
+			}
+		}
+		if addr := ctx.Value(common.PeerAddressKey); addr != nil {
+			if s, ok := addr.(string); ok {
+				peerAddress = s
+			}
+		}
 	}
 	now := time.Now()
-	traceField := traceId
-	if traceField == "" {
-		traceField = "-"
+	// 调用位置现在两条通道都要（stdout 也是结构化的了），不再只在 TLS 启用时计算。
+	// 代价是每条日志约 1µs，另外两个仓一直在付同样的价钱。
+	// skip 从调用方传进来：callerInfo -> logWithFields -> logHelper/LogWithFields -> 调用点。
+	callerFile, callerLine, funcName := callerInfo(skip)
+	requestID := fmt.Sprintf("%v", id)
+
+	// stdout 输出单行 JSON（IKB29O D1），字段与投递给 TLS 的完全一致。
+	// 此前是竖线分隔文本：值里含竖线或空格就破坏切分，而且机器解析不了。
+	// 代价是 docker logs 不再适合肉眼直接扫，用 jq。
+	record := logRecord(level, now, requestID, traceId, callerFile, callerLine, funcName, msg)
+	if clientTraceId != "" {
+		record[common.ClientTraceIdKey] = clientTraceId
 	}
-	// 仅 TLS 启用时计算调用位置（runtime.Caller 有微小开销）。
-	// skip=3：callerInfo -> logHelper -> LogInfo/LogWarn/LogError/LogDebug -> 业务调用点
-	var caller, funcName string
-	if tlsLogChan != nil {
-		caller, funcName = callerInfo(3)
+	if clientAddress != "" {
+		record[common.ClientAddressKey] = clientAddress
+	}
+	if peerAddress != "" {
+		record[common.PeerAddressKey] = peerAddress
+	}
+	for key, value := range fields {
+		// 附加字段不许顶掉基础字段——一个调用方传进来的 body 或 trace_id 会让整条链断在这里。
+		if logRecordFieldSet[key] {
+			continue
+		}
+		if text, ok := value.(string); ok {
+			record[key] = redactLogField(key, text)
+		} else {
+			record[key] = value
+		}
+	}
+	line, err := json.Marshal(record)
+	if err != nil {
+		// 序列化失败也必须留下这一行——丢掉它才是真的损失。
+		line = []byte(fmt.Sprintf("{\"severity_text\":%q,\"body\":%q}", strings.ToLower(level), msg))
 	}
 	common.LogWriterMu.RLock()
 	writer := gin.DefaultErrorWriter
 	if level == loggerINFO {
 		writer = gin.DefaultWriter
 	}
-	_, _ = fmt.Fprintf(writer, "[%s] %v | %s | %s | %s \n", level, now.Format("2006/01/02 - 15:04:05"), id, traceField, msg)
+	_, _ = fmt.Fprintf(writer, "%s\n", line)
 	common.LogWriterMu.RUnlock()
-	sendLogToTLS(level, now, fmt.Sprintf("%v", id), traceId, caller, funcName, msg)
+	sendLogToTLS(record)
 	logCount++ // we don't need accurate count, so no lock here
 	if logCount > maxLogCount && !setupLogWorking {
 		logCount = 0

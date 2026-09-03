@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
+	"github.com/stretchr/testify/require"
 )
 
 // ---------------------------------------------------------------------------
@@ -986,6 +987,49 @@ func TestLen_ZeroDefaultsToZero(t *testing.T) {
 	if trace.MatchedTier != "standard" {
 		t.Errorf("tier = %q, want standard (len=0 <= 200000)", trace.MatchedTier)
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Numeric tolerance: integer operands (e.g. `param(...) ?? 1` fallbacks) must
+// not abort billing with a reflect type error. Regression for IKB66R.
+// ---------------------------------------------------------------------------
+
+func TestMathHelpers_IntegerOperands(t *testing.T) {
+	// Integer literals and nil-coalesced fallbacks reach the math helpers as
+	// Go ints; they must be converted instead of panicking with
+	// "reflect: Call using int as type float64".
+	cost, _, err := billingexpr.RunExprWithRequest(
+		`max((param("image.#") ?? 1) - 1, 0) * 20000 + abs(-2) + ceil(1.2) + floor(2.8) + min(3, 4)`,
+		billingexpr.TokenParams{},
+		billingexpr.RequestInput{}, // param() -> nil, exercises the `?? 1` fallback
+	)
+	require.NoError(t, err)
+	want := 0*20000 + 2.0 + 2.0 + 2.0 + 3.0 // max(0,0)+abs+ceil+floor+min
+	require.InDelta(t, want, cost, 1e-9)
+}
+
+func TestTier_IntegerValue(t *testing.T) {
+	// tier() receiving an int value must not fail and must record the tier.
+	cost, trace, err := billingexpr.RunExprWithRequest(
+		`tier("standard", (param("n") ?? 1) * 42857)`,
+		billingexpr.TokenParams{},
+		billingexpr.RequestInput{},
+	)
+	require.NoError(t, err)
+	require.InDelta(t, 42857.0, cost, 1e-9)
+	require.Equal(t, "standard", trace.MatchedTier)
+}
+
+func TestMathHelpers_NonNumericOperandRejected(t *testing.T) {
+	// Non-numeric operands are a configuration error; they must surface as a
+	// clean run error rather than a reflect panic.
+	_, _, err := billingexpr.RunExprWithRequest(
+		`max(param("size"), 0)`,
+		billingexpr.TokenParams{},
+		billingexpr.RequestInput{Body: []byte(`{"size":"2048x2048"}`)},
+	)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "max")
 }
 
 // ---------------------------------------------------------------------------
