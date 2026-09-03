@@ -42,6 +42,8 @@ export interface SystemConfig {
   systemName: string
   logo: string
   footerHtml?: string
+  /** 公司名配置项（CompanyName），海外版展示香港微甜科技、国内版展示杭州玄浮科技 */
+  companyName?: string
   demoSiteEnabled?: boolean
   displayTokenStatEnabled?: boolean
   currency: CurrencyConfig
