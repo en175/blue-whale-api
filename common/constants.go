@@ -17,6 +17,7 @@ var SystemName = "New API"
 var Footer = ""
 var Logo = ""
 var TopUpLink = ""
+var CompanyName = ""
 
 // ModernizePath rewrites legacy /console/* paths to their modern equivalents
 // in the default frontend. The classic frontend has been removed, so the
