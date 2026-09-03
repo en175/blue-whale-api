@@ -10,27 +10,30 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// 验收标准：timestamp 恒为 +08:00 的 ISO 8601，带毫秒（IKB29O D2）。
+// 验收标准：timestamp 恒为 UTC 的 ISO 8601，带毫秒（IKB29O D2）。
 //
-// 关键不在「+8」而在「固定」：跨服务按字符串排序只在三家偏移**完全一致**时成立。本轮修过一次
-// 混合偏移的 bug（这边写 +08:00、Node 两侧写 Z，+08:00 排在 Z 后面尽管实际更早）。偏移写死之后
-// 它和当初的 UTC 一样确定，而人读日志不必再心算减八小时。
-func TestLogRecord_TimestampIsPlusEightWithMillis(t *testing.T) {
+// 关键不在「哪个时区」而在「三家一致且写死」：跨服务按字符串排序只在三家写同一个时区时成立。
+// 本轮修过一次混合偏移的 bug（这边写 +08:00、Node 两侧写 Z，+08:00 排在 Z 后面尽管实际更早）。
+//
+// 2026-09-03 从 +08:00 改成 UTC：排查一定是把日志行、它写出的那条库记录、它返回的那个 API
+// 响应放在一起看，而那三样已经全是 UTC（本仓 logs.created_at 就是 bigint 真 UTC epoch）。
+// 日志曾是唯一的例外，于是每次交叉引用都要付八小时心算。
+func TestLogRecord_TimestampIsUTCWithMillis(t *testing.T) {
 	// 源时刻用 UTC 给，确保断言检验的是换算而不是"原样打印"。
 	at := time.Date(2026, 9, 2, 8, 10, 42, 575_000_000, time.UTC)
 
 	record := logRecord("INFO", at, "req-1", "trace-12345678", "logger/logger.go", 42, "logHelper", "起来了")
 
-	assert.Equal(t, "2026-09-02T16:10:42.575+08:00", record["timestamp"])
+	assert.Equal(t, "2026-09-02T08:10:42.575Z", record["timestamp"])
 }
 
-// 验收标准：偏移不依赖容器时区。LoadLocation 要读 tzdata，镜像裁掉就会失败并退回 UTC，
-// 一个容器退回就把跨服务排序静默毁掉。
-func TestLogRecord_TimestampOffsetIsFixed(t *testing.T) {
+// 验收标准：时区不依赖容器配置。LoadLocation 要读 tzdata，镜像裁掉就会失败，
+// 一个容器换了时区就把跨服务排序静默毁掉。time.UTC 是常量，读不到任何外部数据。
+func TestLogRecord_TimestampZoneIsFixed(t *testing.T) {
 	at := time.Date(2026, 9, 2, 8, 10, 42, 575_000_000, time.UTC)
 	for _, loc := range []*time.Location{time.UTC, time.FixedZone("UTC-5", -5*3600)} {
 		record := logRecord("INFO", at.In(loc), "", "", "", 0, "", "")
-		assert.Equal(t, "2026-09-02T16:10:42.575+08:00", record["timestamp"],
+		assert.Equal(t, "2026-09-02T08:10:42.575Z", record["timestamp"],
 			"源时刻所在时区不应影响输出：%v", loc)
 	}
 }
@@ -129,8 +132,9 @@ func TestLogRecordFieldSet_MatchesOrder(t *testing.T) {
 
 // 验收标准：投递时刻能从记录自己的 timestamp 反解出来。
 //
-// 写 +08:00 却按 "…Z" 的布局串解析，会每条都失败并静默退回 time.Now()——TLS 的时间轴与字段值
-// 从此差出批量投递的那点延迟，而且不报错。改偏移时最容易漏掉的就是这处。
+// 布局串与写出的格式对不上，会每条都解析失败并静默退回 time.Now()——TLS 的时间轴与字段值
+// 从此差出批量投递的那点延迟，而且不报错。改时区时最容易漏掉的就是这处。
+// （sendLogToTLS 用 RFC3339Nano，认任意偏移，所以 +08:00 → Z 这次不必改它。）
 func TestLogRecord_TimestampRoundTripsForDelivery(t *testing.T) {
 	at := time.Date(2026, 9, 2, 8, 10, 42, 575_000_000, time.UTC)
 	record := logRecord("INFO", at, "", "", "", 0, "", "")
