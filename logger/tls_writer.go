@@ -207,15 +207,20 @@ func tlsDispatchLoop() {
 // 三仓逐字相同，改一边要改三边——留下任何一个旧名，跨服务查询就要为那个仓写特例。
 // logRecordFieldOrder 投递给 TLS 时的字段顺序。map 的遍历顺序随机，而 TLS 控制台按顺序
 // 展示——同一条链路的日志每行字段排列不同，人眼对比时会以为是不同结构。
-// logTimeZone 日志时间戳的固定时区：+08:00，三仓共用的那一个墙上时钟。
+// logTimeZone 日志时间戳的时区：UTC，三仓共用的那一个墙上时钟。
 //
-// **FixedZone 而不是 LoadLocation("Asia/Shanghai")**：后者要读容器里的 tzdata，镜像没装或裁掉
-// 时会失败，届时只能退回 UTC——而跨服务按字符串排序只在三家偏移**完全一致**时成立，一个容器
-// 退回 UTC 就把排序静默毁掉。那正是本轮修过一次的 bug（Go 写 +08:00、Node 写 Z，+08:00 排在
-// Z 后面尽管实际更早）。固定偏移不依赖任何外部数据，和原来的 UTC 一样确定。
+// **time.UTC 而不是 LoadLocation / FixedZone**：前者要读容器里的 tzdata，镜像没装或裁掉时会
+// 失败；后者不依赖外部数据但要求三家写同一个偏移。跨服务按字符串排序只在三家写同一个时区时
+// 成立，一个容器换了时区就把排序静默毁掉——那正是本轮修过一次的 bug（Go 写 +08:00、Node 写
+// Z，+08:00 排在 Z 后面尽管实际更早）。time.UTC 是常量，不依赖任何外部数据。
 //
-// 中国不实行夏令时，固定 +08:00 全年成立。
-var logTimeZone = time.FixedZone("UTC+8", 8*60*60)
+// **2026-09-03 从 +08:00 改成 UTC，理由不是「UTC 更标准」。** 上一版写 +08:00 是因为看日志的人
+// 都在这个时区。那个论证只在「日志被单独读」时成立，而排查一定是把日志行、它写出的那条库记录、
+// 它返回的那个 API 响应放在一起看——那三样已经全是 UTC：agent 的 REST 响应是 `...Z`，
+// blue_whale / blue_whale_agent 的 datetime 存 UTC 墙钟，本仓自己的 logs.created_at 是
+// bigint 真 UTC epoch（实测 1788357317 = 2026-09-02 13:55:17 UTC，没有被 +8 偏移过）。
+// 日志曾是整个系统里唯一的例外，于是每一次交叉引用都要付八小时心算。
+var logTimeZone = time.UTC
 
 var logRecordFieldSet = func() map[string]bool {
 	set := make(map[string]bool, len(logRecordFieldOrder))
@@ -251,7 +256,9 @@ func logRecord(level string, t time.Time, requestID, traceID, callerFile string,
 		"severity_text": strings.ToLower(level),
 		// ISO 8601、带毫秒、恒为 +08:00。此前是 "2006-01-02 15:04:05"，无毫秒无时区——跨服务
 		// 按时间排序时毫秒级先后关系丢失，而待排查的延迟正在几十到几百毫秒量级。
-		"timestamp":                   t.In(logTimeZone).Format("2006-01-02T15:04:05.000-07:00"),
+		// Z07:00 在 UTC 下输出 "Z"，非 UTC 下输出偏移——配合上面的 time.UTC，结果恒为
+		// "2026-09-02T13:55:12.887Z"，与 Node 两仓的 toISOString() 逐字符相同。
+		"timestamp":                   t.In(logTimeZone).Format("2006-01-02T15:04:05.000Z07:00"),
 		"service_name":                serviceName,
 		"service_instance_id":         tlsInstanceID,
 		"host_ip":                     tlsHostIP,
