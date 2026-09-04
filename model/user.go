@@ -49,6 +49,7 @@ type User struct {
 	LinuxDOId        string                     `json:"linux_do_id" gorm:"column:linux_do_id;index"`
 	Setting          string                     `json:"setting" gorm:"type:text;column:setting"`
 	Remark           string                     `json:"remark,omitempty" gorm:"type:varchar(255)" validate:"max=255"`
+	AllowedSystems   string                     `json:"allowed_systems" gorm:"type:varchar(128);column:allowed_systems"` // 可登录系统白名单，逗号分隔(bluewhale,api)，空=全放行
 	StripeCustomer   string                     `json:"stripe_customer" gorm:"type:varchar(64);column:stripe_customer;index"`
 	CreatedAt        int64                      `json:"created_at" gorm:"autoCreateTime;column:created_at"`
 	LastLoginAt      int64                      `json:"last_login_at" gorm:"default:0;column:last_login_at"`
@@ -705,6 +706,11 @@ func (user *User) EditWithTx(tx *gorm.DB, updatePassword bool) error {
 		}
 	}
 
+	current := User{}
+	if err = tx.First(&current, user.Id).Error; err != nil {
+		return err
+	}
+
 	newUser := *user
 	updates := map[string]interface{}{
 		"username":     newUser.Username,
@@ -712,14 +718,21 @@ func (user *User) EditWithTx(tx *gorm.DB, updatePassword bool) error {
 		"group":        newUser.Group,
 		"remark":       newUser.Remark,
 	}
+	// allowed_systems 只在显式提供（非空）时写入，防止调用方未感知该字段（空串零值）
+	// 把已收紧账号意外扩成全放行。root 账号特殊：始终走规范化并强制保留控制台登录权
+	// （api 不可移除），管理员清空白名单也会落成 "api"。
+	if newUser.AllowedSystems != "" || current.Role == common.RoleRootUser {
+		newUser.AllowedSystems = NormalizeAllowedSystems(newUser.AllowedSystems)
+		if current.Role == common.RoleRootUser {
+			newUser.AllowedSystems = ForceSystem(newUser.AllowedSystems, common.AllowedSystemApi)
+		}
+		updates["allowed_systems"] = newUser.AllowedSystems
+	}
+
 	if updatePassword {
 		updates["password"] = newUser.Password
 	}
 
-	current := User{}
-	if err = tx.First(&current, user.Id).Error; err != nil {
-		return err
-	}
 	if err = tx.Model(&current).Updates(updates).Error; err != nil {
 		return err
 	}

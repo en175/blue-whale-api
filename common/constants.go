@@ -199,6 +199,21 @@ const (
 	RoleRootUser   = 100
 )
 
+// 账号可登录系统白名单（users.allowed_systems）。
+// 空串 = 全放行（存量账号零迁移即保持双系统可登录）；逗号分隔，如 "bluewhale,api"。
+// 登录时网关按 X-Client-System 头判断来源系统，账号白名单不含该来源则拒绝登录。
+// 纯函数实现在 model/user_allowed_system.go；controller 解析见 controller/user_system.go。
+const (
+	// AllowedSystemBlueWhale 蓝鲸（blue-whale-ai BFF）
+	AllowedSystemBlueWhale = "bluewhale"
+	// AllowedSystemApi new-api 控制台（web/default）
+	AllowedSystemApi = "api"
+	// AllowedSystemSeparator 白名单分隔符
+	AllowedSystemSeparator = ","
+	// HeaderClientSystem 登录/注册来源系统请求头
+	HeaderClientSystem = "X-Client-System"
+)
+
 func IsValidateRole(role int) bool {
 	return role == RoleGuestUser || role == RoleCommonUser || role == RoleAdminUser || role == RoleRootUser
 }

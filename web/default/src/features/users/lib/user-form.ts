@@ -41,6 +41,7 @@ export const userFormSchema = z.object({
   quota_dollars: z.number().min(0).optional(),
   group: z.string().optional(),
   remark: z.string().optional(),
+  allowed_systems: z.string().optional(),
   admin_permissions: z
     .record(z.string(), z.record(z.string(), z.boolean()))
     .optional(),
@@ -60,6 +61,7 @@ export const USER_FORM_DEFAULT_VALUES: UserFormValues = {
   quota_dollars: 0,
   group: DEFAULT_GROUP,
   remark: '',
+  allowed_systems: 'bluewhale,api', // 显式等价全放行；空串也是全放行（后端语义）
   // Filled against the backend catalog at render time; see UsersMutateDrawer.
   admin_permissions: {},
 }
@@ -83,6 +85,9 @@ export function transformFormDataToPayload(
   }
 
   const role = userId === undefined ? data.role || 1 : (data.role ?? 0)
+
+  // 登录白名单：create 与 update 都随表单提交（空串=全放行，后端按此收紧）
+  payload.allowed_systems = data.allowed_systems || undefined
 
   // Only send the permission matrix when the target is an admin and the catalog
   // is available; without the catalog we cannot build a full matrix, so we omit
@@ -121,6 +126,7 @@ export function transformUserToFormDefaults(user: User): UserFormValues {
     quota_dollars: quotaUnitsToDollars(user.quota),
     group: user.group || DEFAULT_GROUP,
     remark: user.remark || '',
+    allowed_systems: user.allowed_systems || '',
     admin_permissions: user.admin_permissions ?? {},
   }
 }
