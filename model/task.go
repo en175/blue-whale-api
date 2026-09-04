@@ -106,6 +106,24 @@ type TaskPrivateData struct {
 	TokenId        int                 `json:"token_id,omitempty"`        // 令牌 ID，用于令牌额度退款
 	NodeName       string              `json:"node_name,omitempty"`       // 发起任务的节点名，轮询结算阶段据此归属日志而非最后查询节点
 	BillingContext *TaskBillingContext `json:"billing_context,omitempty"` // 计费参数快照（用于轮询阶段重新计算）
+
+	// VolcEngine Enhanced (type 64)
+	RequestedResolution          string  `json:"requested_resolution,omitempty"`
+	UpstreamResolution           string  `json:"upstream_resolution,omitempty"`
+	RequestedRatio               string  `json:"requested_ratio,omitempty"`
+	OriginModelName              string  `json:"origin_model_name,omitempty"`
+	UpstreamCompletionTokens     int     `json:"upstream_completion_tokens,omitempty"`
+	UpstreamTotalTokens          int     `json:"upstream_total_tokens,omitempty"`
+	PeeledTotalTokens            int     `json:"peeled_total_tokens,omitempty"`
+	EnhanceJobID                 string  `json:"enhance_job_id,omitempty"`
+	EnhanceAttempt               int     `json:"enhance_attempt,omitempty"`
+	EnhanceStatus                string  `json:"enhance_status,omitempty"`
+	EnhanceSourceURL             string  `json:"enhance_source_url,omitempty"`
+	OutputDurationMs             int64   `json:"output_duration_ms,omitempty"`
+	SourceFps                    int     `json:"source_fps,omitempty"`
+	ChannelOriginalQuotaDeducted int     `json:"channel_original_quota_deducted,omitempty"`
+	ChannelCostUsesUpstreamTier  bool    `json:"channel_cost_uses_upstream_tier,omitempty"`
+	UpstreamVideoInputRatio      float64 `json:"upstream_video_input_ratio,omitempty"`
 }
 
 // TaskBillingContext 记录任务提交时的计费参数，以便轮询阶段可以重新计算额度。
@@ -183,6 +201,16 @@ func InitTask(platform constant.TaskPlatform, relayInfo *commonRelay.RelayInfo) 
 		}
 		if relayInfo.OriginModelName != "" {
 			properties.OriginModelName = relayInfo.OriginModelName
+		}
+		if relayInfo.TaskRelayInfo != nil {
+			privateData.RequestedResolution = relayInfo.RequestedResolution
+			privateData.UpstreamResolution = relayInfo.UpstreamResolution
+			privateData.RequestedRatio = relayInfo.RequestedRatio
+			privateData.OriginModelName = relayInfo.OriginModelName
+			privateData.OutputDurationMs = relayInfo.OutputDurationMs
+			privateData.ChannelOriginalQuotaDeducted = relayInfo.ChannelOriginalQuota
+			privateData.ChannelCostUsesUpstreamTier = relayInfo.ChannelCostUsesUpstreamTier
+			privateData.UpstreamVideoInputRatio = relayInfo.UpstreamVideoInputRatio
 		}
 	}
 

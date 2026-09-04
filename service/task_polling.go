@@ -41,6 +41,13 @@ type TaskResultURLExtractor interface {
 	ExtractTaskResultURL(body []byte) string
 }
 
+// TaskEnhancer 是可选接口：Seedance 成片就绪后、写入对客 ResultURL 之前做超分。
+// 定义在 service 以免 import relay/channel（api_request.go 会回头依赖 service）。
+type TaskEnhancer interface {
+	EnsureEnhanced(ctx context.Context, task *model.Task, upstreamResultURL string) (finalURL string, done bool, err error)
+	RedactUserVisible(task *model.Task)
+}
+
 // GetTaskAdaptorFunc 由 main 包注入，用于获取指定平台的任务适配器。
 // 打破 service -> relay -> relay/channel -> service 的循环依赖。
 var GetTaskAdaptorFunc func(platform constant.TaskPlatform) TaskPollingAdaptor
@@ -500,6 +507,10 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 
 	task.Data = redactVideoResponseBody(responseBody)
 
+	if enhancer, ok := adaptor.(TaskEnhancer); ok {
+		applyTaskEnhancer(ctx, enhancer, task, taskResult)
+	}
+
 	logger.LogDebug(ctx, "updateVideoSingleTask taskResult: %+v", taskResult)
 
 	now := time.Now().Unix()
@@ -566,7 +577,11 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 		task.FailReason = taskResult.Reason
 		logger.LogInfo(ctx, fmt.Sprintf("Task %s failed: %s", task.TaskID, task.FailReason))
 		taskResult.Progress = taskcommon.ProgressComplete
-		if quota != 0 {
+		if task.PrivateData.EnhanceStatus == "failed" {
+			// Seedance 已出片但超分耗尽：按请求档扣费，不退预扣。
+			shouldRefund = false
+			shouldSettle = true
+		} else if quota != 0 {
 			shouldRefund = true
 		}
 	default:
@@ -631,6 +646,36 @@ func redactVideoResponseBody(body []byte) []byte {
 		return body
 	}
 	return b
+}
+
+func applyTaskEnhancer(ctx context.Context, enhancer TaskEnhancer, task *model.Task, taskResult *relaycommon.TaskInfo) {
+	if taskResult == nil || task == nil {
+		return
+	}
+	if taskResult.Status != model.TaskStatusSuccess {
+		enhancer.RedactUserVisible(task)
+		return
+	}
+	finalURL, done, err := enhancer.EnsureEnhanced(ctx, task, taskResult.Url)
+	if !done {
+		taskResult.Status = model.TaskStatusInProgress
+		taskResult.Progress = "80%"
+		taskResult.Url = ""
+		if task.StartTime == 0 {
+			task.StartTime = time.Now().Unix()
+		}
+		return
+	}
+	if err != nil {
+		taskResult.Status = model.TaskStatusFailure
+		taskResult.Reason = err.Error()
+		taskResult.Url = ""
+		taskResult.Progress = taskcommon.ProgressComplete
+		return
+	}
+	if finalURL != "" {
+		taskResult.Url = finalURL
+	}
 }
 
 func truncateBase64(s string) string {

@@ -692,6 +692,15 @@ type TaskRelayInfo struct {
 	// a specific channel (e.g., remix on origin task's channel). Stored as any
 	// to avoid an import cycle with model; callers type-assert to *model.Channel.
 	LockedChannel any
+
+	// VolcEngine Enhanced lottery outcome (channel type 64).
+	RequestedResolution         string
+	UpstreamResolution          string
+	RequestedRatio              string
+	OutputDurationMs            int64
+	ChannelOriginalQuota        int
+	ChannelCostUsesUpstreamTier bool
+	UpstreamVideoInputRatio     float64
 }
 
 type TaskSubmitReq struct {

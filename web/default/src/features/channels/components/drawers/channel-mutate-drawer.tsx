@@ -140,6 +140,7 @@ import {
   ADD_MODE_OPTIONS,
   CHANNEL_STATUS_LABELS,
   CHANNEL_TYPE_OPTIONS,
+  CHANNEL_TYPE_VOLCENGINE_ENHANCED,
   CHANNEL_TYPE_WARNINGS,
   ERROR_MESSAGES,
   FIELD_DESCRIPTIONS,
@@ -288,6 +289,11 @@ const SENSITIVE_FORM_FIELDS = [
   'pass_through_body_enabled',
   'system_prompt',
   'system_prompt_override',
+  'lottery_1080p_to_720p_percent',
+  'lottery_1080p_to_480p_percent',
+  'lottery_720p_to_480p_percent',
+  'mediakit_api_key',
+  'mediakit_base_url',
   'allow_service_tier',
   'disable_store',
   'allow_safety_identifier',
@@ -2628,6 +2634,132 @@ export function ChannelMutateDrawer({
                                           '"default": "us-central1", "claude-3-5-sonnet-20240620": "europe-west1"'
                                         )}
                                         {'}'}
+                                      </FormDescription>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                              </>
+                            )}
+
+                            {currentType === CHANNEL_TYPE_VOLCENGINE_ENHANCED && (
+                              <>
+                                <FormField
+                                  control={form.control}
+                                  name='lottery_1080p_to_720p_percent'
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>
+                                        {t('1080p to 720p lottery percent')}
+                                      </FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          type='number'
+                                          min={0}
+                                          max={100}
+                                          {...field}
+                                          onChange={(e) =>
+                                            field.onChange(Number(e.target.value))
+                                          }
+                                        />
+                                      </FormControl>
+                                      <FormDescription>
+                                        {t(
+                                          'Chance to generate 1080p requests at 720p, then enhance back. 0 disables this path.'
+                                        )}
+                                      </FormDescription>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                                <FormField
+                                  control={form.control}
+                                  name='lottery_1080p_to_480p_percent'
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>
+                                        {t('1080p to 480p lottery percent')}
+                                      </FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          type='number'
+                                          min={0}
+                                          max={100}
+                                          {...field}
+                                          onChange={(e) =>
+                                            field.onChange(Number(e.target.value))
+                                          }
+                                        />
+                                      </FormControl>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                                <FormField
+                                  control={form.control}
+                                  name='lottery_720p_to_480p_percent'
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>
+                                        {t('720p to 480p lottery percent')}
+                                      </FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          type='number'
+                                          min={0}
+                                          max={100}
+                                          {...field}
+                                          onChange={(e) =>
+                                            field.onChange(Number(e.target.value))
+                                          }
+                                        />
+                                      </FormControl>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                                <FormField
+                                  control={form.control}
+                                  name='mediakit_api_key'
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>
+                                        {t('MediaKit API Key')}
+                                      </FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          type='password'
+                                          autoComplete='off'
+                                          {...field}
+                                        />
+                                      </FormControl>
+                                      <FormDescription>
+                                        {t(
+                                          'Required when any lottery percent is non-zero. Separate from the Ark channel key.'
+                                        )}
+                                      </FormDescription>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                                <FormField
+                                  control={form.control}
+                                  name='mediakit_base_url'
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>
+                                        {t('MediaKit Base URL')}
+                                      </FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          placeholder='https://mediakit.cn-beijing.volces.com'
+                                          {...field}
+                                        />
+                                      </FormControl>
+                                      <FormDescription>
+                                        {t(
+                                          'Optional. Leave empty to use the Beijing MediaKit default.'
+                                        )}
                                       </FormDescription>
                                       <FormMessage />
                                     </FormItem>
