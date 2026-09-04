@@ -276,6 +276,34 @@ export function useUsersColumns(): ColumnDef<User>[] {
       meta: { mobileOrder: 20 },
     },
     {
+      accessorKey: 'allowed_systems',
+      header: t('Allowed Systems'),
+      cell: ({ row }) => {
+        const raw = (row.getValue('allowed_systems') as string) || ''
+        const systems = raw
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+        if (systems.length === 0) {
+          return <span className='text-muted-foreground text-sm'>{t('All')}</span>
+        }
+        const labels: Record<string, string> = {
+          bluewhale: t('Blue Whale'),
+          api: t('API Console'),
+        }
+        return (
+          <div className='flex flex-wrap gap-1'>
+            {systems.map((s) => (
+              <BadgeCell key={s}>{labels[s] ?? s}</BadgeCell>
+            ))}
+          </div>
+        )
+      },
+      enableSorting: false,
+      size: 150,
+      meta: { mobileOrder: 18 },
+    },
+    {
       id: 'invite_info',
       header: t('Invite Info'),
       cell: ({ row }) => {
