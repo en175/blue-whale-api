@@ -10,6 +10,7 @@
 | [channels](channels.md) | 30 |  | BASE TABLE |
 | [checkins](checkins.md) | 5 |  | BASE TABLE |
 | [custom_oauth_providers](custom_oauth_providers.md) | 21 |  | BASE TABLE |
+| [enhance_costs](enhance_costs.md) | 13 | MediaKit 超分花费（人民币分，对账用）。 | BASE TABLE |
 | [logs](logs.md) | 21 |  | BASE TABLE |
 | [midjourneys](midjourneys.md) | 22 |  | BASE TABLE |
 | [models](models.md) | 13 | 模型展示元数据。每行一个模型:图标/描述/厂商。不含价格——价格在 options.ModelRatio。 | BASE TABLE |

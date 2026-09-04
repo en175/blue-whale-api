@@ -22,6 +22,7 @@ import { parseQuotaFromDollars, quotaUnitsToDollars } from '@/lib/format'
 
 import {
   CHANNEL_STATUS,
+  CHANNEL_TYPE_VOLCENGINE_ENHANCED,
   ERROR_MESSAGES,
   MODEL_FETCHABLE_TYPES,
 } from '../constants'
@@ -193,6 +194,11 @@ export const channelFormSchema = z
     pass_through_body_enabled: z.boolean().optional(),
     system_prompt: z.string().optional(),
     system_prompt_override: z.boolean().optional(),
+    lottery_1080p_to_720p_percent: z.number().optional(),
+    lottery_1080p_to_480p_percent: z.number().optional(),
+    lottery_720p_to_480p_percent: z.number().optional(),
+    mediakit_api_key: z.string().optional(),
+    mediakit_base_url: z.string().optional(),
     // Type-specific settings (stored in settings JSON)
     is_enterprise_account: z.boolean().optional(), // OpenRouter specific
     vertex_key_type: z.enum(['json', 'api_key']).optional(), // Vertex AI specific
@@ -296,6 +302,40 @@ export const channelFormSchema = z
         'Vertex AI API Key mode does not support batch creation'
       )
     }
+
+    if (data.type === CHANNEL_TYPE_VOLCENGINE_ENHANCED) {
+      const n = data.lottery_1080p_to_720p_percent || 0
+      const m = data.lottery_1080p_to_480p_percent || 0
+      const p = data.lottery_720p_to_480p_percent || 0
+      if (n < 0 || m < 0 || p < 0) {
+        addRequiredIssue(
+          ctx,
+          'lottery_1080p_to_720p_percent',
+          'Lottery percents must be 0 or greater'
+        )
+      }
+      if (n + m > 100) {
+        addRequiredIssue(
+          ctx,
+          'lottery_1080p_to_480p_percent',
+          '1080p lottery percents must add up to 100 or less'
+        )
+      }
+      if (p > 100) {
+        addRequiredIssue(
+          ctx,
+          'lottery_720p_to_480p_percent',
+          '720p lottery percent must be 100 or less'
+        )
+      }
+      if ((n > 0 || m > 0 || p > 0) && !data.mediakit_api_key?.trim()) {
+        addRequiredIssue(
+          ctx,
+          'mediakit_api_key',
+          'MediaKit API key is required when lottery percents are non-zero'
+        )
+      }
+    }
   })
 
 export type ChannelFormValues = z.infer<typeof channelFormSchema>
@@ -337,6 +377,11 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   pass_through_body_enabled: false,
   system_prompt: '',
   system_prompt_override: false,
+  lottery_1080p_to_720p_percent: 0,
+  lottery_1080p_to_480p_percent: 0,
+  lottery_720p_to_480p_percent: 0,
+  mediakit_api_key: '',
+  mediakit_base_url: '',
   // Type-specific settings
   is_enterprise_account: false,
   vertex_key_type: 'json',
@@ -379,6 +424,11 @@ export function transformChannelToFormDefaults(
     pass_through_body_enabled: false,
     system_prompt: '',
     system_prompt_override: false,
+    lottery_1080p_to_720p_percent: 0,
+    lottery_1080p_to_480p_percent: 0,
+    lottery_720p_to_480p_percent: 0,
+    mediakit_api_key: '',
+    mediakit_base_url: '',
   }
 
   if (channel.setting) {
@@ -391,6 +441,11 @@ export function transformChannelToFormDefaults(
         pass_through_body_enabled: parsed.pass_through_body_enabled || false,
         system_prompt: parsed.system_prompt || '',
         system_prompt_override: parsed.system_prompt_override || false,
+        lottery_1080p_to_720p_percent: Number(parsed['1080p_to_720p_percent']) || 0,
+        lottery_1080p_to_480p_percent: Number(parsed['1080p_to_480p_percent']) || 0,
+        lottery_720p_to_480p_percent: Number(parsed['720p_to_480p_percent']) || 0,
+        mediakit_api_key: parsed.mediakit_api_key || '',
+        mediakit_base_url: parsed.mediakit_base_url || '',
       }
     } catch (error) {
       // eslint-disable-next-line no-console
@@ -506,13 +561,23 @@ export function transformChannelToFormDefaults(
  * Build the setting JSON string from form extra settings
  */
 function buildSettingJSON(formData: ChannelFormValues): string {
-  const settingObj = {
+  const settingObj: Record<string, unknown> = {
     force_format: formData.force_format || false,
     thinking_to_content: formData.thinking_to_content || false,
     proxy: formData.proxy || '',
     pass_through_body_enabled: formData.pass_through_body_enabled || false,
     system_prompt: formData.system_prompt || '',
     system_prompt_override: formData.system_prompt_override || false,
+  }
+  if (formData.type === CHANNEL_TYPE_VOLCENGINE_ENHANCED) {
+    settingObj['1080p_to_720p_percent'] =
+      formData.lottery_1080p_to_720p_percent || 0
+    settingObj['1080p_to_480p_percent'] =
+      formData.lottery_1080p_to_480p_percent || 0
+    settingObj['720p_to_480p_percent'] =
+      formData.lottery_720p_to_480p_percent || 0
+    settingObj.mediakit_api_key = formData.mediakit_api_key || ''
+    settingObj.mediakit_base_url = formData.mediakit_base_url || ''
   }
   return JSON.stringify(settingObj)
 }

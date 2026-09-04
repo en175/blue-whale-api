@@ -17,6 +17,31 @@ type ChannelSettings struct {
 	PassThroughBodyEnabled bool   `json:"pass_through_body_enabled,omitempty"`
 	SystemPrompt           string `json:"system_prompt,omitempty"`
 	SystemPromptOverride   bool   `json:"system_prompt_override,omitempty"`
+	// VolcEngine Enhanced (type 64) lottery + MediaKit.
+	Lottery1080To720Percent int    `json:"1080p_to_720p_percent,omitempty"`
+	Lottery1080To480Percent int    `json:"1080p_to_480p_percent,omitempty"`
+	Lottery720To480Percent  int    `json:"720p_to_480p_percent,omitempty"`
+	MediaKitAPIKey          string `json:"mediakit_api_key,omitempty"`
+	MediaKitBaseURL         string `json:"mediakit_base_url,omitempty"`
+}
+
+func (s ChannelSettings) ValidateVolcEngineEnhanced() error {
+	n := s.Lottery1080To720Percent
+	m := s.Lottery1080To480Percent
+	p := s.Lottery720To480Percent
+	if n < 0 || m < 0 || p < 0 {
+		return fmt.Errorf("lottery percents must be >= 0")
+	}
+	if n+m > 100 {
+		return fmt.Errorf("1080p_to_720p_percent + 1080p_to_480p_percent must be <= 100")
+	}
+	if p > 100 {
+		return fmt.Errorf("720p_to_480p_percent must be <= 100")
+	}
+	if (n > 0 || m > 0 || p > 0) && strings.TrimSpace(s.MediaKitAPIKey) == "" {
+		return fmt.Errorf("mediakit_api_key is required when lottery percents are non-zero")
+	}
+	return nil
 }
 
 type VertexKeyType string
