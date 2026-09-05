@@ -9,7 +9,6 @@ const (
 	EnhanceStatusFailed    = "failed"
 
 	MaxEnhanceAttempts = 3
-	ProgressEnhancing  = "80%"
 
 	DefaultMediaKitBaseURL = "https://mediakit.cn-beijing.volces.com"
 	mediaKitSubmitPath     = "/api/v1/tools/enhance-video-generative"

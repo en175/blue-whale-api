@@ -67,6 +67,27 @@ func TestRewriteUserVisibleTaskDataMarksFailed(t *testing.T) {
 	assert.NotContains(t, string(got), "https://up.example/720.mp4")
 }
 
+func TestApplyUserVisibleRewriteSkippedUsesPublicURL(t *testing.T) {
+	task := &model.Task{
+		TaskID: "task_skip_url",
+		PrivateData: model.TaskPrivateData{
+			RequestedResolution: Res1080p,
+			UpstreamResolution:  Res1080p,
+			EnhanceStatus:       EnhanceStatusSkipped,
+			ResultURL:           "https://ark-acg-cn-beijing.tos-cn-beijing.volces.com/clip.mp4",
+		},
+		Data: []byte(`{"status":"succeeded","resolution":"1080p","content":{"video_url":"https://ark-acg-cn-beijing.tos-cn-beijing.volces.com/clip.mp4"}}`),
+	}
+	applyUserVisibleRewrite(task, task.PublicResultURL(), true, false)
+
+	var m map[string]any
+	require.NoError(t, common.Unmarshal(task.Data, &m))
+	content := m["content"].(map[string]any)
+	assert.Contains(t, content["video_url"], "/v1/videos/task_skip_url/content")
+	assert.NotContains(t, string(task.Data), "tos-cn-beijing")
+	assert.Equal(t, "https://ark-acg-cn-beijing.tos-cn-beijing.volces.com/clip.mp4", task.GetResultURL())
+}
+
 func TestRedactUserVisibleHidesUpstreamWhileRunning(t *testing.T) {
 	task := taskWithDowngrade()
 	raw, err := common.Marshal(map[string]any{

@@ -499,7 +499,7 @@ func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool) []byte {
 		"metadata": nil,
 		"status":   mapTaskStatusToSimple(task.Status),
 		"task_id":  task.TaskID,
-		"url":      task.GetResultURL(),
+		"url":      task.PublicResultURL(),
 	}
 	respBody, _ := common.Marshal(dto.TaskResponse[any]{
 		Code: "success",
@@ -561,14 +561,14 @@ func TaskModel2Dto(task *model.Task) *dto.TaskDto {
 		Action:     task.Action,
 		Status:     string(task.Status),
 		FailReason: task.FailReason,
-		ResultURL:  task.GetResultURL(),
+		ResultURL:  task.PublicResultURL(),
 		SubmitTime: task.SubmitTime,
 		StartTime:  task.StartTime,
 		FinishTime: task.FinishTime,
 		Progress:   task.Progress,
 		Properties: task.Properties,
 		Username:   task.Username,
-		Data:       task.Data,
+		Data:       task.PublicData(),
 	}
 	// 真实消耗 token：按平台从 task.Data 提取（可选接口，未实现平台不返回）
 	if adaptor := GetTaskAdaptor(task.Platform); adaptor != nil {

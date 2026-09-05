@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"database/sql/driver"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	commonRelay "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/setting/system_setting"
 )
 
 type TaskStatus string
@@ -154,6 +156,56 @@ func (t *Task) GetResultURL() string {
 	return t.FailReason
 }
 
+// PublicResultURL is the client/admin API download link. Type-64 tasks store
+// the TOS/VOD origin in ResultURL for /content proxy fetch, but never expose
+// that origin — both enhance and skip look like the same gateway path.
+func (t *Task) PublicResultURL() string {
+	if t == nil {
+		return ""
+	}
+	if t.PrivateData.EnhanceStatus != "" && t.TaskID != "" {
+		return fmt.Sprintf("%s/v1/videos/%s/content", system_setting.ServerAddress, t.TaskID)
+	}
+	return t.GetResultURL()
+}
+
+// PublicData is the task JSON returned to user and admin APIs. Stored Data
+// may still hold a TOS/VOD origin from older writes; replace that URL only
+// in the copy we serialize.
+func (t *Task) PublicData() json.RawMessage {
+	if t == nil || len(t.Data) == 0 {
+		if t == nil {
+			return nil
+		}
+		return t.Data
+	}
+	if t.PrivateData.EnhanceStatus == "" {
+		return t.Data
+	}
+	var m map[string]any
+	if err := common.Unmarshal(t.Data, &m); err != nil {
+		return t.Data
+	}
+	content, ok := m["content"].(map[string]any)
+	if !ok {
+		return t.Data
+	}
+	if t.Status == TaskStatusSuccess {
+		if url := t.PublicResultURL(); url != "" {
+			content["video_url"] = url
+		} else {
+			delete(content, "video_url")
+		}
+	} else {
+		delete(content, "video_url")
+	}
+	out, err := common.Marshal(m)
+	if err != nil {
+		return t.Data
+	}
+	return out
+}
+
 // GenerateTaskID 生成对外暴露的 task_xxxx 格式 ID
 func GenerateTaskID() string {
 	key, _ := common.GenerateRandomCharsKey(32)
@@ -186,6 +238,7 @@ type SyncTaskQueryParams struct {
 	StartTimestamp int64
 	EndTimestamp   int64
 	UserIDs        []int
+	EnhancedOnly   bool
 }
 
 func InitTask(platform constant.TaskPlatform, relayInfo *commonRelay.RelayInfo) *Task {
@@ -308,6 +361,7 @@ func TaskGetAllTasks(startIdx int, num int, queryParams SyncTaskQueryParams) []*
 	if queryParams.EndTimestamp != 0 {
 		query = query.Where("submit_time <= ?", queryParams.EndTimestamp)
 	}
+	query = applyEnhancedOnlyFilter(query, queryParams.EnhancedOnly)
 
 	// 获取数据
 	err = query.Order("id desc").Limit(num).Offset(startIdx).Find(&tasks).Error
@@ -525,6 +579,7 @@ func TaskCountAllTasks(queryParams SyncTaskQueryParams) int64 {
 	if queryParams.EndTimestamp != 0 {
 		query = query.Where("submit_time <= ?", queryParams.EndTimestamp)
 	}
+	query = applyEnhancedOnlyFilter(query, queryParams.EnhancedOnly)
 	_ = query.Count(&total).Error
 	return total
 }
@@ -562,6 +617,6 @@ func (t *Task) ToOpenAIVideo() *dto.OpenAIVideo {
 	openAIVideo.SetProgressStr(t.Progress)
 	openAIVideo.CreatedAt = t.CreatedAt
 	openAIVideo.CompletedAt = t.UpdatedAt
-	openAIVideo.SetMetadata("url", t.GetResultURL())
+	openAIVideo.SetMetadata("url", t.PublicResultURL())
 	return openAIVideo
 }

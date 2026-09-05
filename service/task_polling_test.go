@@ -443,7 +443,7 @@ func TestApplyTaskEnhancerKeepsInProgressUntilDone(t *testing.T) {
 	result := &relaycommon.TaskInfo{Status: model.TaskStatusSuccess, Url: "https://up.example/720.mp4"}
 	applyTaskEnhancer(context.Background(), enh, &model.Task{}, result)
 	assert.Equal(t, model.TaskStatusInProgress, result.Status)
-	assert.Equal(t, "80%", result.Progress)
+	assert.Equal(t, "50%", result.Progress)
 	assert.Empty(t, result.Url)
 }
 

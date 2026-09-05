@@ -53,12 +53,18 @@ func taskWithDowngrade() *model.Task {
 }
 
 func TestEnsureEnhancedSkipsWhenNoDowngrade(t *testing.T) {
-	task := &model.Task{PrivateData: model.TaskPrivateData{RequestedResolution: Res1080p, UpstreamResolution: Res1080p}}
+	task := &model.Task{
+		TaskID:      "task_skip",
+		PrivateData: model.TaskPrivateData{RequestedResolution: Res1080p, UpstreamResolution: Res1080p},
+		Data:        []byte(`{"status":"succeeded","resolution":"1080p","content":{"video_url":"https://up.example/1080.mp4"}}`),
+	}
 	url, done, err := (&TaskAdaptor{}).EnsureEnhanced(context.Background(), task, "https://up.example/1080.mp4")
 	require.NoError(t, err)
 	assert.True(t, done)
 	assert.Equal(t, "https://up.example/1080.mp4", url)
 	assert.Equal(t, EnhanceStatusSkipped, task.PrivateData.EnhanceStatus)
+	assert.Contains(t, string(task.Data), "/v1/videos/task_skip/content")
+	assert.NotContains(t, string(task.Data), "https://up.example/1080.mp4")
 }
 
 func TestEnsureEnhancedSubmitsRequestedTier(t *testing.T) {
@@ -75,6 +81,25 @@ func TestEnsureEnhancedSubmitsRequestedTier(t *testing.T) {
 	assert.Equal(t, Res1080p, gotRes)
 	assert.Equal(t, 1, task.PrivateData.EnhanceAttempt)
 	assert.Equal(t, EnhanceStatusPending, task.PrivateData.EnhanceStatus)
+}
+
+func TestEnsureEnhancedClientInitFailureRecordsCost(t *testing.T) {
+	costs := 0
+	a := &TaskAdaptor{
+		loadChannel: func(int) (*model.Channel, error) {
+			return nil, fmt.Errorf("no channel")
+		},
+		insertEnhanceCost: func(*model.EnhanceCost) error {
+			costs++
+			return nil
+		},
+	}
+	task := taskWithDowngrade()
+	_, done, err := a.EnsureEnhanced(context.Background(), task, task.PrivateData.EnhanceSourceURL)
+	require.Error(t, err)
+	assert.True(t, done)
+	assert.Equal(t, EnhanceStatusFailed, task.PrivateData.EnhanceStatus)
+	assert.Equal(t, 1, costs)
 }
 
 func TestEnsureEnhancedRetriesUntilThreeFailures(t *testing.T) {
@@ -106,6 +131,7 @@ func TestEnsureEnhancedSuccessReturnsURL(t *testing.T) {
 		return nil
 	}}
 	task := taskWithDowngrade()
+	task.Data = []byte(`{"status":"succeeded","resolution":"720p","content":{"video_url":"https://up.example/720.mp4"}}`)
 	_, done, err := a.EnsureEnhanced(context.Background(), task, task.PrivateData.EnhanceSourceURL)
 	require.NoError(t, err)
 	require.False(t, done)
@@ -117,6 +143,9 @@ func TestEnsureEnhancedSuccessReturnsURL(t *testing.T) {
 	require.NotNil(t, last)
 	assert.Equal(t, EnhanceStatusSucceeded, last.Status)
 	assert.Equal(t, 42, last.AmountFen)
+	assert.Contains(t, string(task.Data), "/v1/videos/task_test/content")
+	assert.NotContains(t, string(task.Data), "https://mk.example/1080.mp4")
+	assert.NotContains(t, string(task.Data), "720p")
 }
 
 type recordingKit struct {

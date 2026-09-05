@@ -4,7 +4,17 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"gorm.io/gorm"
 )
+
+// EnhanceCostSummary is the admin-facing rollup of enhance_costs for one task.
+type EnhanceCostSummary struct {
+	Status              string
+	RequestedResolution string
+	UpstreamResolution  string
+	AmountFen           int
+	AttemptCount        int
+}
 
 // EnhanceCost records one MediaKit 超分 attempt. Amounts are RMB fen and are
 // audit-only: they never enter user quota or channel limits.
@@ -39,4 +49,43 @@ func InsertEnhanceCost(cost *EnhanceCost) error {
 		return nil
 	}
 	return DB.Create(cost).Error
+}
+
+func applyEnhancedOnlyFilter(query *gorm.DB, enabled bool) *gorm.DB {
+	if query == nil || !enabled {
+		return query
+	}
+	return query.Where("EXISTS (SELECT 1 FROM enhance_costs WHERE enhance_costs.task_id = tasks.task_id)")
+}
+
+// SummarizeEnhanceCostsByTaskIDs rolls up MediaKit attempts for admin task logs.
+// A task is enhanced if it has any row; status is succeeded when any row succeeded.
+func SummarizeEnhanceCostsByTaskIDs(taskIDs []string) map[string]EnhanceCostSummary {
+	out := make(map[string]EnhanceCostSummary)
+	if len(taskIDs) == 0 || DB == nil {
+		return out
+	}
+	var rows []EnhanceCost
+	if err := DB.Where("task_id IN ?", taskIDs).Order("id asc").Find(&rows).Error; err != nil {
+		common.SysError("SummarizeEnhanceCostsByTaskIDs: " + err.Error())
+		return out
+	}
+	for _, row := range rows {
+		cur := out[row.TaskId]
+		cur.AttemptCount++
+		cur.AmountFen += row.AmountFen
+		if row.RequestedResolution != "" {
+			cur.RequestedResolution = row.RequestedResolution
+		}
+		if row.UpstreamResolution != "" {
+			cur.UpstreamResolution = row.UpstreamResolution
+		}
+		if row.Status == "succeeded" {
+			cur.Status = "succeeded"
+		} else if cur.Status == "" {
+			cur.Status = "failed"
+		}
+		out[row.TaskId] = cur
+	}
+	return out
 }

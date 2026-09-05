@@ -659,7 +659,7 @@ func applyTaskEnhancer(ctx context.Context, enhancer TaskEnhancer, task *model.T
 	finalURL, done, err := enhancer.EnsureEnhanced(ctx, task, taskResult.Url)
 	if !done {
 		taskResult.Status = model.TaskStatusInProgress
-		taskResult.Progress = "80%"
+		taskResult.Progress = "50%"
 		taskResult.Url = ""
 		if task.StartTime == 0 {
 			task.StartTime = time.Now().Unix()

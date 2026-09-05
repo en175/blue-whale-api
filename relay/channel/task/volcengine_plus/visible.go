@@ -121,11 +121,24 @@ func rewriteUserVisibleTaskData(raw []byte, requested string, peeledCompletion, 
 	return out
 }
 
+func shouldRewriteUserVisible(task *model.Task) bool {
+	if task == nil {
+		return false
+	}
+	if task.PrivateData.EnhanceStatus != "" {
+		return true
+	}
+	return IsDowngrade(task.PrivateData.RequestedResolution, task.PrivateData.UpstreamResolution)
+}
+
 func applyUserVisibleRewrite(task *model.Task, videoURL string, done, failed bool) {
-	if task == nil || !IsDowngrade(task.PrivateData.RequestedResolution, task.PrivateData.UpstreamResolution) {
+	if !shouldRewriteUserVisible(task) {
 		return
 	}
-	peeled := peeledTokensForTask(task)
+	peeled := 0
+	if IsDowngrade(task.PrivateData.RequestedResolution, task.PrivateData.UpstreamResolution) {
+		peeled = peeledTokensForTask(task)
+	}
 	task.Data = rewriteUserVisibleTaskData(task.Data, task.PrivateData.RequestedResolution, peeled, peeled, videoURL, !done && !failed, failed)
 }
 

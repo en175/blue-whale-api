@@ -8,10 +8,10 @@ import (
 )
 
 func SetVideoRouter(router *gin.Engine) {
-	// Video proxy: accepts either session auth (dashboard) or token auth (API clients)
+	// Video bytes are a capability URL: the public task ID is the credential.
+	// Players and <a href> cannot send Authorization, so this route is public.
 	videoProxyRouter := router.Group("/v1")
 	videoProxyRouter.Use(middleware.RouteTag("relay"))
-	videoProxyRouter.Use(middleware.TokenOrUserAuth())
 	{
 		videoProxyRouter.GET("/videos/:task_id/content", controller.VideoProxy)
 	}

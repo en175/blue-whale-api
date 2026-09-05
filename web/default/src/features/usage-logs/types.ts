@@ -67,6 +67,7 @@ export interface DrawingLogFilters extends CommonFilters {
  */
 export interface TaskLogFilters extends CommonFilters {
   taskId?: string
+  enhancedOnly?: boolean
 }
 
 /**
@@ -294,6 +295,15 @@ export interface TaskLog {
   other?: string
   created_at?: number
   updated_at?: number
+  enhance?: TaskEnhanceInfo
+}
+
+export interface TaskEnhanceInfo {
+  status: string
+  requested_resolution?: string
+  upstream_resolution?: string
+  amount_fen?: number
+  attempt_count?: number
 }
 
 // ============================================================================
@@ -369,6 +379,7 @@ export interface GetTaskLogsParams {
   task_id?: string
   start_timestamp?: number
   end_timestamp?: number
+  enhanced?: string
 }
 
 // ============================================================================
