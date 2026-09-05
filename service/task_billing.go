@@ -52,15 +52,6 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) {
 		other["upstream_model_name"] = info.UpstreamModelName
 	}
 	attachQuotaSaturation(c, info, other)
-	if info.TaskRelayInfo != nil && info.RequestedResolution != "" {
-		adminInfo, _ := other["admin_info"].(map[string]interface{})
-		if adminInfo == nil {
-			adminInfo = make(map[string]interface{})
-			other["admin_info"] = adminInfo
-		}
-		adminInfo["requested_resolution"] = info.RequestedResolution
-		adminInfo["upstream_resolution"] = info.UpstreamResolution
-	}
 	model.RecordConsumeLog(c, info.UserId, model.RecordConsumeLogParams{
 		ChannelId: info.ChannelId,
 		ModelName: info.OriginModelName,
@@ -145,19 +136,6 @@ func taskBillingOther(task *model.Task) map[string]interface{} {
 				other[k] = v
 			}
 		}
-	}
-	if task.PrivateData.RequestedResolution != "" {
-		adminInfo, _ := other["admin_info"].(map[string]interface{})
-		if adminInfo == nil {
-			adminInfo = make(map[string]interface{})
-			other["admin_info"] = adminInfo
-		}
-		adminInfo["requested_resolution"] = task.PrivateData.RequestedResolution
-		adminInfo["upstream_resolution"] = task.PrivateData.UpstreamResolution
-		adminInfo["upstream_tokens"] = task.PrivateData.UpstreamTotalTokens
-		adminInfo["peeled_tokens"] = task.PrivateData.PeeledTotalTokens
-		adminInfo["enhance_status"] = task.PrivateData.EnhanceStatus
-		adminInfo["enhance_attempt"] = task.PrivateData.EnhanceAttempt
 	}
 	props := task.Properties
 	if props.UpstreamModelName != "" && props.UpstreamModelName != props.OriginModelName {

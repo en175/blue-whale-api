@@ -156,12 +156,12 @@ func (a *TaskAdaptor) ExtractTaskUsage(task *model.Task) *dto.TaskUsage {
 }
 
 func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, error) {
-	if originTask != nil && IsDowngrade(originTask.PrivateData.RequestedResolution, originTask.PrivateData.UpstreamResolution) {
+	if shouldRewriteUserVisible(originTask) {
 		url := ""
 		done := originTask.Status == model.TaskStatusSuccess
 		failed := originTask.Status == model.TaskStatusFailure
 		if done {
-			url = originTask.GetResultURL()
+			url = originTask.PublicResultURL()
 		}
 		applyUserVisibleRewrite(originTask, url, done, failed)
 	}

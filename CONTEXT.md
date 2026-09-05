@@ -19,7 +19,7 @@ _Avoid_: 真实ID、内部ID
 _Avoid_: 视频地址、下载链接
 
 **代理URL**:
-网关下发的结果代理地址，形如 /v1/videos/{公开任务ID}/content；网关代客户端向源头取回流式返回，客户端无需源头直连权限。
+网关下发的结果代理地址，形如 /v1/videos/{公开任务ID}/content；网关代客户端向源头取回流式返回。公开任务ID即领取凭证，下载不带网关 API Key，也不需要源头直连权限。
 _Avoid_: content 链接
 
 **文生视频**:
@@ -57,7 +57,7 @@ _Avoid_: 模型映射、param_override、模型配置
 _Avoid_: 上游档、清晰度
 
 **上游档**:
-分辨率抽签之后真正发给 Seedance 的输出分辨率档。只进 private_data 与 admin 日志。成片像素在超分成功后应对齐请求档，不是上游档。
+分辨率抽签之后真正发给 Seedance 的输出分辨率档。只进 private_data 与 enhance_costs；用户 API 与消费日志不展示。管理台任务日志按 enhance_costs 汇总。成片像素在超分成功后应对齐请求档，不是上游档。
 _Avoid_: 请求档、真实分辨率（含糊）
 
 **分辨率抽签**:

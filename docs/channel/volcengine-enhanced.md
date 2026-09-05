@@ -57,7 +57,7 @@ Seedance 生成可抽签降档，再用 MediaKit 超分回请求档。契约以�
         → Seedance 按上游档生成（对客仍 IN_PROGRESS）
         ├─ Seedance 失败 → FAILURE，全额退用户预扣
         └─ Seedance 成功
-              → MediaKit 超分到请求档（最多 3 次，进度约 80%）
+              → MediaKit 超分到请求档（最多 3 次，对客进度保持 50%）
               ├─ 超分成功 → SUCCESS；结果 URL = 超分成片
               │              对客 resolution = 请求档；token = 剥皮值
               │              用户按请求档 × 剥皮 token 结算
@@ -192,9 +192,9 @@ Seedance 已成功、超分尚未完成时：对客仍是进行中。**不得**�
 
 **状态机**（复用现有视频轮询，不新开任务表）：
 
-1. Seedance `succeeded` 且需要超分：提交超分 job，`EnhanceJobID` 写入 `private_data`，任务保持 `IN_PROGRESS`，progress `80%`。
-2. 轮询超分 job。`completed` → 写入超分结果 URL，SUCCESS。`failed` / 超时 → 若未满 3 次则再提交；满 3 次 → FAILURE。
-3. 不需要超分：Seedance 成功即 SUCCESS，结果 URL 为 Seedance 直链（或代理 URL）。
+1. Seedance `succeeded` 且需要超分：提交超分 job，`EnhanceJobID` 写入 `private_data`，任务保持 `IN_PROGRESS`，progress `50%`（不写 `80%`）。
+2. 轮询超分 job。`completed` → 源链写入 `private_data.ResultURL` 供 `/content` 代理拉取，SUCCESS。`failed` / 超时 → 若未满 3 次则再提交；满 3 次 → FAILURE。
+3. 不需要超分：Seedance 成功即 SUCCESS。对客 `result_url` / `content.video_url` 一律本站 `/v1/videos/{task_id}/content`；TOS/VOD 源链只存在 `private_data.ResultURL`，给代理拉片，不进用户或管理台 API。
 
 超分进行中不得把 Seedance 720p/480p URL 写入对客 `ResultURL`；上游档成片 URL 只存在 `private_data` 内部字段。
 
@@ -325,9 +325,9 @@ type TaskEnhancer interface {
 - `EnhanceStatus`（`skipped` / `pending` / `succeeded` / `failed`）
 - `EnhanceSourceURL`（上游档成片，仅内部）
 
-Admin 日志 `admin_info` 带请求档、上游档、上游原始 token、剥皮 token、超分状态与尝试次数。
+对客任务/视频 API 不写请求档/上游档差、超分状态。管理台任务日志按 `enhance_costs` 显示超分徽章，并可筛「仅超分」（有花费行即算，含失败）。消费日志不写这些字段。
 
-对客 `task.Data` 在落库前改写：`resolution` 与 `usage` 为请求档口径。
+对客 `task.Data` 在落库前改写：`resolution` 与 `usage` 为请求档口径；成片 URL 为本站代理路径。
 
 ---
 
@@ -344,7 +344,7 @@ Admin 日志 `admin_info` 带请求档、上游档、上游原始 token、剥皮
 | fast 不支持 1080 且抽签未降档 | 上游错误原样返回，全额退 |
 | MediaKit 输入超规格 | 计入一次失败，按重试规则 |
 
-用户可见出口不得出现上游档字符串、上游原始 token、上游档成片 URL：任务查询、OpenAI Video 转换、`usage`、用户用量日志。Admin、`private_data`、`enhance_costs` 除外。
+用户与管理台 API 都不得出现上游档字符串、上游原始 token、上游档/超分成片直链、超分进度（`80%`）：任务查询、OpenAI Video 转换、`usage`、用量日志。TOS/VOD 源链与超分痕迹只在 `private_data`、`enhance_costs`。
 
 超分成功后成片像素应对齐请求档（1080 或 720）。未抽中的请求与豆包直连一致。本渠道 v1 **不接** `/v1/videos/:id/remix`。
 

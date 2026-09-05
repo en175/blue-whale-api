@@ -52,6 +52,17 @@ type TaskDto struct {
 	Data       json.RawMessage `json:"data"`
 	// Usage 任务真实消耗 token（仅支持返回 token 的上游填充）
 	Usage *TaskUsage `json:"usage,omitempty"`
+	// Enhance is admin-only: present when enhance_costs has rows for this task.
+	Enhance *TaskEnhanceInfo `json:"enhance,omitempty"`
+}
+
+// TaskEnhanceInfo is the admin rollup of MediaKit 超分 attempts.
+type TaskEnhanceInfo struct {
+	Status              string `json:"status"`
+	RequestedResolution string `json:"requested_resolution,omitempty"`
+	UpstreamResolution  string `json:"upstream_resolution,omitempty"`
+	AmountFen           int    `json:"amount_fen"`
+	AttemptCount        int    `json:"attempt_count"`
 }
 
 // TaskUsage 任务真实消耗统计（仅支持返回 token 的上游填充）。

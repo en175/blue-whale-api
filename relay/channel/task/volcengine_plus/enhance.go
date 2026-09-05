@@ -204,12 +204,14 @@ func (a *TaskAdaptor) EnsureEnhanced(ctx context.Context, task *model.Task, upst
 		logger.LogError(ctx, fmt.Sprintf("mediakit client task %s: %s", task.TaskID, err.Error()))
 		task.PrivateData.EnhanceAttempt = MaxEnhanceAttempts
 		task.PrivateData.EnhanceStatus = EnhanceStatusFailed
+		a.recordEnhanceCost(ctx, task, "", EnhanceStatusFailed, 0)
 		return a.finishEnhance(task, "", true, fmt.Errorf("%s", genericEnhanceFailReason))
 	}
 
 	if task.PrivateData.EnhanceJobID == "" {
 		if task.PrivateData.EnhanceAttempt >= MaxEnhanceAttempts {
 			task.PrivateData.EnhanceStatus = EnhanceStatusFailed
+			a.recordEnhanceCost(ctx, task, "", EnhanceStatusFailed, 0)
 			return a.finishEnhance(task, "", true, fmt.Errorf("%s", genericEnhanceFailReason))
 		}
 		if err := a.submitEnhance(ctx, task, client); err != nil {
@@ -253,9 +255,9 @@ func (a *TaskAdaptor) finishOrRetry(ctx context.Context, task *model.Task, clien
 }
 
 func (a *TaskAdaptor) finishEnhance(task *model.Task, url string, done bool, err error) (string, bool, error) {
-	visibleURL := url
-	if err != nil {
-		visibleURL = ""
+	visibleURL := ""
+	if err == nil && done && task != nil {
+		visibleURL = task.PublicResultURL()
 	}
 	applyUserVisibleRewrite(task, visibleURL, done && err == nil, err != nil)
 	return url, done, err
