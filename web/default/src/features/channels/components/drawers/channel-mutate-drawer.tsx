@@ -294,6 +294,7 @@ const SENSITIVE_FORM_FIELDS = [
   'lottery_720p_to_480p_percent',
   'mediakit_api_key',
   'mediakit_base_url',
+  'mediakit_submit_path',
   'allow_service_tier',
   'disable_store',
   'allow_safety_identifier',
@@ -2759,6 +2760,29 @@ export function ChannelMutateDrawer({
                                       <FormDescription>
                                         {t(
                                           'Optional. Leave empty to use the Beijing MediaKit default.'
+                                        )}
+                                      </FormDescription>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                                <FormField
+                                  control={form.control}
+                                  name='mediakit_submit_path'
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>
+                                        {t('MediaKit Submit Path')}
+                                      </FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          placeholder='/api/v1/tools/enhance-video-generative'
+                                          {...field}
+                                        />
+                                      </FormControl>
+                                      <FormDescription>
+                                        {t(
+                                          'Optional. Leave empty to use /api/v1/tools/enhance-video-generative.'
                                         )}
                                       </FormDescription>
                                       <FormMessage />

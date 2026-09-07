@@ -97,6 +97,7 @@ export interface ChannelSettings {
   '720p_to_480p_percent'?: number
   mediakit_api_key?: string
   mediakit_base_url?: string
+  mediakit_submit_path?: string
 }
 
 export interface ChannelOtherSettings {

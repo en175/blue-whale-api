@@ -10,8 +10,8 @@ const (
 
 	MaxEnhanceAttempts = 3
 
-	DefaultMediaKitBaseURL = "https://mediakit.cn-beijing.volces.com"
-	mediaKitSubmitPath     = "/api/v1/tools/enhance-video-generative"
+	DefaultMediaKitBaseURL    = "https://mediakit.cn-beijing.volces.com"
+	DefaultMediaKitSubmitPath = "/api/v1/tools/enhance-video-generative"
 
 	genericEnhanceFailReason = "processing failed"
 )

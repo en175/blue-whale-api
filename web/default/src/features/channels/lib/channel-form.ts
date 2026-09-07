@@ -199,6 +199,7 @@ export const channelFormSchema = z
     lottery_720p_to_480p_percent: z.number().optional(),
     mediakit_api_key: z.string().optional(),
     mediakit_base_url: z.string().optional(),
+    mediakit_submit_path: z.string().optional(),
     // Type-specific settings (stored in settings JSON)
     is_enterprise_account: z.boolean().optional(), // OpenRouter specific
     vertex_key_type: z.enum(['json', 'api_key']).optional(), // Vertex AI specific
@@ -382,6 +383,7 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   lottery_720p_to_480p_percent: 0,
   mediakit_api_key: '',
   mediakit_base_url: '',
+  mediakit_submit_path: '',
   // Type-specific settings
   is_enterprise_account: false,
   vertex_key_type: 'json',
@@ -429,6 +431,7 @@ export function transformChannelToFormDefaults(
     lottery_720p_to_480p_percent: 0,
     mediakit_api_key: '',
     mediakit_base_url: '',
+    mediakit_submit_path: '',
   }
 
   if (channel.setting) {
@@ -446,6 +449,7 @@ export function transformChannelToFormDefaults(
         lottery_720p_to_480p_percent: Number(parsed['720p_to_480p_percent']) || 0,
         mediakit_api_key: parsed.mediakit_api_key || '',
         mediakit_base_url: parsed.mediakit_base_url || '',
+        mediakit_submit_path: parsed.mediakit_submit_path || '',
       }
     } catch (error) {
       // eslint-disable-next-line no-console
@@ -578,6 +582,7 @@ function buildSettingJSON(formData: ChannelFormValues): string {
       formData.lottery_720p_to_480p_percent || 0
     settingObj.mediakit_api_key = formData.mediakit_api_key || ''
     settingObj.mediakit_base_url = formData.mediakit_base_url || ''
+    settingObj.mediakit_submit_path = formData.mediakit_submit_path || ''
   }
   return JSON.stringify(settingObj)
 }
