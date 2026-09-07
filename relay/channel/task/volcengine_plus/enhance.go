@@ -20,18 +20,25 @@ type mediaKitAPI interface {
 }
 
 type mediaKitClient struct {
-	baseURL string
-	apiKey  string
-	proxy   string
-	do      func(*http.Request) (*http.Response, error)
+	baseURL    string
+	submitPath string
+	apiKey     string
+	proxy      string
+	do         func(*http.Request) (*http.Response, error)
 }
 
-func newMediaKitClient(baseURL, apiKey, proxy string) *mediaKitClient {
+func newMediaKitClient(baseURL, apiKey, proxy, submitPath string) *mediaKitClient {
 	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	if baseURL == "" {
 		baseURL = DefaultMediaKitBaseURL
 	}
-	return &mediaKitClient{baseURL: baseURL, apiKey: apiKey, proxy: proxy}
+	submitPath = strings.TrimSpace(submitPath)
+	if submitPath == "" {
+		submitPath = DefaultMediaKitSubmitPath
+	} else if !strings.HasPrefix(submitPath, "/") {
+		submitPath = "/" + submitPath
+	}
+	return &mediaKitClient{baseURL: baseURL, apiKey: apiKey, proxy: proxy, submitPath: submitPath}
 }
 
 func (c *mediaKitClient) doRequest(req *http.Request) (*http.Response, error) {
@@ -53,7 +60,7 @@ func (c *mediaKitClient) Submit(ctx context.Context, videoURL, resolution string
 	if err != nil {
 		return "", err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+mediaKitSubmitPath, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+c.submitPath, bytes.NewReader(body))
 	if err != nil {
 		return "", err
 	}
@@ -131,7 +138,7 @@ func (a *TaskAdaptor) mediaKitForTask(task *model.Task) (mediaKitAPI, error) {
 	if strings.TrimSpace(setting.MediaKitAPIKey) == "" {
 		return nil, fmt.Errorf("mediakit_api_key is required")
 	}
-	return newMediaKitClient(setting.MediaKitBaseURL, setting.MediaKitAPIKey, setting.Proxy), nil
+	return newMediaKitClient(setting.MediaKitBaseURL, setting.MediaKitAPIKey, setting.Proxy, setting.MediaKitSubmitPath), nil
 }
 
 func (a *TaskAdaptor) recordEnhanceCost(ctx context.Context, task *model.Task, jobID, status string, amountFen int) {

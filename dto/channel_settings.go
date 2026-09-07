@@ -23,6 +23,7 @@ type ChannelSettings struct {
 	Lottery720To480Percent  int    `json:"720p_to_480p_percent,omitempty"`
 	MediaKitAPIKey          string `json:"mediakit_api_key,omitempty"`
 	MediaKitBaseURL         string `json:"mediakit_base_url,omitempty"`
+	MediaKitSubmitPath      string `json:"mediakit_submit_path,omitempty"`
 }
 
 func (s ChannelSettings) ValidateVolcEngineEnhanced() error {

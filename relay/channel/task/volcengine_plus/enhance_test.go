@@ -3,6 +3,9 @@ package volcengine_plus
 import (
 	"context"
 	"fmt"
+	"io"
+	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/QuantumNous/new-api/model"
@@ -163,4 +166,45 @@ func (r *recordingKit) Submit(_ context.Context, videoURL, resolution string) (s
 
 func (r *recordingKit) Get(context.Context, string) (string, string, error) {
 	return "running", "", nil
+}
+
+func TestMediaKitSubmitUsesConfiguredPath(t *testing.T) {
+	var gotURL string
+	client := newMediaKitClient("https://mk.example", "k", "", "/custom/enhance")
+	client.do = stubMediaKitSubmitOK(&gotURL)
+
+	jobID, err := client.Submit(context.Background(), "https://v.example/a.mp4", "1080p")
+	require.NoError(t, err)
+	assert.Equal(t, "job-1", jobID)
+	assert.Equal(t, "https://mk.example/custom/enhance", gotURL)
+}
+
+func TestMediaKitSubmitEmptyPathUsesDefault(t *testing.T) {
+	var gotURL string
+	client := newMediaKitClient("https://mk.example", "k", "", "  ")
+	client.do = stubMediaKitSubmitOK(&gotURL)
+
+	_, err := client.Submit(context.Background(), "https://v.example/a.mp4", "1080p")
+	require.NoError(t, err)
+	assert.Equal(t, "https://mk.example"+DefaultMediaKitSubmitPath, gotURL)
+}
+
+func TestMediaKitSubmitPathWithoutSlashGetsPrefixed(t *testing.T) {
+	var gotURL string
+	client := newMediaKitClient("https://mk.example", "k", "", "custom/enhance")
+	client.do = stubMediaKitSubmitOK(&gotURL)
+
+	_, err := client.Submit(context.Background(), "https://v.example/a.mp4", "1080p")
+	require.NoError(t, err)
+	assert.Equal(t, "https://mk.example/custom/enhance", gotURL)
+}
+
+func stubMediaKitSubmitOK(gotURL *string) func(*http.Request) (*http.Response, error) {
+	return func(req *http.Request) (*http.Response, error) {
+		*gotURL = req.URL.String()
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(`{"success":true,"task_id":"job-1"}`)),
+		}, nil
+	}
 }

@@ -186,7 +186,7 @@ Seedance 已成功、超分尚未完成时：对客仍是进行中。**不得**�
 | 不传 | `fps`、`bitrate`（帧率跟 Seedance 片源，码率走 MediaKit 默认 medium） |
 | 完成 | `status=completed`，`result.video_url` 为超分成片（默认 MP4，有效期 24h，落库后走现有结果 URL / 代理 URL） |
 
-可选 `setting.mediakit_base_url` 覆盖默认域名。
+可选 `setting.mediakit_base_url` 覆盖默认域名；可选 `setting.mediakit_submit_path` 覆盖默认提交路径 `/api/v1/tools/enhance-video-generative`。查询路径仍为 `/api/v1/tasks/{task_id}`。
 
 **重试：** 只重试 MediaKit，不重跑 Seedance。固定 **3 次提交**（第 1 次 + 2 次重试），渠道不可配。三次皆失败 → 任务 FAILURE，不把上游档成片当成功单。
 
@@ -273,7 +273,8 @@ v1 超分目标只有 720p / 1080p，2K 行代码带着不用。例：5 秒、10
   "1080p_to_480p_percent": 20,
   "720p_to_480p_percent": 10,
   "mediakit_api_key": "<MediaKit API Key>",
-  "mediakit_base_url": ""
+  "mediakit_base_url": "",
+  "mediakit_submit_path": ""
 }
 ```
 
