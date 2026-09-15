@@ -15,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/relay/channel/mediakit"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
@@ -343,6 +344,22 @@ func getModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
 			modelRequest.Model = modelName
 		}
 		c.Set("relay_mode", relayMode)
+	} else if strings.HasPrefix(c.Request.URL.Path, "/v1/mediakit/sync/") {
+		// MediaKit 同步工具：工具名在路径上，对客模型名 = mediakit-<tool>。
+		// 必须排在下面那个「读 JSON body 取 model」的兜底分支之前——MediaKit
+		// 原生请求体里没有 model 字段，走到兜底分支会拿到空模型名。
+		tool := c.Param("tool")
+		spec, ok := mediakit.LookupTool(tool)
+		if !ok {
+			return nil, false, fmt.Errorf("unknown mediakit tool: %s", tool)
+		}
+		// 同步路由不接受异步工具：在这里挡下才能给出 400，否则要等到
+		// Adaptor.GetRequestURL 才失败，客户端会收到 500。
+		if !spec.Sync {
+			return nil, false, fmt.Errorf("mediakit tool %s is asynchronous, use POST /v1/mediakit/%s", spec.Name, spec.Name)
+		}
+		modelRequest.Model = mediakit.ModelNameForTool(spec.Name)
+		c.Set("relay_mode", relayconstant.RelayModeMediaKitSync)
 	} else if !strings.HasPrefix(c.Request.URL.Path, "/v1/audio/transcriptions") && !strings.Contains(c.Request.Header.Get("Content-Type"), "multipart/form-data") {
 		req, err := getModelFromRequest(c)
 		if err != nil {

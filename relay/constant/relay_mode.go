@@ -52,6 +52,10 @@ const (
 	RelayModeGemini
 
 	RelayModeResponsesCompact
+
+	// RelayModeMediaKitSync 是 MediaKit 同步工具（/v1/mediakit/sync/{tool}），
+	// 一次往返返回产物。异步工具走任务系统，不在此列。
+	RelayModeMediaKitSync
 )
 
 func Path2RelayMode(path string) int {
@@ -86,6 +90,8 @@ func Path2RelayMode(path string) int {
 		relayMode = RelayModeRerank
 	} else if strings.HasPrefix(path, "/v1/realtime") {
 		relayMode = RelayModeRealtime
+	} else if strings.HasPrefix(path, "/v1/mediakit/sync/") {
+		relayMode = RelayModeMediaKitSync
 	} else if strings.HasPrefix(path, "/v1beta/models") || strings.HasPrefix(path, "/v1/models") {
 		relayMode = RelayModeGemini
 	} else if strings.HasPrefix(path, "/mj") {

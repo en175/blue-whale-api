@@ -49,6 +49,8 @@ func relayHandler(c *gin.Context, info *relaycommon.RelayInfo) *types.NewAPIErro
 		err = relay.EmbeddingHelper(c, info)
 	case relayconstant.RelayModeResponses, relayconstant.RelayModeResponsesCompact:
 		err = relay.ResponsesHelper(c, info)
+	case relayconstant.RelayModeMediaKitSync:
+		err = relay.MediaKitSyncHelper(c, info)
 	default:
 		err = relay.TextHelper(c, info)
 	}
@@ -399,6 +401,12 @@ func processChannelError(c *gin.Context, channelError types.ChannelError, err *t
 		model.RecordErrorLog(c, userId, channelId, modelName, tokenName, err.MaskSensitiveErrorWithStatusCode(), tokenId, useTimeSeconds, common.GetContextKeyBool(c, constant.ContextKeyIsStream), userGroup, other)
 	}
 
+}
+
+// RelayMediaKitSync 服务 /v1/mediakit/sync/{tool}。走通用 Relay 管道，
+// 免费获得渠道重试、失败退款、日志与渠道自动禁用。
+func RelayMediaKitSync(c *gin.Context) {
+	Relay(c, types.RelayFormatMediaKit)
 }
 
 func RelayMidjourney(c *gin.Context) {
