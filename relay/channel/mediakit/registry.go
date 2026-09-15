@@ -72,7 +72,9 @@ var toolRegistry = []ToolSpec{
 	{Name: "mosaic-image", Sync: true, Mode: BillingVolume, ResultKind: ResultImage},
 	{Name: "add-image-watermark", Sync: true, Mode: BillingVolume, ResultKind: ResultImage},
 	{Name: "adjust-image-color", Sync: true, Mode: BillingVolume, ResultKind: ResultImage},
-	{Name: "scale-image", Sync: true, Mode: BillingVolume, ResultKind: ResultImage},
+	// 图像缩放的上游 slug 是 resize-image，不是文档里写的 scale-image——
+	// 后者上游返回 NotFound，整条工具在网关上永远 400（实测发现）。
+	{Name: "resize-image", Sync: true, Mode: BillingVolume, ResultKind: ResultImage},
 	{Name: "invert-image", Sync: true, Mode: BillingVolume, ResultKind: ResultImage},
 	{Name: "crop-image", Sync: true, Mode: BillingVolume, ResultKind: ResultImage},
 	{Name: "compress-image", Sync: true, Mode: BillingVolume, ResultKind: ResultImage},
