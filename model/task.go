@@ -136,6 +136,11 @@ type TaskBillingContext struct {
 	OtherRatios     map[string]float64 `json:"other_ratios,omitempty"`      // 附加倍率（时长、分辨率等）
 	OriginModelName string             `json:"origin_model_name,omitempty"` // 模型名称，必须为OriginModelName
 	PerCallBilling  bool               `json:"per_call_billing,omitempty"`  // 按次计费：跳过轮询阶段的差额结算
+	// DurationSettlement 显式要求完成时做差额结算。按次计费的判定条件之一是
+	// 「命中 model_price」，而按时长计费的渠道（元/分钟）同样要把价格配在
+	// model_price 上，于是会被误判为按次、整段跳过差额结算。这个标志让这类
+	// 渠道可以opt-in，重新打开结算（见 service/task_polling.go）。
+	DurationSettlement bool `json:"duration_settlement,omitempty"`
 }
 
 // GetUpstreamTaskID 获取上游真实 task ID（用于与 provider 通信）

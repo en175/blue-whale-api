@@ -54,8 +54,13 @@ const (
 	RelayModeResponsesCompact
 
 	// RelayModeMediaKitSync 是 MediaKit 同步工具（/v1/mediakit/sync/{tool}），
-	// 一次往返返回产物。异步工具走任务系统，不在此列。
+	// 一次往返返回产物。
 	RelayModeMediaKitSync
+	// RelayModeMediaKitAsync 是 MediaKit 异步工具（/v1/mediakit/{tool}），
+	// 提交后落 tasks 表，由轮询推进。
+	RelayModeMediaKitAsync
+	// RelayModeMediaKitFetch 是 MediaKit 任务查询（/v1/mediakit/tasks/{task_id}）。
+	RelayModeMediaKitFetch
 )
 
 func Path2RelayMode(path string) int {
@@ -91,7 +96,12 @@ func Path2RelayMode(path string) int {
 	} else if strings.HasPrefix(path, "/v1/realtime") {
 		relayMode = RelayModeRealtime
 	} else if strings.HasPrefix(path, "/v1/mediakit/sync/") {
+		// 同步与查询的具体前缀必须先于下面的通用前缀判断。
 		relayMode = RelayModeMediaKitSync
+	} else if strings.HasPrefix(path, "/v1/mediakit/tasks/") {
+		relayMode = RelayModeMediaKitFetch
+	} else if strings.HasPrefix(path, "/v1/mediakit/") {
+		relayMode = RelayModeMediaKitAsync
 	} else if strings.HasPrefix(path, "/v1beta/models") || strings.HasPrefix(path, "/v1/models") {
 		relayMode = RelayModeGemini
 	} else if strings.HasPrefix(path, "/mj") {

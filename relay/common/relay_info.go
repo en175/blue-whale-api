@@ -701,6 +701,10 @@ type TaskRelayInfo struct {
 
 	ConsumeQuota bool
 
+	// DurationSettlement 由按时长计费的适配器在 EstimateBilling 里置位，
+	// 让完成时的差额结算不被 PerCallBilling 早退跳过（详见 model.TaskBillingContext）。
+	DurationSettlement bool
+
 	// LockedChannel holds the full channel object when the request is bound to
 	// a specific channel (e.g., remix on origin task's channel). Stored as any
 	// to avoid an import cycle with model; callers type-assert to *model.Channel.

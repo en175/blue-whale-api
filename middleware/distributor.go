@@ -360,6 +360,24 @@ func getModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
 		}
 		modelRequest.Model = mediakit.ModelNameForTool(spec.Name)
 		c.Set("relay_mode", relayconstant.RelayModeMediaKitSync)
+	} else if strings.HasPrefix(c.Request.URL.Path, "/v1/mediakit/tasks/") {
+		// MediaKit 任务查询：渠道由任务记录决定，不需要也不应该重新选渠道。
+		shouldSelectChannel = false
+		modelRequest.Model = getTaskOriginModelName(c)
+		c.Set("relay_mode", relayconstant.RelayModeMediaKitFetch)
+	} else if strings.HasPrefix(c.Request.URL.Path, "/v1/mediakit/") {
+		// MediaKit 异步工具提交。与同步分支同理，必须排在读 JSON body 取 model
+		// 的兜底分支之前——原生请求体里没有 model 字段。
+		tool := c.Param("tool")
+		spec, ok := mediakit.LookupTool(tool)
+		if !ok {
+			return nil, false, fmt.Errorf("unknown mediakit tool: %s", tool)
+		}
+		if spec.Sync {
+			return nil, false, fmt.Errorf("mediakit tool %s is synchronous, use POST /v1/mediakit/sync/%s", spec.Name, spec.Name)
+		}
+		modelRequest.Model = mediakit.ModelNameForTool(spec.Name)
+		c.Set("relay_mode", relayconstant.RelayModeMediaKitAsync)
 	} else if !strings.HasPrefix(c.Request.URL.Path, "/v1/audio/transcriptions") && !strings.Contains(c.Request.Header.Get("Content-Type"), "multipart/form-data") {
 		req, err := getModelFromRequest(c)
 		if err != nil {

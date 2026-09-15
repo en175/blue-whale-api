@@ -291,6 +291,66 @@ var fetchRespBuilders = map[int]func(c *gin.Context) (respBody []byte, taskResp 
 	relayconstant.RelayModeSunoFetchByID:  sunoFetchByIDRespBodyBuilder,
 	relayconstant.RelayModeSunoFetch:      sunoFetchRespBodyBuilder,
 	relayconstant.RelayModeVideoFetchByID: videoFetchByIDRespBodyBuilder,
+	relayconstant.RelayModeMediaKitFetch:  mediaKitFetchRespBodyBuilder,
+}
+
+// mediaKitTaskStatus 把网关任务状态翻译回 MediaKit 的词汇。客户端的提交响应
+// 是 MediaKit 信封，查询也应当用同一套状态词，否则客户端要写两套判断。
+var mediaKitTaskStatus = map[model.TaskStatus]string{
+	model.TaskStatusNotStart:   "pending",
+	model.TaskStatusSubmitted:  "queued",
+	model.TaskStatusQueued:     "queued",
+	model.TaskStatusInProgress: "processing",
+	model.TaskStatusSuccess:    "completed",
+	model.TaskStatusFailure:    "failed",
+}
+
+// mediaKitFetchRespBodyBuilder 从本库 tasks 表读任务，不代理上游 /api/v1/tasks/。
+// 客户端持有的是网关公开 task_xxx，直连上游会暴露上游 task_id 并允许越权枚举
+// 他人任务。
+func mediaKitFetchRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *dto.TaskError) {
+	taskId := c.Param("task_id")
+	if taskId == "" {
+		taskResp = service.TaskErrorWrapperLocal(errors.New("task_id is required"), "task_id_required", http.StatusBadRequest)
+		return
+	}
+	task, exist, err := model.GetByTaskId(c.GetInt("id"), taskId)
+	if err != nil {
+		taskResp = service.TaskErrorWrapper(err, "get_task_failed", http.StatusInternalServerError)
+		return
+	}
+	if !exist {
+		taskResp = service.TaskErrorWrapperLocal(errors.New("task_not_exist"), "task_not_exist", http.StatusBadRequest)
+		return
+	}
+
+	status := mediaKitTaskStatus[task.Status]
+	if status == "" {
+		status = "processing"
+	}
+	response := gin.H{
+		"success": true,
+		"task_id": task.TaskID,
+		"status":  status,
+		"message": task.FailReason,
+	}
+	// 结果 URL 与上游原始 result 一并回传，客户端可自取产物。
+	if resultURL := task.PublicResultURL(); resultURL != "" {
+		response["result"] = gin.H{"url": resultURL}
+	} else if len(task.Data) > 0 {
+		var envelope struct {
+			Result map[string]any `json:"result"`
+		}
+		if err := common.Unmarshal(task.Data, &envelope); err == nil && len(envelope.Result) > 0 {
+			response["result"] = envelope.Result
+		}
+	}
+
+	respBody, err = common.Marshal(response)
+	if err != nil {
+		taskResp = service.TaskErrorWrapper(err, "marshal_response_failed", http.StatusInternalServerError)
+	}
+	return
 }
 
 func RelayTaskFetch(c *gin.Context, relayMode int) (taskResp *dto.TaskError) {

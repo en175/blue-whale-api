@@ -48,6 +48,15 @@ type TaskEnhancer interface {
 	RedactUserVisible(task *model.Task)
 }
 
+// TaskCostRecorder 是可选接口：任务到达终态、退款与差额结算都做完之后，落一条
+// 审计行供与上游账单对账。只写审计表，不碰用户额度与渠道限额。
+//
+// chargedQuota 由轮询层算好传入（退款过就是 0），而不是让适配器读 task.Quota——
+// 退款不会回写 task.Quota，适配器自己读会读到预扣值。
+type TaskCostRecorder interface {
+	RecordTaskCost(ctx context.Context, task *model.Task, chargedQuota int)
+}
+
 // GetTaskAdaptorFunc 由 main 包注入，用于获取指定平台的任务适配器。
 // 打破 service -> relay -> relay/channel -> service 的循环依赖。
 var GetTaskAdaptorFunc func(platform constant.TaskPlatform) TaskPollingAdaptor
@@ -94,9 +103,14 @@ func sweepTimedOutTasks(ctx context.Context) {
 			continue
 		}
 		timedOutCount++
+		chargedQuota := task.Quota
 		if !isLegacy && task.Quota != 0 {
 			RefundTaskQuota(ctx, task, reason)
+			chargedQuota = 0
 		}
+		// 超时任务同样留审计行：这类任务上游可能仍在跑并计费，是本表最需要
+		// 记录的形态之一。真实时长拿不到，记 0 由对账方按上游账单核对。
+		recordTaskCost(ctx, task.Platform, task, chargedQuota)
 	}
 
 	if timedOutCount > 0 {
@@ -592,6 +606,9 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 	}
 
 	isDone := task.Status == model.TaskStatusSuccess || task.Status == model.TaskStatusFailure
+	// terminalWon 表示本进程赢得了「推进到终态」的那次 CAS。只有它为真才写审计行，
+	// 否则重复轮询同一个已终态的任务会写出多行。
+	terminalWon := false
 	if isDone && snap.Status != task.Status {
 		won, err := task.UpdateWithStatus(snap.Status)
 		if err != nil {
@@ -602,6 +619,8 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 			logger.LogWarn(ctx, fmt.Sprintf("Task %s already transitioned by another process, skip billing", task.TaskID))
 			shouldRefund = false
 			shouldSettle = false
+		} else {
+			terminalWon = true
 		}
 	} else if !snap.Equal(task.Snapshot()) {
 		if _, err := task.UpdateWithStatus(snap.Status); err != nil {
@@ -619,7 +638,31 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 		RefundTaskQuota(ctx, task, task.FailReason)
 	}
 
+	// 审计行写在结算与退款之后：ChargedQuota 要的是最终实扣，退款过就是 0。
+	if terminalWon {
+		chargedQuota := task.Quota
+		if shouldRefund {
+			chargedQuota = 0
+		}
+		recordTaskCost(ctx, task.Platform, task, chargedQuota)
+	}
+
 	return nil
+}
+
+// recordTaskCost 是 TaskCostRecorder 的转发点。适配器未实现该接口时什么都不做，
+// 现有渠道行为不变。
+func recordTaskCost(ctx context.Context, platform constant.TaskPlatform, task *model.Task, chargedQuota int) {
+	if GetTaskAdaptorFunc == nil {
+		return
+	}
+	adaptor := GetTaskAdaptorFunc(platform)
+	if adaptor == nil {
+		return
+	}
+	if recorder, ok := adaptor.(TaskCostRecorder); ok {
+		recorder.RecordTaskCost(ctx, task, chargedQuota)
+	}
 }
 
 func redactVideoResponseBody(body []byte) []byte {
@@ -692,14 +735,16 @@ func truncateBase64(s string) string {
 //  2. taskResult.TotalTokens > 0 → 按 token 重算
 //  3. 都不满足 → 保持预扣额度不变
 func settleTaskBillingOnComplete(ctx context.Context, adaptor TaskPollingAdaptor, task *model.Task, taskResult *relaycommon.TaskInfo) {
-	// 0. 按次计费的任务不做差额结算
-	if bc := task.PrivateData.BillingContext; bc != nil && bc.PerCallBilling {
+	// 0. 按次计费的任务不做差额结算。按时长计费的渠道同样把价格配在
+	// model_price 上，会被 PerCallBilling 误判，故用 DurationSettlement 放行。
+	if bc := task.PrivateData.BillingContext; bc != nil && bc.PerCallBilling && !bc.DurationSettlement {
 		logger.LogInfo(ctx, fmt.Sprintf("任务 %s 按次计费，跳过差额结算", task.TaskID))
 		return
 	}
 	// 1. 优先让 adaptor 决定最终额度
-	if actualQuota := adaptor.AdjustBillingOnComplete(task, taskResult); actualQuota > 0 {
-		RecalculateTaskQuota(ctx, task, actualQuota, "adaptor计费调整")
+	adjustedQuota, clamp := adjustBillingOnComplete(adaptor, task, taskResult)
+	if adjustedQuota > 0 {
+		RecalculateTaskQuota(ctx, task, adjustedQuota, "adaptor计费调整", clamp)
 		return
 	}
 	// 2. 回退到 token 重算
@@ -708,4 +753,20 @@ func settleTaskBillingOnComplete(ctx context.Context, adaptor TaskPollingAdaptor
 		return
 	}
 	// 3. 无调整，保持预扣额度
+}
+
+// TaskQuotaClampReporter 是 TaskPollingAdaptor 的可选扩展：适配器在换算结算
+// 额度时若发生饱和（越界或 NaN），把 QuotaClamp 一起交回，由轮询层随差额结算
+// 写进日志的 admin_info.quota_saturation，使异常在后端日志与管理台都留痕。
+//
+// 用返回值而不是在适配器实例上暂存：适配器可能被并发任务共用，暂存会串味。
+type TaskQuotaClampReporter interface {
+	AdjustBillingOnCompleteWithClamp(task *model.Task, taskResult *relaycommon.TaskInfo) (int, *common.QuotaClamp)
+}
+
+func adjustBillingOnComplete(adaptor TaskPollingAdaptor, task *model.Task, taskResult *relaycommon.TaskInfo) (int, *common.QuotaClamp) {
+	if reporter, ok := adaptor.(TaskQuotaClampReporter); ok {
+		return reporter.AdjustBillingOnCompleteWithClamp(task, taskResult)
+	}
+	return adaptor.AdjustBillingOnComplete(task, taskResult), nil
 }

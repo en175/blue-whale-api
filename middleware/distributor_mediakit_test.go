@@ -65,11 +65,71 @@ func TestDistributeMediaKitSyncRejectsAsyncTool(t *testing.T) {
 	assert.Nil(t, modelRequest)
 }
 
-// TestPath2RelayModeMediaKitSync 固定中继模式解析：genBaseRelayInfo 只在
-// Path2RelayMode 返回 Unknown 时才回退读 context，解析错会让同步工具走错 handler。
-// 异步工具与查询路径此时没有对应模式，必须落回 Unknown 而不是误判为同步。
-func TestPath2RelayModeMediaKitSync(t *testing.T) {
+// TestPath2RelayModeMediaKit 固定中继模式解析：genBaseRelayInfo 只在 Path2RelayMode
+// 返回 Unknown 时才回退读 context，解析错会让请求走错 handler。三个前缀有包含关系，
+// 顺序错了（比如把通用前缀提到最前）会把同步工具和查询都吞成异步。
+func TestPath2RelayModeMediaKit(t *testing.T) {
 	assert.Equal(t, relayconstant.RelayModeMediaKitSync, relayconstant.Path2RelayMode("/v1/mediakit/sync/enhance-image"))
-	assert.Equal(t, relayconstant.RelayModeUnknown, relayconstant.Path2RelayMode("/v1/mediakit/enhance-video-generative"))
-	assert.Equal(t, relayconstant.RelayModeUnknown, relayconstant.Path2RelayMode("/v1/mediakit/tasks/task_abc"))
+	assert.Equal(t, relayconstant.RelayModeMediaKitAsync, relayconstant.Path2RelayMode("/v1/mediakit/enhance-video-generative"))
+	assert.Equal(t, relayconstant.RelayModeMediaKitFetch, relayconstant.Path2RelayMode("/v1/mediakit/tasks/task_abc"))
+	assert.Equal(t, relayconstant.RelayModeUnknown, relayconstant.Path2RelayMode("/v1/whatever"))
+}
+
+// distributeMediaKitAsync 以异步路由的 path 与 :tool 参数调用 getModelRequest。
+func distributeMediaKitAsync(t *testing.T, tool string) (*ModelRequest, bool, error) {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/mediakit/"+tool, strings.NewReader(`{"video_url":"https://x/a.mp4"}`))
+	c.Request.Header.Set("Content-Type", "application/json")
+	c.Params = gin.Params{{Key: "tool", Value: tool}}
+
+	return getModelRequest(c)
+}
+
+// TestDistributeMediaKitAsyncResolvesToolModel 与同步分支同理：模型只能由路径上的
+// 工具名查表得出，落到 JSON body 兜底分支会拿到空模型名。
+func TestDistributeMediaKitAsyncResolvesToolModel(t *testing.T) {
+	modelRequest, shouldSelect, err := distributeMediaKitAsync(t, "enhance-video-generative")
+	require.NoError(t, err)
+	require.NotNil(t, modelRequest)
+	assert.Equal(t, mediakit.ModelNameForTool("enhance-video-generative"), modelRequest.Model)
+	assert.True(t, shouldSelect, "异步提交需要走渠道选择")
+}
+
+// TestDistributeMediaKitAsyncRejectsTool 是同一个安全边界：工具名只用于查表，
+// 未登记的拒绝；同步工具走异步路由同样必须在分销阶段挡下，否则会一路走到
+// TaskAdaptor.ValidateRequestAndSetAction 才报错。
+func TestDistributeMediaKitAsyncRejectsTool(t *testing.T) {
+	t.Run("未登记工具", func(t *testing.T) {
+		modelRequest, _, err := distributeMediaKitAsync(t, "not-a-tool")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "unknown mediakit tool")
+		assert.Nil(t, modelRequest)
+	})
+
+	t.Run("同步工具", func(t *testing.T) {
+		modelRequest, _, err := distributeMediaKitAsync(t, "enhance-image")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "is synchronous")
+		assert.Nil(t, modelRequest)
+	})
+}
+
+// TestDistributeMediaKitFetchSkipsChannelSelection 查询路径用的是任务记录里的渠道，
+// 重新选渠道会让查询落到另一条渠道上（甚至另一家供应商），任务永远查不到。
+func TestDistributeMediaKitFetchSkipsChannelSelection(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/v1/mediakit/tasks/task_abc", nil)
+	c.Params = gin.Params{{Key: "task_id", Value: "task_abc"}}
+
+	_, shouldSelect, err := getModelRequest(c)
+	require.NoError(t, err)
+	assert.False(t, shouldSelect, "查询不应重新选择渠道")
+	assert.Equal(t, relayconstant.RelayModeMediaKitFetch, c.GetInt("relay_mode"))
 }
