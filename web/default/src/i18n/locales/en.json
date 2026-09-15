@@ -2680,6 +2680,7 @@
     "maxRequests ≥ 0, maxSuccess ≥ 1, both ≤ 2,147,483,647": "maxRequests ≥ 0, maxSuccess ≥ 1, both ≤ 2,147,483,647",
     "May be used for training by upstream provider": "May be used for training by upstream provider",
     "Media pricing": "Media pricing",
+    "MediaKit": "MediaKit",
     "MediaKit API Key": "MediaKit API Key",
     "MediaKit API key is required when lottery percents are non-zero": "MediaKit API key is required when lottery percents are non-zero",
     "MediaKit Base URL": "MediaKit Base URL",

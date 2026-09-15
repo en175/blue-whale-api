@@ -2680,6 +2680,7 @@
     "maxRequests ≥ 0, maxSuccess ≥ 1, both ≤ 2,147,483,647": "maxRequests ≥ 0, maxSuccess ≥ 1，两者均 ≤ 2,147,483,647",
     "May be used for training by upstream provider": "可能被上游提供商用于训练",
     "Media pricing": "媒体定价",
+    "MediaKit": "MediaKit（火山智能多媒体）",
     "MediaKit API Key": "MediaKit API Key",
     "MediaKit API key is required when lottery percents are non-zero": "配置了非零抽签百分比时必须填写 MediaKit API Key",
     "MediaKit Base URL": "MediaKit Base URL",

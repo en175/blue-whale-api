@@ -2680,6 +2680,7 @@
     "maxRequests ≥ 0, maxSuccess ≥ 1, both ≤ 2,147,483,647": "maxRequests ≥ 0、maxSuccess ≥ 1、両方とも ≤ 2,147,483,647",
     "May be used for training by upstream provider": "上流プロバイダーが学習に利用する可能性があります",
     "Media pricing": "メディア料金",
+    "MediaKit": "MediaKit（インテリジェントメディア）",
     "MediaKit API Key": "MediaKit API Key",
     "MediaKit API key is required when lottery percents are non-zero": "抽選パーセントが 0 以外の場合は MediaKit API Key が必要です",
     "MediaKit Base URL": "MediaKit Base URL",

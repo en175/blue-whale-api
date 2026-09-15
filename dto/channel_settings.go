@@ -24,6 +24,9 @@ type ChannelSettings struct {
 	MediaKitAPIKey          string `json:"mediakit_api_key,omitempty"`
 	MediaKitBaseURL         string `json:"mediakit_base_url,omitempty"`
 	MediaKitSubmitPath      string `json:"mediakit_submit_path,omitempty"`
+	// MediaKit channel (type 65). 时长类工具入参多为 URL，提交时拿不到真实时长，
+	// 用本值做预扣估算，任务完成时按回包时长结算差额。
+	MediaKitDefaultMinutes float64 `json:"mediakit_default_minutes,omitempty"`
 }
 
 func (s ChannelSettings) ValidateVolcEngineEnhanced() error {
@@ -45,8 +48,20 @@ func (s ChannelSettings) ValidateVolcEngineEnhanced() error {
 	return nil
 }
 
-type VertexKeyType string
+// ValidateMediaKit 校验 MediaKit 渠道（type 65）专有配置。
+func (s ChannelSettings) ValidateMediaKit() error {
+	if s.MediaKitDefaultMinutes < 0 || s.MediaKitDefaultMinutes > 60 {
+		return fmt.Errorf("mediakit_default_minutes must be between 0 and 60")
+	}
+	if s.MediaKitBaseURL != "" {
+		if _, err := url.Parse(s.MediaKitBaseURL); err != nil {
+			return fmt.Errorf("mediakit_base_url is invalid: %w", err)
+		}
+	}
+	return nil
+}
 
+type VertexKeyType string
 const (
 	VertexKeyTypeJSON   VertexKeyType = "json"
 	VertexKeyTypeAPIKey VertexKeyType = "api_key"

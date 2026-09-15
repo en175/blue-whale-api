@@ -1,17 +1,14 @@
 package volcengine_plus
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"io"
-	"net/http"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/relay/channel/mediakit"
 )
 
 type mediaKitAPI interface {
@@ -19,37 +16,24 @@ type mediaKitAPI interface {
 	Get(ctx context.Context, jobID string) (status, videoURL string, err error)
 }
 
+// mediaKitClient 是超分专用的薄封装：固定提交路径、固定请求体与结果字段。
+// HTTP 与错误信封由 mediakit.Client 承担。
 type mediaKitClient struct {
-	baseURL    string
+	inner      *mediakit.Client
 	submitPath string
-	apiKey     string
-	proxy      string
-	do         func(*http.Request) (*http.Response, error)
 }
 
 func newMediaKitClient(baseURL, apiKey, proxy, submitPath string) *mediaKitClient {
-	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
-	if baseURL == "" {
-		baseURL = DefaultMediaKitBaseURL
-	}
 	submitPath = strings.TrimSpace(submitPath)
 	if submitPath == "" {
 		submitPath = DefaultMediaKitSubmitPath
 	} else if !strings.HasPrefix(submitPath, "/") {
 		submitPath = "/" + submitPath
 	}
-	return &mediaKitClient{baseURL: baseURL, apiKey: apiKey, proxy: proxy, submitPath: submitPath}
-}
-
-func (c *mediaKitClient) doRequest(req *http.Request) (*http.Response, error) {
-	if c.do != nil {
-		return c.do(req)
+	return &mediaKitClient{
+		inner:      mediakit.NewClient(baseURL, apiKey, proxy),
+		submitPath: submitPath,
 	}
-	client, err := service.GetHttpClientWithProxy(c.proxy)
-	if err != nil {
-		return nil, err
-	}
-	return client.Do(req)
 }
 
 func (c *mediaKitClient) Submit(ctx context.Context, videoURL, resolution string) (string, error) {
@@ -60,24 +44,9 @@ func (c *mediaKitClient) Submit(ctx context.Context, videoURL, resolution string
 	if err != nil {
 		return "", err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+c.submitPath, bytes.NewReader(body))
+	raw, err := c.inner.Post(ctx, c.submitPath, body)
 	if err != nil {
 		return "", err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.apiKey)
-	resp, err := c.doRequest(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	raw, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", fmt.Errorf("mediakit submit status %d", resp.StatusCode)
 	}
 	var parsed struct {
 		Success bool   `json:"success"`
@@ -94,23 +63,9 @@ func (c *mediaKitClient) Submit(ctx context.Context, videoURL, resolution string
 }
 
 func (c *mediaKitClient) Get(ctx context.Context, jobID string) (string, string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/v1/tasks/"+jobID, nil)
+	raw, err := c.inner.Get(ctx, mediakit.TaskPath(jobID))
 	if err != nil {
 		return "", "", err
-	}
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.apiKey)
-	resp, err := c.doRequest(req)
-	if err != nil {
-		return "", "", err
-	}
-	defer resp.Body.Close()
-	raw, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", "", err
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", "", fmt.Errorf("mediakit get status %d", resp.StatusCode)
 	}
 	var parsed struct {
 		Success bool   `json:"success"`
