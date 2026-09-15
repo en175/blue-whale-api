@@ -86,3 +86,28 @@ func TestRecordTaskCostToleratesNilTask(t *testing.T) {
 	adaptor.RecordTaskCost(context.Background(), nil, 0)
 	assert.Nil(t, *captured)
 }
+
+// TestParseTaskResultKeepsFailureReason 是真实上游踩出来的回归：上游把失败详情
+// 放在顶层 error 对象里，顶层 message 是空的。只读 message 会让任务在库里落成
+// 一条没有原因的失败记录，用户和运维都看不出为什么挂了。
+func TestParseTaskResultKeepsFailureReason(t *testing.T) {
+	body := []byte(`{"error":{"code":"DownloadFileError","type":"BadRequest",` +
+		`"message":"file upload by url failed, code: DownloadFailed"},"status":"failed",` +
+		`"success":true,"task_id":"amk-tool-x-1","task_type":"enhance-video-generative"}`)
+
+	var adaptor TaskAdaptor
+	result, err := adaptor.ParseTaskResult(body)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, model.TaskStatusFailure, result.Status)
+	assert.Equal(t, "DownloadFileError: file upload by url failed, code: DownloadFailed", result.Reason)
+}
+
+// TestParseTaskResultFallsBackToTopLevelMessage 旧形状（错误只在顶层 message）
+// 仍要能取到原因，不能为了新形状把老形状丢掉。
+func TestParseTaskResultFallsBackToTopLevelMessage(t *testing.T) {
+	var adaptor TaskAdaptor
+	result, err := adaptor.ParseTaskResult([]byte(`{"success":false,"status":"failed","message":"boom"}`))
+	require.NoError(t, err)
+	assert.Equal(t, "boom", result.Reason)
+}

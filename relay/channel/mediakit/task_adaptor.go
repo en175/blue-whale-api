@@ -22,9 +22,10 @@ import (
 // submitResponse 是异步工具的提交响应信封。task_id 是上游任务 ID，
 // 只落库到 private_data，对客返回的是网关公开任务 ID。
 type submitResponse struct {
-	Success bool   `json:"success"`
-	TaskID  string `json:"task_id"`
-	Message string `json:"message"`
+	Success bool           `json:"success"`
+	TaskID  string         `json:"task_id"`
+	Message string         `json:"message"`
+	Error   *upstreamError `json:"error"`
 }
 
 // queryResponse 是异步任务的查询响应。result 的键名因工具而异
@@ -34,6 +35,7 @@ type queryResponse struct {
 	Status  string         `json:"status"`
 	Message string         `json:"message"`
 	Result  map[string]any `json:"result"`
+	Error   *upstreamError `json:"error"`
 }
 
 type TaskAdaptor struct {
@@ -233,11 +235,9 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 		return "", nil, service.TaskErrorWrapper(fmt.Errorf("unmarshal_response_body_failed: %w", err), "unmarshal_response_body_failed", http.StatusInternalServerError)
 	}
 	if !submit.Success || submit.TaskID == "" {
-		message := submit.Message
-		if message == "" {
-			message = "submit failed"
-		}
-		return "", nil, service.TaskErrorWrapper(fmt.Errorf("mediakit submit failed: %s", message), "invalid_response", http.StatusBadGateway)
+		return "", nil, service.TaskErrorWrapper(
+			fmt.Errorf("mediakit submit failed: %s", failureReason(submit.Error, submit.Message)),
+			"invalid_response", http.StatusBadGateway)
 	}
 
 	// 对客沿用 MediaKit 信封，但只暴露网关公开任务 ID。
@@ -291,7 +291,7 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 	case "failed", "error", "canceled", "cancelled":
 		taskResult.Status = model.TaskStatusFailure
 		taskResult.Progress = "100%"
-		taskResult.Reason = res.Message
+		taskResult.Reason = failureReason(res.Error, res.Message)
 	default:
 		taskResult.Status = model.TaskStatusInProgress
 		taskResult.Progress = "30%"

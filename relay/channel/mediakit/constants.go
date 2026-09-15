@@ -24,3 +24,24 @@ var ModelList = []string{}
 func TaskPath(taskID string) string {
 	return queryPathPrefix + taskID
 }
+
+// upstreamError 是 MediaKit 信封里的错误对象。上游失败时详情放在这里，
+// **顶层 message 通常是空的**——只读顶层会把失败原因丢掉，任务在库里落成
+// 一条没有原因的失败记录（真实上游上已踩到）。
+type upstreamError struct {
+	Code    string `json:"code"`
+	Type    string `json:"type"`
+	Message string `json:"message"`
+}
+
+// failureReason 从上游信封里取可读的失败原因，取不到时退回 fallback。
+// 形如 "DownloadFileError: file upload by url failed, ..."。
+func failureReason(err *upstreamError, fallback string) string {
+	if err == nil || err.Message == "" {
+		return fallback
+	}
+	if err.Code != "" {
+		return err.Code + ": " + err.Message
+	}
+	return err.Message
+}

@@ -21,8 +21,9 @@ import (
 // envelope 是 MediaKit 同步工具的统一响应信封。完整响应体由 DoResponse
 // 原样透传给客户端，这里只解析判定成功与否所需的字段。
 type envelope struct {
-	Success bool   `json:"success"`
-	Message string `json:"message"`
+	Success bool           `json:"success"`
+	Message string         `json:"message"`
+	Error   *upstreamError `json:"error"`
 }
 
 type Adaptor struct{}
@@ -116,7 +117,7 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycom
 	}
 	if !env.Success {
 		return nil, types.NewErrorWithStatusCode(
-			errors.New(env.Message),
+			errors.New(failureReason(env.Error, env.Message)),
 			types.ErrorCodeBadResponse,
 			http.StatusBadRequest,
 		)
