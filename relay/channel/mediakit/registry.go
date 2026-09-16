@@ -100,7 +100,9 @@ var toolRegistry = []ToolSpec{
 	{Name: "segment-scenes", Mode: BillingDuration, ResultKind: ResultNone, ResultPath: "segments.0.segment_video_url"},
 	{Name: "asr-subtitles", Mode: BillingDuration, ResultKind: ResultNone},
 	{Name: "video-ocr", Mode: BillingDuration, ResultKind: ResultNone},
-	{Name: "analyze-video-highlights", Mode: BillingDuration, ResultKind: ResultVideo},
+	// 高光「提取」只回 highlight_info（各片段起止时间与评分），不产出文件；
+	// 真正把高光剪成片的是 generate-highlights-* 族，产物在 video_urls 里。
+	{Name: "analyze-video-highlights", Mode: BillingDuration, ResultKind: ResultNone},
 	{Name: "analyze-video-storyline", Mode: BillingDuration, ResultKind: ResultNone},
 	// 高光剪辑族的成品与竖版解说同形，都在顶层 video_urls 数组里（minigame 实测确认，
 	// 另外两个同族工具据此推定，均走同一上游能力）。

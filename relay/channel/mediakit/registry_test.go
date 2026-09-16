@@ -53,6 +53,35 @@ func TestSyncToolsUseToolsSyncPrefix(t *testing.T) {
 	}
 }
 
+// TestAnalysisToolsDeclareNoProduct 锁定「只出分析结果、不产出文件」的工具必须声明
+// ResultNone。ResultKind 是「该不该有产物」的唯一判据：声明成 ResultVideo 而实际
+// 拿不到 URL，调用方会把「无产物」误判成网关取件失败。
+// 实测抓到的反例是 analyze-video-highlights —— 名字带「提取」，实际只回
+// highlight_info（片段起止时间），成品由 generate-highlights-* 族产出。
+func TestAnalysisToolsDeclareNoProduct(t *testing.T) {
+	analysisOnly := []string{
+		"analyze-video-highlights",
+		"analyze-video-storyline",
+		"asr-subtitles",
+		"assess-video-quality",
+		"detect-voice-activity",
+		"video-ocr",
+		"image-ocr",
+		"evaluate-image-quality",
+		"extract-video-invisible-watermark",
+		"extract-image-invisible-watermark",
+	}
+	for _, name := range analysisOnly {
+		t.Run(name, func(t *testing.T) {
+			spec, ok := LookupTool(name)
+			require.Truef(t, ok, "tool %s must be registered", name)
+			assert.Equal(t, ResultNone, spec.ResultKind,
+				"%s returns analysis only; declaring a product kind makes the gateway's result URL lookups fail", name)
+			assert.Empty(t, spec.ResultPath, "%s has no artifact to point at", name)
+		})
+	}
+}
+
 func TestLookupToolRejectsUnknownName(t *testing.T) {
 	_, ok := LookupTool("../../etc/passwd")
 	assert.False(t, ok)

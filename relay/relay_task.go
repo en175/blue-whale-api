@@ -347,11 +347,15 @@ func mediaKitFetchRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *dt
 			result = envelope.Result
 		}
 	}
-	// url 只在确实取到上游产物时附加。自引用代理地址来自轮询层「没有产物」时的
-	// 兜底写入（taskcommon.BuildProxyURL），不是产物，回传它会让调用方拿到一个
-	// 指向网关自身的地址。
-	if resultURL := task.PublicResultURL(); resultURL != "" && !taskcommon.IsProxyURL(resultURL, task.TaskID) {
-		result["url"] = resultURL
+	// url 只在任务成功且确实取到上游产物时附加，三条排除理由各自独立：
+	//   - 失败的task.PublicResultURL()会回落到 FailReason（见 model/task.go GetResultURL），
+	//     错误文案不是地址，放进 url 会被调用方当下载链接用。错误已由上面的 message 字段承载。
+	//   - 自引用代理地址来自轮询层「没有产物」时的兜底写入（taskcommon.BuildProxyURL），
+	//     不是产物，回传它会让调用方拿到一个指向网关自身的地址。
+	if task.Status == model.TaskStatusSuccess {
+		if resultURL := task.PublicResultURL(); resultURL != "" && !taskcommon.IsProxyURL(resultURL, task.TaskID) {
+			result["url"] = resultURL
+		}
 	}
 	if len(result) > 0 {
 		response["result"] = result
