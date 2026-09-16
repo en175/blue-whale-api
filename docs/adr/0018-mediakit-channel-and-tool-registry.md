@@ -84,6 +84,7 @@ GiB 档不套阶梯是为了让三类计费量**全部逐请求可算**，网关
 2. **各工具的结果键名与时长字段名**：结果位置已由注册表逐工具声明（`ResultPath` 或 `ResultKind` 约定键），取不到即空串；早期「兜底扫 `*_url` 按键名排序取第一个」的写法已删除，理由见 `registry.go` `ResultURL` 注释。时长字段靠 `TaskDurationSeconds` 未命中时打出的 `result 键：…` 日志逐工具收敛。**已实测**：`enhance-video-generative` 的真实回包为 `result.duration`（秒，如 `14.095`），候选表已命中，无需新增 `DurationResultField`；其余工具仍待实测。
 
    失败原因同理：上游把详情放在顶层 `error` 对象（`{code, type, message}`），**顶层 `message` 通常为空**，且 `success` 与 `status: "failed"` 可同时为真——只能认 `status`，原因走 `failureReason()`。已实测。
-3. **同步工具批量（`batch_count > 1`）**：v1 一律 400，`MediaKitSyncHelper` 已实现。透传路径没有 DTO，拿不到 `TokenCountMeta.BillingRatios` 钩子参与计价；要做批量得给 `TokenCountMeta` 加「透传 body 预扫描」。注意倍率字段是 `batch_count` 而非 `n`——MediaKit 无工具使用 `n`。
+3. **同步工具批量（`batch_count > 1`）**：v1 一律 400。实现在 `relay/helper/valid_request.go` 的 `GetAndValidateRequest` → `RelayFormatMediaKit` 分支，**不是 `MediaKitSyncHelper`**——必须排在 `controller.Relay` 的定价与预扣之前。透传路径没有 DTO，拿不到 `TokenCountMeta.BillingRatios` 钩子参与计价；要做批量得给 `TokenCountMeta` 加「透传 body 预扫描」。注意倍率字段是 `batch_count` 而非 `n`——MediaKit 无工具使用 `n`。
+   异步侧无同类守卫，也无需守卫：异步唯一的按次工具 `extract-frames` 没有帧数/张数入参，产出规模不可由客户端线性放大。代价是口径差——官方按**截图总张数**计费（0.1 元/千次），网关按次收。
 4. **确认生产 `TaskPricePatches` 是否含 MediaKit 工具名**：命中会强制 `PerCallBilling=true`，把时长类工具拖进不结算分支（`DurationSettlement` 已可放行，但仍应确认）。
 5. **未登记的工具**：`get-audio-meta`（音频元信息获取）刻意未登记——它是元数据查询、不是处理工具，官方也不按处理量计费。同类的 `video-understand-router` / `chat` / 大模型高光剪辑 / 剪辑套件（拼接、调速、滤镜等约 19 个）同样未登记：前者依赖方舟按 token 计费（MediaKit 侧只按时长收），后者官方未给出逐工具的独立 slug 表。要接需先补注册表与计费口径。

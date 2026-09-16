@@ -190,8 +190,10 @@ GiB 档不套阶梯是为了让三类计费量**全部逐请求可算**，网关
 ## 11. 明确不做
 
 - 官方价表内置进用户计费（改价要发版）；`cost.go` 落地后只用于审计与默认定价参考。
-- 同步工具批量 v1 一律 400：**上游真实的多产物倍率字段是 `batch_count`**（目前只有 `generate-product-scene-image` 有，官方按生成张数计费、回包为 `result.images[]`），`MediaKitSyncHelper` 已对 `batch_count > 1` 拦成 400。透传路径没有 DTO，拿不到 `TokenCountMeta.BillingRatios` 钩子参与计价，所以不放开。
+- 同步工具批量 v1 一律 400：**上游真实的多产物倍率字段是 `batch_count`**（目前只有 `generate-product-scene-image` 有，官方按生成张数计费、回包为 `result.images[]`）。守卫在 `relay/helper/valid_request.go` 的 `GetAndValidateRequest` → `RelayFormatMediaKit` 分支（`gjson` 扫 `batch_count > 1` 返 400），**不在 `MediaKitSyncHelper` 里**——它必须排在 `controller.Relay` 的定价与预扣之前，落到 handler 阶段再拦已经来不及参与计价。透传路径没有 DTO，拿不到 `TokenCountMeta.BillingRatios` 钩子参与计价，所以不放开。
   早期文档写的守卫字段是 `n`——MediaKit 没有任何工具用这个字段名，按 `n` 写守卫等于不设防。
+- 异步链路的同类守卫：**经核对，异步工具没有等价的可控倍率字段**，故无需守卫。异步侧唯一的按次工具是 `extract-frames`，入参为 `video_url` / `scene_change_threshold` / `enable_sprite` / `sprite_rows` / `sprite_cols` / `scale_long` / `scale_short` / 时间范围，**没有帧数或张数字段**，产出规模由视频内容决定，客户端改不出线性倍率。异步走 `controller.RelayTask`、不经过 `GetAndValidateRequest`，因此不构成少收面。
+  但存在口径差需留意：官方对抽帧是**按截图总张数**计费（`截图总张数 / 1000 × 0.1 元`；开启雪碧图时按合成雪碧图所用的帧截图张数，不按雪碧图文件数），网关登记为 `BillingPerCall` 按次收费。这不是漏洞而是定价取舍——管理员配 `model_price` 时应知道单个长视频可能产出上万张截图。
 - 代理上游 `/api/v1/tasks/{id}`。
 - 由客户端字符串拼上游路径。
 - 媒体上传地址 API（`/api/v1/media/upload-address`）与事件回调配置。
