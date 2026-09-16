@@ -31,11 +31,12 @@ type submitResponse struct {
 // queryResponse 是异步任务的查询响应。result 的键名因工具而异
 // （image_url / video_url / audio_url ...），故按 map 解析后按产物类型取。
 type queryResponse struct {
-	Success bool           `json:"success"`
-	Status  string         `json:"status"`
-	Message string         `json:"message"`
-	Result  map[string]any `json:"result"`
-	Error   *upstreamError `json:"error"`
+	Success  bool           `json:"success"`
+	Status   string         `json:"status"`
+	Message  string         `json:"message"`
+	TaskType string         `json:"task_type"`
+	Result   map[string]any `json:"result"`
+	Error    *upstreamError `json:"error"`
 }
 
 type TaskAdaptor struct {
@@ -287,7 +288,11 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 	case "completed", "succeeded", "success":
 		taskResult.Status = model.TaskStatusSuccess
 		taskResult.Progress = "100%"
-		taskResult.Url = ResultURL(res.Result)
+		// 产物位置逐工具不同，用上游回包的 task_type 反查注册表。实测 45/45 回包
+		// 都带 task_type 且与提交时的工具名一致；查不到则视为无产物（空 Url），
+		// 由轮询层决定兜底，绝不在这里猜键名。
+		spec, _ := LookupTool(res.TaskType)
+		taskResult.Url = ResultURL(res.Result, spec)
 	case "failed", "error", "canceled", "cancelled":
 		taskResult.Status = model.TaskStatusFailure
 		taskResult.Progress = "100%"

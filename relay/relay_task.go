@@ -334,16 +334,27 @@ func mediaKitFetchRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *dt
 		"status":  status,
 		"message": task.FailReason,
 	}
-	// 结果 URL 与上游原始 result 一并回传，客户端可自取产物。
-	if resultURL := task.PublicResultURL(); resultURL != "" {
-		response["result"] = gin.H{"url": resultURL}
-	} else if len(task.Data) > 0 {
+	// 回传上游原始 result 的结构化内容。网关的下游调用方需要产物本身——可能是
+	// 数组（extract-frames 的 snapshots、drama-recap-vertical 的 video_urls）、
+	// 嵌套字段，或根本没有 URL 的分析结果（asr-subtitles 的字幕、画质评分）。
+	// 只给一个 url 字段表达不了这些形状。
+	result := gin.H{}
+	if len(task.Data) > 0 {
 		var envelope struct {
 			Result map[string]any `json:"result"`
 		}
 		if err := common.Unmarshal(task.Data, &envelope); err == nil && len(envelope.Result) > 0 {
-			response["result"] = envelope.Result
+			result = envelope.Result
 		}
+	}
+	// url 只在确实取到上游产物时附加。自引用代理地址来自轮询层「没有产物」时的
+	// 兜底写入（taskcommon.BuildProxyURL），不是产物，回传它会让调用方拿到一个
+	// 指向网关自身的地址。
+	if resultURL := task.PublicResultURL(); resultURL != "" && !taskcommon.IsProxyURL(resultURL, task.TaskID) {
+		result["url"] = resultURL
+	}
+	if len(result) > 0 {
+		response["result"] = result
 	}
 
 	respBody, err = common.Marshal(response)

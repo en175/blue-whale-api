@@ -14,6 +14,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/relay/channel/task/taskcommon"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/system_setting"
 
@@ -135,6 +136,15 @@ func VideoProxy(c *gin.Context) {
 	if videoURL == "" {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("Video URL is empty for task %s", taskID))
 		videoProxyError(c, http.StatusBadGateway, "server_error", "Failed to fetch video content")
+		return
+	}
+
+	// 存的是本网关自己的 /content 地址，说明轮询层没从上游取到产物——那是
+	// taskcommon.BuildProxyURL 的兜底写入，不是一个下载地址。继续转发等于网关
+	// 请求自己，生产环境（ServerAddress 为公网域名、443 端口放行）会无限套娃。
+	if taskcommon.IsProxyURL(videoURL, task.TaskID) {
+		logger.LogWarn(c.Request.Context(), fmt.Sprintf("Task %s has no upstream artifact: stored result URL points back at this gateway", taskID))
+		videoProxyError(c, http.StatusNotFound, "server_error", "Task has no downloadable artifact")
 		return
 	}
 

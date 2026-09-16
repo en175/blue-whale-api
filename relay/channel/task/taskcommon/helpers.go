@@ -3,6 +3,7 @@ package taskcommon
 import (
 	"encoding/base64"
 	"fmt"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
@@ -64,6 +65,18 @@ func DecodeLocalTaskID(id string) (string, error) {
 // e.g., "https://your-server.com/v1/videos/task_xxxx/content"
 func BuildProxyURL(taskID string) string {
 	return fmt.Sprintf("%s/v1/videos/%s/content", system_setting.ServerAddress, taskID)
+}
+
+// IsProxyURL reports whether url points back at this gateway's own video proxy
+// route for taskID. The polling layer falls back to BuildProxyURL when an
+// adaptor yields no result URL, so a stored proxy URL means "no upstream
+// artifact" rather than a real download link. Serving it through
+// /v1/videos/:task_id/content would make the gateway fetch from itself.
+func IsProxyURL(url string, taskID string) bool {
+	if strings.TrimSpace(url) == "" || strings.TrimSpace(taskID) == "" {
+		return false
+	}
+	return strings.Contains(url, "/v1/videos/"+taskID+"/content")
 }
 
 // Status-to-progress mapping constants for polling updates.

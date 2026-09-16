@@ -1,8 +1,10 @@
 package mediakit
 
 import (
-	"sort"
 	"strings"
+
+	"github.com/QuantumNous/new-api/common"
+	"github.com/tidwall/gjson"
 )
 
 // BillingMode 决定对客计费口径。官方计费分三档（按成功次数 / 按时长 / 按处理量 GiB），
@@ -18,7 +20,8 @@ const (
 	BillingVolume BillingMode = "volume"
 )
 
-// ResultKind 声明工具产物类型，用于从上游 result 对象里取结果 URL。
+// ResultKind 声明工具产物类型。它只描述产物「是什么」，不决定「去哪取」——
+// 单产物工具可据此走约定键名，多产物或键名不规律的工具必须用 ResultPath 显式声明。
 type ResultKind string
 
 const (
@@ -42,6 +45,15 @@ type ToolSpec struct {
 	Sync       bool        // true=同步工具（/tools-sync/），false=异步任务（/tools/）
 	Mode       BillingMode // 计费口径
 	ResultKind ResultKind  // 产物类型
+	// ResultPath 是相对上游 result 对象的 gjson 路径，声明产物 URL 的确切位置，
+	// 例如 video_urls.0、snapshots.0.image_url。留空则按 ResultKind 走约定键名
+	// （video_url / image_url / audio_url）；ResultNone 的工具留空即「无产物」。
+	//
+	// 逐工具实测得出：上游各工具 result 形状不统一，产物可能嵌在数组里
+	// （drama-recap-vertical 的 video_urls、extract-frames 的 snapshots），
+	// 也可能键名不在约定之列（semantic-segment / drama-script 的 result_url），
+	// 而 multi-product 工具（separate-voice 同时给人声与伴奏）必须指定取哪一轨。
+	ResultPath string
 }
 
 // toolRegistry 是全部已接入的工具。上游路径来自官方文档逐条核对，
@@ -84,19 +96,24 @@ var toolRegistry = []ToolSpec{
 	{Name: "enhance-video", Mode: BillingDuration, ResultKind: ResultVideo},
 	{Name: "enhance-video-fast", Mode: BillingDuration, ResultKind: ResultVideo},
 	{Name: "erase-video-subtitle-pro", Mode: BillingDuration, ResultKind: ResultVideo},
-	{Name: "segment-scenes", Mode: BillingDuration, ResultKind: ResultNone},
+	// 场景切分的产物是逐个片段的视频链，放在 segments 数组里。
+	{Name: "segment-scenes", Mode: BillingDuration, ResultKind: ResultNone, ResultPath: "segments.0.segment_video_url"},
 	{Name: "asr-subtitles", Mode: BillingDuration, ResultKind: ResultNone},
 	{Name: "video-ocr", Mode: BillingDuration, ResultKind: ResultNone},
 	{Name: "analyze-video-highlights", Mode: BillingDuration, ResultKind: ResultVideo},
 	{Name: "analyze-video-storyline", Mode: BillingDuration, ResultKind: ResultNone},
-	{Name: "generate-highlights-microdrama", Mode: BillingDuration, ResultKind: ResultVideo},
-	{Name: "generate-highlights-minigame", Mode: BillingDuration, ResultKind: ResultVideo},
-	{Name: "generate-highlights-movie", Mode: BillingDuration, ResultKind: ResultVideo},
+	// 高光剪辑族的成品与竖版解说同形，都在顶层 video_urls 数组里（minigame 实测确认，
+	// 另外两个同族工具据此推定，均走同一上游能力）。
+	{Name: "generate-highlights-microdrama", Mode: BillingDuration, ResultKind: ResultVideo, ResultPath: "video_urls.0"},
+	{Name: "generate-highlights-minigame", Mode: BillingDuration, ResultKind: ResultVideo, ResultPath: "video_urls.0"},
+	{Name: "generate-highlights-movie", Mode: BillingDuration, ResultKind: ResultVideo, ResultPath: "video_urls.0"},
 	{Name: "matte-greenscreen-video", Mode: BillingDuration, ResultKind: ResultVideo},
 	{Name: "matte-portrait-video", Mode: BillingDuration, ResultKind: ResultVideo},
-	{Name: "drama-script", Mode: BillingDuration, ResultKind: ResultNone},
+	// 剧本还原的产物是 .json.gz 分析包，键名 result_url 不在约定之列。
+	{Name: "drama-script", Mode: BillingDuration, ResultKind: ResultNone, ResultPath: "result_url"},
 	{Name: "drama-recap", Mode: BillingDuration, ResultKind: ResultVideo},
-	{Name: "drama-recap-vertical", Mode: BillingDuration, ResultKind: ResultVideo},
+	// 竖版解说把成品放在顶层 video_urls 数组里，没有单数 video_url 键。
+	{Name: "drama-recap-vertical", Mode: BillingDuration, ResultKind: ResultVideo, ResultPath: "video_urls.0"},
 	{Name: "add-video-invisible-watermark", Mode: BillingDuration, ResultKind: ResultVideo},
 	{Name: "extract-video-invisible-watermark", Mode: BillingDuration, ResultKind: ResultNone},
 	{Name: "assess-video-quality", Mode: BillingDuration, ResultKind: ResultNone},
@@ -105,14 +122,17 @@ var toolRegistry = []ToolSpec{
 	{Name: "martencode-video", Mode: BillingDuration, ResultKind: ResultVideo},
 	{Name: "face-blur-video", Mode: BillingDuration, ResultKind: ResultVideo},
 	{Name: "face-swap-video", Mode: BillingDuration, ResultKind: ResultVideo},
-	{Name: "semantic-segment", Mode: BillingDuration, ResultKind: ResultVideo},
+	// 智能语义切片的成品键名同样是 result_url，不在约定之列。
+	{Name: "semantic-segment", Mode: BillingDuration, ResultKind: ResultVideo, ResultPath: "result_url"},
 	{Name: "video-frame-interpolation", Mode: BillingDuration, ResultKind: ResultVideo},
 	{Name: "lip-sync", Mode: BillingDuration, ResultKind: ResultVideo},
 	{Name: "reframe-video-to-vertical", Mode: BillingDuration, ResultKind: ResultVideo},
-	{Name: "extract-frames", Mode: BillingPerCall, ResultKind: ResultImage},
+	// 抽帧一次产出多张图（snapshots 数组），url 只放第一张作便捷字段，全量在 result 里。
+	{Name: "extract-frames", Mode: BillingPerCall, ResultKind: ResultImage, ResultPath: "snapshots.0.image_url"},
 
 	// ── 异步：音频工具 ──────────────────────────────────────────────
-	{Name: "separate-voice", Mode: BillingDuration, ResultKind: ResultAudio},
+	// 人声/伴奏分离同时产出两轨且都在顶层，必须指明取人声轨，否则会随键名字典序漂移。
+	{Name: "separate-voice", Mode: BillingDuration, ResultKind: ResultAudio, ResultPath: "voice_audio_url"},
 	{Name: "transcode-audio", Mode: BillingDuration, ResultKind: ResultAudio},
 	{Name: "detect-voice-activity", Mode: BillingDuration, ResultKind: ResultNone},
 }
@@ -167,30 +187,35 @@ func GetModelList() []string {
 	return models
 }
 
-// resultURLKeys 是已知的产物 URL 键，按优先级排列（视频 → 图像 → 音频 → 通用）。
-var resultURLKeys = []string{"video_url", "image_url", "audio_url", "url"}
+// resultKeyForKind 是各产物类型对应的约定键名。上游单产物工具基本都用这套键名，
+// 凡不在其中的形状（数组、嵌套、异名键）必须由 ToolSpec.ResultPath 显式声明。
+var resultKeyForKind = map[ResultKind]string{
+	ResultVideo: "video_url",
+	ResultImage: "image_url",
+	ResultAudio: "audio_url",
+}
 
-// ResultURL 从上游 result 对象里取产物 URL。不同工具的结果键名不同，先按已知
-// 键取，再兜底扫任意以 _url 结尾的字符串键（按键名排序保证结果确定）。
-func ResultURL(result map[string]any) string {
-	for _, key := range resultURLKeys {
-		if value, ok := result[key].(string); ok && value != "" {
-			return value
-		}
-	}
-
-	fallbackKeys := make([]string, 0, len(result))
-	for key, value := range result {
-		if !strings.HasSuffix(key, "_url") {
-			continue
-		}
-		if value, ok := value.(string); ok && value != "" {
-			fallbackKeys = append(fallbackKeys, key)
-		}
-	}
-	if len(fallbackKeys) == 0 {
+// ResultURL 从上游 result 对象里取产物 URL。位置由 spec 决定：ResultPath 非空时
+// 按 gjson 路径精确取值（可指向数组元素与嵌套字段），否则按 ResultKind 取约定键名。
+//
+// 取不到一律返回空串。空串意味着「本次没有产物」——历史实现在取不到时会兜底扫
+// 任意 *_url 键并按字典序取第一个，这对多产物工具（separate-voice 的人声/伴奏、
+// Drama 场景的 voice/music/sfx）会随键名字典序漂移到语义无关的轨道上，故移除。
+func ResultURL(result map[string]any, spec ToolSpec) string {
+	if len(result) == 0 {
 		return ""
 	}
-	sort.Strings(fallbackKeys)
-	return result[fallbackKeys[0]].(string)
+	if spec.ResultPath == "" {
+		key, ok := resultKeyForKind[spec.ResultKind]
+		if !ok {
+			return ""
+		}
+		value, _ := result[key].(string)
+		return value
+	}
+	body, err := common.Marshal(result)
+	if err != nil {
+		return ""
+	}
+	return gjson.GetBytes(body, spec.ResultPath).String()
 }
