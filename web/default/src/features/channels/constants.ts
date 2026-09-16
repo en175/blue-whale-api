@@ -406,6 +406,8 @@ export const TYPE_TO_KEY_PROMPT: Record<number, string> = {
 
 export const CHANNEL_TYPE_VOLCENGINE_ENHANCED = 64
 
+export const CHANNEL_TYPE_MEDIAKIT = 65
+
 export const CHANNEL_TYPE_WARNINGS: Record<number, string> = {
   3: 'For channels added after May 10, 2025, no need to remove "." from model names during deployment',
   8: 'If connecting to upstream One API or New API relay projects, use OpenAI type instead unless you know what you are doing',

@@ -83,7 +83,9 @@
 
 **上游以 HTTP 200 + `success=false` 表达业务失败**，必须在 `DoResponse` 里拦下——`relay_task.go` 只拦非 200 响应码。
 
-**结果键名不固定**（`video_url` / `image_url` / `audio_url` / 多产物工具的 `images[]` / `video_urls`），故按 `map[string]any` 解析后先取已知键，再兜底扫任意以 `_url` 结尾的字符串键（按键名排序保证结果确定），不为 59 个工具各写 struct。
+**结果键名不固定**（`video_url` / `image_url` / `audio_url` / 多产物工具的 `images[]` / `video_urls`），故按 `map[string]any` 解析，位置由注册表逐工具声明：`ResultPath` 非空按 gjson 路径精确取值（可指向数组元素与嵌套字段），否则按 `ResultKind` 取约定键名。取不到一律返回空串，不为 59 个工具各写 struct。
+
+> **曾有过、已移除**：早期实现对取不到的键兜底扫任意以 `_url` 结尾的字符串键、按键名排序取第一个。该兜底对多产物工具（`separate-voice` 的人声/伴奏、Drama 场景的 voice/music/sfx）会随键名字典序漂移到语义无关的轨道上，故删除。详见 `registry.go` `ResultURL` 的注释与 `TestResultURLRealToolShapes`。
 
 ---
 
@@ -134,8 +136,8 @@ GiB 档不套阶梯是为了让三类计费量**全部逐请求可算**，网关
 ## 8. 渠道配置
 
 - **API Key 走渠道 `key` 字段**（`info.ApiKey`），不用 `setting.mediakit_api_key`：MediaKit 是单头 `Authorization: Bearer <apiKey>`，天然适配渠道 key 机制，且轮询层 `FetchTask(baseUrl, key, ...)` 拿到的正是渠道 key，走 setting 会让轮询拿不到。
-- `mediakit_base_url`：覆盖默认域名 `https://mediakit.cn-beijing.volces.com`。
-- `mediakit_default_minutes`：时长类工具缺声明时长时的预估分钟，校验 0–60。不配也能正常结算（真实时长参与计价），只是预扣为 0。
+- **上游域名走渠道自身的 `base_url` 字段**（`info.ChannelBaseUrl`，默认 `https://mediakit.cn-beijing.volces.com`）。**不要**配 `setting.mediakit_base_url`——那是 type 64 的键，type 65 的两条取值路径（`adaptor.GetRequestURL` / `task_adaptor.BuildRequestURL`）都只读 `info.ChannelBaseUrl`，配了不生效。
+- `mediakit_default_minutes`：时长类工具**提交时拿不到真实时长**（入参多为 URL），故用这个预估分钟数参与预扣，校验 0–60。不配（或填 0）时预扣退回 `model_price` 的基准额度（≈1 分钟量），真实时长的差额在任务完成时才补扣——**不是**「预扣为 0、先用后付」。该字段在控制台 MediaKit 渠道抽屉里可配；只在 API 里写、之后从控制台保存一次会被清掉（`buildSettingJSON` 现已有 type 65 分支，正常路径不会丢）。
 - `proxy`：渠道级代理。
 - 保存校验：`ValidateMediaKit()`，在 `model/channel.go` 的 `ValidateSettings()` 里按 `channel.Type == ChannelTypeMediaKit` 调用。
 - 渠道测试（余额查询等）标记为不支持。
@@ -188,7 +190,8 @@ GiB 档不套阶梯是为了让三类计费量**全部逐请求可算**，网关
 ## 11. 明确不做
 
 - 官方价表内置进用户计费（改价要发版）；`cost.go` 落地后只用于审计与默认定价参考。
-- 同步工具批量（`n > 1`）v1 一律 400：透传路径没有 DTO，拿不到 `TokenCountMeta.BillingRatios` 钩子参与计价。
+- 同步工具批量 v1 一律 400：**上游真实的多产物倍率字段是 `batch_count`**（目前只有 `generate-product-scene-image` 有，官方按生成张数计费、回包为 `result.images[]`），`MediaKitSyncHelper` 已对 `batch_count > 1` 拦成 400。透传路径没有 DTO，拿不到 `TokenCountMeta.BillingRatios` 钩子参与计价，所以不放开。
+  早期文档写的守卫字段是 `n`——MediaKit 没有任何工具用这个字段名，按 `n` 写守卫等于不设防。
 - 代理上游 `/api/v1/tasks/{id}`。
 - 由客户端字符串拼上游路径。
 - 媒体上传地址 API（`/api/v1/media/upload-address`）与事件回调配置。

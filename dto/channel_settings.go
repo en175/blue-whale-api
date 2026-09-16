@@ -49,19 +49,18 @@ func (s ChannelSettings) ValidateVolcEngineEnhanced() error {
 }
 
 // ValidateMediaKit 校验 MediaKit 渠道（type 65）专有配置。
+//
+// 不校验 mediakit_base_url：那是 type 64 的键，type 65 的上游域名取自渠道自身
+// 的 base_url 字段（info.ChannelBaseUrl），本包不做第二处取值。
 func (s ChannelSettings) ValidateMediaKit() error {
 	if s.MediaKitDefaultMinutes < 0 || s.MediaKitDefaultMinutes > 60 {
 		return fmt.Errorf("mediakit_default_minutes must be between 0 and 60")
-	}
-	if s.MediaKitBaseURL != "" {
-		if _, err := url.Parse(s.MediaKitBaseURL); err != nil {
-			return fmt.Errorf("mediakit_base_url is invalid: %w", err)
-		}
 	}
 	return nil
 }
 
 type VertexKeyType string
+
 const (
 	VertexKeyTypeJSON   VertexKeyType = "json"
 	VertexKeyTypeAPIKey VertexKeyType = "api_key"

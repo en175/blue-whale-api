@@ -168,8 +168,13 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	// 2.5 应用渠道的模型映射（与同步任务对齐）
 	info.OriginModelName = modelName
 	info.UpstreamModelName = modelName
-	if err := helper.ModelMappedHelper(c, info, nil); err != nil {
-		return nil, service.TaskErrorWrapperLocal(err, "model_mapping_failed", http.StatusBadRequest)
+	// MediaKit 例外：模型名（mediakit-<tool>）是协议的一部分，决定打到哪个上游
+	// 端点，不是可按渠道改写的别名——改写后 BuildRequestURL 查注册表必然失败。
+	// 同步侧 MediaKitSyncHelper 出于同一理由刻意不调本函数。
+	if platform != constant.TaskPlatform(strconv.Itoa(constant.ChannelTypeMediaKit)) {
+		if err := helper.ModelMappedHelper(c, info, nil); err != nil {
+			return nil, service.TaskErrorWrapperLocal(err, "model_mapping_failed", http.StatusBadRequest)
+		}
 	}
 
 	// 3. 预生成公开 task ID（仅首次）
