@@ -83,12 +83,13 @@ export const CHANNEL_TYPES = {
   62: 'DoubaoAudio',
   63: 'jiekouAI',
   64: 'VolcEngineEnhanced',
+  65: 'MediaKit',
 } as const
 
 const CHANNEL_TYPE_DISPLAY_ORDER: number[] = [
   1, 14, 33, 24, 43, 3, 41, 48, 58, 59, 42, 34, 20, 4, 40, 27, 25, 17, 26, 15,
   46, 23, 18, 45, 31, 35, 49, 19, 47, 37, 38, 39, 11, 8, 57, 22, 21, 44, 2, 5,
-  36, 50, 51, 52, 53, 54, 64, 55, 56, 60, 61, 62, 63,
+  36, 50, 51, 52, 53, 54, 64, 65, 55, 56, 60, 61, 62, 63,
 ]
 
 export const CHANNEL_TYPE_OPTIONS: { value: number; label: string }[] = (() => {
@@ -404,6 +405,8 @@ export const TYPE_TO_KEY_PROMPT: Record<number, string> = {
 }
 
 export const CHANNEL_TYPE_VOLCENGINE_ENHANCED = 64
+
+export const CHANNEL_TYPE_MEDIAKIT = 65
 
 export const CHANNEL_TYPE_WARNINGS: Record<number, string> = {
   3: 'For channels added after May 10, 2025, no need to remove "." from model names during deployment',

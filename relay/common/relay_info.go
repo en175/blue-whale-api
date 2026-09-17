@@ -441,6 +441,17 @@ func GenRelayInfoOpenAI(c *gin.Context, request dto.Request) *RelayInfo {
 	return info
 }
 
+// GenRelayInfoMediaKit 覆盖同步工具。请求体透传，故只设格式与中继模式；
+// 中继模式在 path 未命中时由 genBaseRelayInfo 回退读 context，这里显式兜底。
+func GenRelayInfoMediaKit(c *gin.Context, request dto.Request) *RelayInfo {
+	info := genBaseRelayInfo(c, request)
+	info.RelayFormat = types.RelayFormatMediaKit
+	if info.RelayMode == relayconstant.RelayModeUnknown {
+		info.RelayMode = relayconstant.RelayModeMediaKitSync
+	}
+	return info
+}
+
 func genBaseRelayInfo(c *gin.Context, request dto.Request) *RelayInfo {
 
 	//channelType := common.GetContextKeyInt(c, constant.ContextKeyChannelType)
@@ -588,6 +599,8 @@ func GenRelayInfo(c *gin.Context, relayFormat types.RelayFormat, request dto.Req
 	case types.RelayFormatMjProxy:
 		info = genBaseRelayInfo(c, nil)
 		info.TaskRelayInfo = &TaskRelayInfo{}
+	case types.RelayFormatMediaKit:
+		info = GenRelayInfoMediaKit(c, request)
 	default:
 		err = errors.New("invalid relay format")
 	}
@@ -687,6 +700,10 @@ type TaskRelayInfo struct {
 	PublicTaskID string
 
 	ConsumeQuota bool
+
+	// DurationSettlement 由按时长计费的适配器在 EstimateBilling 里置位，
+	// 让完成时的差额结算不被 PerCallBilling 早退跳过（详见 model.TaskBillingContext）。
+	DurationSettlement bool
 
 	// LockedChannel holds the full channel object when the request is bound to
 	// a specific channel (e.g., remix on origin task's channel). Stored as any

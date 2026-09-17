@@ -171,7 +171,7 @@ func (r *recordingKit) Get(context.Context, string) (string, string, error) {
 func TestMediaKitSubmitUsesConfiguredPath(t *testing.T) {
 	var gotURL string
 	client := newMediaKitClient("https://mk.example", "k", "", "/custom/enhance")
-	client.do = stubMediaKitSubmitOK(&gotURL)
+	client.inner.HTTPDo = stubMediaKitSubmitOK(&gotURL)
 
 	jobID, err := client.Submit(context.Background(), "https://v.example/a.mp4", "1080p")
 	require.NoError(t, err)
@@ -182,7 +182,7 @@ func TestMediaKitSubmitUsesConfiguredPath(t *testing.T) {
 func TestMediaKitSubmitEmptyPathUsesDefault(t *testing.T) {
 	var gotURL string
 	client := newMediaKitClient("https://mk.example", "k", "", "  ")
-	client.do = stubMediaKitSubmitOK(&gotURL)
+	client.inner.HTTPDo = stubMediaKitSubmitOK(&gotURL)
 
 	_, err := client.Submit(context.Background(), "https://v.example/a.mp4", "1080p")
 	require.NoError(t, err)
@@ -192,7 +192,7 @@ func TestMediaKitSubmitEmptyPathUsesDefault(t *testing.T) {
 func TestMediaKitSubmitPathWithoutSlashGetsPrefixed(t *testing.T) {
 	var gotURL string
 	client := newMediaKitClient("https://mk.example", "k", "", "custom/enhance")
-	client.do = stubMediaKitSubmitOK(&gotURL)
+	client.inner.HTTPDo = stubMediaKitSubmitOK(&gotURL)
 
 	_, err := client.Submit(context.Background(), "https://v.example/a.mp4", "1080p")
 	require.NoError(t, err)

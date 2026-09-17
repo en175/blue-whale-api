@@ -18,6 +18,8 @@ new-api
 .DS_Store
 tiktoken_cache
 .eslintcache
+__pycache__/
+*.pyc
 .gocache
 .gomodcache/
 .cache

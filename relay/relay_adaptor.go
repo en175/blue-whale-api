@@ -22,6 +22,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel/highwayapi"
 	"github.com/QuantumNous/new-api/relay/channel/jimeng"
 	"github.com/QuantumNous/new-api/relay/channel/jina"
+	"github.com/QuantumNous/new-api/relay/channel/mediakit"
 	"github.com/QuantumNous/new-api/relay/channel/minimax"
 	"github.com/QuantumNous/new-api/relay/channel/mistral"
 	"github.com/QuantumNous/new-api/relay/channel/mokaai"
@@ -133,6 +134,8 @@ func GetAdaptor(apiType int) channel.Adaptor {
 		return &doubaoaudio.Adaptor{}
 	case constant.APITypeHighwayAPI:
 		return &highwayapi.Adaptor{}
+	case constant.APITypeMediaKit:
+		return &mediakit.Adaptor{}
 	}
 	return nil
 }
@@ -180,6 +183,8 @@ func GetTaskAdaptor(platform constant.TaskPlatform) channel.TaskAdaptor {
 			return &taskGemini.TaskAdaptor{}
 		case constant.ChannelTypeMiniMax:
 			return &hailuo.TaskAdaptor{}
+		case constant.ChannelTypeMediaKit:
+			return &mediakit.TaskAdaptor{}
 		}
 	}
 	return nil

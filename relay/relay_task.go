@@ -168,8 +168,13 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	// 2.5 应用渠道的模型映射（与同步任务对齐）
 	info.OriginModelName = modelName
 	info.UpstreamModelName = modelName
-	if err := helper.ModelMappedHelper(c, info, nil); err != nil {
-		return nil, service.TaskErrorWrapperLocal(err, "model_mapping_failed", http.StatusBadRequest)
+	// MediaKit 例外：模型名（mediakit-<tool>）是协议的一部分，决定打到哪个上游
+	// 端点，不是可按渠道改写的别名——改写后 BuildRequestURL 查注册表必然失败。
+	// 同步侧 MediaKitSyncHelper 出于同一理由刻意不调本函数。
+	if platform != constant.TaskPlatform(strconv.Itoa(constant.ChannelTypeMediaKit)) {
+		if err := helper.ModelMappedHelper(c, info, nil); err != nil {
+			return nil, service.TaskErrorWrapperLocal(err, "model_mapping_failed", http.StatusBadRequest)
+		}
 	}
 
 	// 3. 预生成公开 task ID（仅首次）
@@ -291,6 +296,81 @@ var fetchRespBuilders = map[int]func(c *gin.Context) (respBody []byte, taskResp 
 	relayconstant.RelayModeSunoFetchByID:  sunoFetchByIDRespBodyBuilder,
 	relayconstant.RelayModeSunoFetch:      sunoFetchRespBodyBuilder,
 	relayconstant.RelayModeVideoFetchByID: videoFetchByIDRespBodyBuilder,
+	relayconstant.RelayModeMediaKitFetch:  mediaKitFetchRespBodyBuilder,
+}
+
+// mediaKitTaskStatus 把网关任务状态翻译回 MediaKit 的词汇。客户端的提交响应
+// 是 MediaKit 信封，查询也应当用同一套状态词，否则客户端要写两套判断。
+var mediaKitTaskStatus = map[model.TaskStatus]string{
+	model.TaskStatusNotStart:   "pending",
+	model.TaskStatusSubmitted:  "queued",
+	model.TaskStatusQueued:     "queued",
+	model.TaskStatusInProgress: "processing",
+	model.TaskStatusSuccess:    "completed",
+	model.TaskStatusFailure:    "failed",
+}
+
+// mediaKitFetchRespBodyBuilder 从本库 tasks 表读任务，不代理上游 /api/v1/tasks/。
+// 客户端持有的是网关公开 task_xxx，直连上游会暴露上游 task_id 并允许越权枚举
+// 他人任务。
+func mediaKitFetchRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *dto.TaskError) {
+	taskId := c.Param("task_id")
+	if taskId == "" {
+		taskResp = service.TaskErrorWrapperLocal(errors.New("task_id is required"), "task_id_required", http.StatusBadRequest)
+		return
+	}
+	task, exist, err := model.GetByTaskId(c.GetInt("id"), taskId)
+	if err != nil {
+		taskResp = service.TaskErrorWrapper(err, "get_task_failed", http.StatusInternalServerError)
+		return
+	}
+	if !exist {
+		taskResp = service.TaskErrorWrapperLocal(errors.New("task_not_exist"), "task_not_exist", http.StatusBadRequest)
+		return
+	}
+
+	status := mediaKitTaskStatus[task.Status]
+	if status == "" {
+		status = "processing"
+	}
+	response := gin.H{
+		"success": true,
+		"task_id": task.TaskID,
+		"status":  status,
+		"message": task.FailReason,
+	}
+	// 回传上游原始 result 的结构化内容。网关的下游调用方需要产物本身——可能是
+	// 数组（extract-frames 的 snapshots、drama-recap-vertical 的 video_urls）、
+	// 嵌套字段，或根本没有 URL 的分析结果（asr-subtitles 的字幕、画质评分）。
+	// 只给一个 url 字段表达不了这些形状。
+	result := gin.H{}
+	if len(task.Data) > 0 {
+		var envelope struct {
+			Result map[string]any `json:"result"`
+		}
+		if err := common.Unmarshal(task.Data, &envelope); err == nil && len(envelope.Result) > 0 {
+			result = envelope.Result
+		}
+	}
+	// url 只在任务成功且确实取到上游产物时附加，三条排除理由各自独立：
+	//   - 失败的task.PublicResultURL()会回落到 FailReason（见 model/task.go GetResultURL），
+	//     错误文案不是地址，放进 url 会被调用方当下载链接用。错误已由上面的 message 字段承载。
+	//   - 自引用代理地址来自轮询层「没有产物」时的兜底写入（taskcommon.BuildProxyURL），
+	//     不是产物，回传它会让调用方拿到一个指向网关自身的地址。
+	if task.Status == model.TaskStatusSuccess {
+		if resultURL := task.PublicResultURL(); resultURL != "" && !taskcommon.IsProxyURL(resultURL, task.TaskID) {
+			result["url"] = resultURL
+		}
+	}
+	if len(result) > 0 {
+		response["result"] = result
+	}
+
+	respBody, err = common.Marshal(response)
+	if err != nil {
+		taskResp = service.TaskErrorWrapper(err, "marshal_response_failed", http.StatusInternalServerError)
+	}
+	return
 }
 
 func RelayTaskFetch(c *gin.Context, relayMode int) (taskResp *dto.TaskError) {

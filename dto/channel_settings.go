@@ -24,6 +24,9 @@ type ChannelSettings struct {
 	MediaKitAPIKey          string `json:"mediakit_api_key,omitempty"`
 	MediaKitBaseURL         string `json:"mediakit_base_url,omitempty"`
 	MediaKitSubmitPath      string `json:"mediakit_submit_path,omitempty"`
+	// MediaKit channel (type 65). 时长类工具入参多为 URL，提交时拿不到真实时长，
+	// 用本值做预扣估算，任务完成时按回包时长结算差额。
+	MediaKitDefaultMinutes float64 `json:"mediakit_default_minutes,omitempty"`
 }
 
 func (s ChannelSettings) ValidateVolcEngineEnhanced() error {
@@ -41,6 +44,17 @@ func (s ChannelSettings) ValidateVolcEngineEnhanced() error {
 	}
 	if (n > 0 || m > 0 || p > 0) && strings.TrimSpace(s.MediaKitAPIKey) == "" {
 		return fmt.Errorf("mediakit_api_key is required when lottery percents are non-zero")
+	}
+	return nil
+}
+
+// ValidateMediaKit 校验 MediaKit 渠道（type 65）专有配置。
+//
+// 不校验 mediakit_base_url：那是 type 64 的键，type 65 的上游域名取自渠道自身
+// 的 base_url 字段（info.ChannelBaseUrl），本包不做第二处取值。
+func (s ChannelSettings) ValidateMediaKit() error {
+	if s.MediaKitDefaultMinutes < 0 || s.MediaKitDefaultMinutes > 60 {
+		return fmt.Errorf("mediakit_default_minutes must be between 0 and 60")
 	}
 	return nil
 }

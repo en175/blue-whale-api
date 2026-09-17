@@ -62,6 +62,7 @@ const (
 	ChannelTypeDoubaoAudio        = 62
 	ChannelTypeHighwayAPI         = 63
 	ChannelTypeVolcEngineEnhanced = 64
+	ChannelTypeMediaKit           = 65
 	ChannelTypeDummy              // this one is only for count, do not add any channel after this
 
 )
@@ -132,6 +133,7 @@ var ChannelBaseURLs = []string{
 	"https://openspeech.bytedance.com",          //62
 	"https://api.highwayapi.ai/v3",              //63
 	"https://ark.cn-beijing.volces.com",         //64
+	"https://mediakit.cn-beijing.volces.com",    //65
 }
 
 var ChannelTypeNames = map[int]string{
@@ -196,6 +198,7 @@ var ChannelTypeNames = map[int]string{
 	ChannelTypeDoubaoAudio:        "DoubaoAudio",
 	ChannelTypeHighwayAPI:         "jiekouAI",
 	ChannelTypeVolcEngineEnhanced: "VolcEngineEnhanced",
+	ChannelTypeMediaKit:           "MediaKit",
 }
 
 func GetChannelTypeName(channelType int) string {

@@ -216,6 +216,19 @@ export const CHANNEL_TYPE_CONFIGS: Record<number, ChannelTypeConfig> = {
         'Same Seedance protocol as Doubao Video. Lottery percents and MediaKit key go in channel setting JSON.',
     },
   },
+  65: {
+    id: 65,
+    name: CHANNEL_TYPES[65],
+    icon: 'volcengine',
+    defaultBaseUrl: 'https://mediakit.cn-beijing.volces.com',
+    hints: {
+      baseUrl: 'Default: https://mediakit.cn-beijing.volces.com',
+      key: 'MediaKit API Key (Bearer)',
+      models: 'mediakit-<tool>, e.g. mediakit-enhance-image, mediakit-enhance-video-generative',
+      other:
+        'Volcengine AI MediaKit toolkit. Requests are passed through in the upstream protocol: POST /v1/mediakit/{tool} for async tools, POST /v1/mediakit/sync/{tool} for sync tools, GET /v1/mediakit/tasks/{task_id} to poll.',
+    },
+  },
 }
 
 /**

@@ -39,5 +39,6 @@ const (
 	APITypeAdvancedCustom
 	APITypeDoubaoAudio
 	APITypeHighwayAPI
+	APITypeMediaKit
 	APITypeDummy // this one is only for count, do not add any channel after this
 )

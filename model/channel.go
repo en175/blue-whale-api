@@ -1050,6 +1050,11 @@ func (channel *Channel) ValidateSettings() error {
 			return err
 		}
 	}
+	if channel.Type == constant.ChannelTypeMediaKit {
+		if err := channelParams.ValidateMediaKit(); err != nil {
+			return err
+		}
+	}
 	if channelOtherSettings.AdvancedCustom != nil {
 		if err := channelOtherSettings.AdvancedCustom.Validate(); err != nil {
 			return err

@@ -22,6 +22,7 @@ import { parseQuotaFromDollars, quotaUnitsToDollars } from '@/lib/format'
 
 import {
   CHANNEL_STATUS,
+  CHANNEL_TYPE_MEDIAKIT,
   CHANNEL_TYPE_VOLCENGINE_ENHANCED,
   ERROR_MESSAGES,
   MODEL_FETCHABLE_TYPES,
@@ -200,6 +201,7 @@ export const channelFormSchema = z
     mediakit_api_key: z.string().optional(),
     mediakit_base_url: z.string().optional(),
     mediakit_submit_path: z.string().optional(),
+    mediakit_default_minutes: z.number().optional(),
     // Type-specific settings (stored in settings JSON)
     is_enterprise_account: z.boolean().optional(), // OpenRouter specific
     vertex_key_type: z.enum(['json', 'api_key']).optional(), // Vertex AI specific
@@ -337,6 +339,17 @@ export const channelFormSchema = z
         )
       }
     }
+
+    if (data.type === CHANNEL_TYPE_MEDIAKIT) {
+      const minutes = data.mediakit_default_minutes || 0
+      if (minutes < 0 || minutes > 60) {
+        addRequiredIssue(
+          ctx,
+          'mediakit_default_minutes',
+          'Default minutes must be between 0 and 60'
+        )
+      }
+    }
   })
 
 export type ChannelFormValues = z.infer<typeof channelFormSchema>
@@ -384,6 +397,7 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   mediakit_api_key: '',
   mediakit_base_url: '',
   mediakit_submit_path: '',
+  mediakit_default_minutes: 0,
   // Type-specific settings
   is_enterprise_account: false,
   vertex_key_type: 'json',
@@ -432,6 +446,7 @@ export function transformChannelToFormDefaults(
     mediakit_api_key: '',
     mediakit_base_url: '',
     mediakit_submit_path: '',
+    mediakit_default_minutes: 0,
   }
 
   if (channel.setting) {
@@ -450,6 +465,7 @@ export function transformChannelToFormDefaults(
         mediakit_api_key: parsed.mediakit_api_key || '',
         mediakit_base_url: parsed.mediakit_base_url || '',
         mediakit_submit_path: parsed.mediakit_submit_path || '',
+        mediakit_default_minutes: Number(parsed.mediakit_default_minutes) || 0,
       }
     } catch (error) {
       // eslint-disable-next-line no-console
@@ -583,6 +599,11 @@ function buildSettingJSON(formData: ChannelFormValues): string {
     settingObj.mediakit_api_key = formData.mediakit_api_key || ''
     settingObj.mediakit_base_url = formData.mediakit_base_url || ''
     settingObj.mediakit_submit_path = formData.mediakit_submit_path || ''
+  }
+  // MediaKit 的 API Key 走渠道 key 字段，setting 里只放时长类工具的预估分钟；
+  // 少了这个分支，控制台保存一次就会把该字段清掉。
+  if (formData.type === CHANNEL_TYPE_MEDIAKIT) {
+    settingObj.mediakit_default_minutes = formData.mediakit_default_minutes || 0
   }
   return JSON.stringify(settingObj)
 }

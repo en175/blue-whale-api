@@ -140,6 +140,7 @@ import {
   ADD_MODE_OPTIONS,
   CHANNEL_STATUS_LABELS,
   CHANNEL_TYPE_OPTIONS,
+  CHANNEL_TYPE_MEDIAKIT,
   CHANNEL_TYPE_VOLCENGINE_ENHANCED,
   CHANNEL_TYPE_WARNINGS,
   ERROR_MESSAGES,
@@ -295,6 +296,7 @@ const SENSITIVE_FORM_FIELDS = [
   'mediakit_api_key',
   'mediakit_base_url',
   'mediakit_submit_path',
+  'mediakit_default_minutes',
   'allow_service_tier',
   'disable_store',
   'allow_safety_identifier',
@@ -2790,6 +2792,39 @@ export function ChannelMutateDrawer({
                                   )}
                                 />
                               </>
+                            )}
+
+                            {/* MediaKit (type 65) */}
+                            {currentType === CHANNEL_TYPE_MEDIAKIT && (
+                              <FormField
+                                control={form.control}
+                                name='mediakit_default_minutes'
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>
+                                      {t('MediaKit Default Minutes')}
+                                    </FormLabel>
+                                    <FormControl>
+                                      <Input
+                                        type='number'
+                                        min={0}
+                                        max={60}
+                                        step='0.5'
+                                        {...field}
+                                        onChange={(e) =>
+                                          field.onChange(Number(e.target.value))
+                                        }
+                                      />
+                                    </FormControl>
+                                    <FormDescription>
+                                      {t(
+                                        'Estimated minutes for pre-charging duration-billed tools; their real length is only known on completion. 0 falls back to the model price base.'
+                                      )}
+                                    </FormDescription>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
                             )}
 
                             {/* VolcEngine (type 45) */}

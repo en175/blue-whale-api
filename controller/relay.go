@@ -49,6 +49,8 @@ func relayHandler(c *gin.Context, info *relaycommon.RelayInfo) *types.NewAPIErro
 		err = relay.EmbeddingHelper(c, info)
 	case relayconstant.RelayModeResponses, relayconstant.RelayModeResponsesCompact:
 		err = relay.ResponsesHelper(c, info)
+	case relayconstant.RelayModeMediaKitSync:
+		err = relay.MediaKitSyncHelper(c, info)
 	default:
 		err = relay.TextHelper(c, info)
 	}
@@ -401,6 +403,12 @@ func processChannelError(c *gin.Context, channelError types.ChannelError, err *t
 
 }
 
+// RelayMediaKitSync 服务 /v1/mediakit/sync/{tool}。走通用 Relay 管道，
+// 免费获得渠道重试、失败退款、日志与渠道自动禁用。
+func RelayMediaKitSync(c *gin.Context) {
+	Relay(c, types.RelayFormatMediaKit)
+}
+
 func RelayMidjourney(c *gin.Context) {
 	relayInfo, err := relaycommon.GenRelayInfo(c, types.RelayFormatMjProxy, nil, nil)
 
@@ -591,6 +599,9 @@ func RelayTask(c *gin.Context) {
 			OtherRatios:     relayInfo.PriceData.OtherRatios(),
 			OriginModelName: relayInfo.OriginModelName,
 			PerCallBilling:  common.StringsContains(constant.TaskPricePatches, relayInfo.OriginModelName) || relayInfo.PriceData.UsePrice,
+		}
+		if relayInfo.TaskRelayInfo != nil && relayInfo.TaskRelayInfo.DurationSettlement {
+			task.PrivateData.BillingContext.DurationSettlement = true
 		}
 		task.Quota = result.Quota
 		task.Data = result.TaskData

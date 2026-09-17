@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/types"
 	"github.com/samber/lo"
+	"github.com/tidwall/gjson"
 
 	"github.com/gin-gonic/gin"
 )
@@ -48,6 +50,31 @@ func GetAndValidateRequest(c *gin.Context, format types.RelayFormat) (request dt
 	case types.RelayFormatOpenAIAudio:
 		request, err = GetAndValidAudioRequest(c, relayMode)
 	case types.RelayFormatOpenAIRealtime:
+		request = &dto.BaseRequest{}
+	case types.RelayFormatMediaKit:
+		// MediaKit 请求体按上游原生协议透传，网关不解析也不改写，
+		// 故用 BaseRequest 占位（同 RelayFormatOpenAIRealtime）。
+		//
+		// 唯一例外是张数倍率：它进计费，且必须在 controller.Relay 定价与预扣
+		// 之前就拦下，否则上游出 N 张图而网关只按一次收费。上游真实字段名就是
+		// batch_count（目前只有 generate-product-scene-image 有，官方按生成张数
+		// 计费、回包 result.images[]），不是 n。
+		storage, storageErr := common.GetBodyStorage(c)
+		if storageErr != nil {
+			return nil, types.NewErrorWithStatusCode(storageErr, types.ErrorCodeReadRequestBodyFailed, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+		}
+		rawBody, bodyErr := storage.Bytes()
+		if bodyErr != nil {
+			return nil, types.NewErrorWithStatusCode(bodyErr, types.ErrorCodeReadRequestBodyFailed, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+		}
+		if batchCount := gjson.GetBytes(rawBody, "batch_count").Int(); batchCount > 1 {
+			return nil, types.NewErrorWithStatusCode(
+				fmt.Errorf("mediakit tools do not support batch_count > 1 (got %d)", batchCount),
+				types.ErrorCodeInvalidRequest,
+				http.StatusBadRequest,
+				types.ErrOptionWithSkipRetry(),
+			)
+		}
 		request = &dto.BaseRequest{}
 	default:
 		return nil, fmt.Errorf("unsupported relay format: %s", format)
