@@ -13,6 +13,14 @@
 --       JSON_MERGE_PATCH（8.0+，仅第 3 节需要）、SUBSTRING_INDEX 拆串。
 --       SQLite 与 PostgreSQL 需改写。
 --
+-- 排序规则陷阱：user variable 会继承「连接的」collation（随客户端默认字符集漂移，
+--       mysql CLI 不给 --default-character-set 时是 latin1_swedish_ci，给了 utf8mb4
+--       则是 utf8mb4_0900_ai_ci），而 channels.name 的 collation 由建库时决定
+--       （本仓部署常见 utf8mb4_unicode_ci）。两边都是 IMPLICIT，直接比较会报
+--       ERROR 1267 Illegal mix of collations。所以下面与 @channel_name 的比较一律写成
+--       BINARY LOWER(x) = BINARY LOWER(y)：先各自转成字节串再比，不参与 collation 协商，
+--       任何连接字符集下都成立；同时用 LOWER 保住大小写不敏感的原始语义。
+--
 -- 执行：mysql -h <host> -u <user> -p <db> < mediakit-bootstrap.sql
 -- ============================================================================
 
@@ -49,14 +57,14 @@ SELECT 65, @mediakit_key, 1, @channel_name, 0, UNIX_TIMESTAMP(), '',
        ''
 FROM DUAL
 WHERE NOT EXISTS (
-  SELECT 1 FROM channels WHERE name = @channel_name AND type = 65
+  SELECT 1 FROM channels WHERE BINARY LOWER(name) = BINARY LOWER(@channel_name) AND type = 65
 );
 
 -- 拿渠道 id：新建用 LAST_INSERT_ID()，已存在则回退查一次。
 SET @channel_id := LAST_INSERT_ID();
 SET @channel_id := IF(
   @channel_id = 0,
-  (SELECT id FROM channels WHERE name = @channel_name AND type = 65 ORDER BY id DESC LIMIT 1),
+  (SELECT id FROM channels WHERE BINARY LOWER(name) = BINARY LOWER(@channel_name) AND type = 65 ORDER BY id DESC LIMIT 1),
   @channel_id
 );
 
