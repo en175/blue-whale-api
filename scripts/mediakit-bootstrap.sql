@@ -1,11 +1,11 @@
 -- ============================================================================
 -- MediaKit 渠道一键配置（渠道类型 65）
--- 模型清单生成自 relay/channel/mediakit/registry.go，共 59 个工具。
+-- 模型清单生成自 relay/channel/mediakit/registry.go，共 64 个工具。
 -- 注册表加工具后重新生成本文件的模型段即可。
 --
 -- 为什么不能只配一样：建渠道 ≠ 能用，三件事都得做，缺一样就报错 ——
 --   ① channels 行（密钥走 key 字段，不是 setting）
---   ② channels.models 里列全 59 个模型
+--   ② channels.models 里列全 64 个模型
 --   ③ abilities 行 —— 对客路由查的是这张表，由 ② × 分组派生
 --   （同步工具还要求 model_price 已配，见第 3 节，否则 400）
 --
@@ -23,6 +23,8 @@ SET @channel_groups  := 'default';   -- 逗号分隔，如 'default,vip,svip'
 SET @default_minutes := 0;           -- 时长类工具预估分钟；0 = 预扣退回 model_price 基准额度
 SET @set_price       := 0;           -- 1 = 同时写 model_price；0 = 跳过（跳过则同步工具会 400）
 SET @price_per_call  := 0.5;         -- 上一行开启时用的单价（元/次）
+SET @price_probe     := 0.0001;      -- 视频/音频元信息探测单价，对齐官方 0.1 元/千次
+SET @price_probe_img := 0.00024;     -- 图像元信息探测单价，见下方第 3 节说明
 -- ▲▲▲ 只改这一段 ▲▲▲
 
 START TRANSACTION;
@@ -33,7 +35,7 @@ INSERT INTO channels
   (type, `key`, status, name, weight, created_time, base_url,
    models, `group`, priority, auto_ban, setting, channel_info, tag)
 SELECT 65, @mediakit_key, 1, @channel_name, 0, UNIX_TIMESTAMP(), '',
-       'mediakit-enhance-image,mediakit-remove-image-background,mediakit-image-ocr,mediakit-evaluate-image-quality,mediakit-erase-image,mediakit-expand-image-canvas,mediakit-smart-crop-image,mediakit-slim-image,mediakit-remove-image-elements,mediakit-translate-image-text,mediakit-face-blur-image,mediakit-generate-product-scene-image,mediakit-add-image-invisible-watermark,mediakit-extract-image-invisible-watermark,mediakit-round-corner-image,mediakit-flip-image,mediakit-rotate-image,mediakit-sharpen-image,mediakit-gaussian-blur-image,mediakit-mosaic-image,mediakit-add-image-watermark,mediakit-adjust-image-color,mediakit-resize-image,mediakit-invert-image,mediakit-crop-image,mediakit-compress-image,mediakit-enhance-video-generative,mediakit-enhance-video,mediakit-enhance-video-fast,mediakit-erase-video-subtitle-pro,mediakit-segment-scenes,mediakit-asr-subtitles,mediakit-video-ocr,mediakit-analyze-video-highlights,mediakit-analyze-video-storyline,mediakit-generate-highlights-microdrama,mediakit-generate-highlights-minigame,mediakit-generate-highlights-movie,mediakit-matte-greenscreen-video,mediakit-matte-portrait-video,mediakit-drama-script,mediakit-drama-recap,mediakit-drama-recap-vertical,mediakit-add-video-invisible-watermark,mediakit-extract-video-invisible-watermark,mediakit-assess-video-quality,mediakit-transcode-video,mediakit-remux-video,mediakit-martencode-video,mediakit-face-blur-video,mediakit-face-swap-video,mediakit-semantic-segment,mediakit-video-frame-interpolation,mediakit-lip-sync,mediakit-reframe-video-to-vertical,mediakit-extract-frames,mediakit-separate-voice,mediakit-transcode-audio,mediakit-detect-voice-activity', @channel_groups, 0, 1,
+       'mediakit-enhance-image,mediakit-remove-image-background,mediakit-image-ocr,mediakit-evaluate-image-quality,mediakit-erase-image,mediakit-expand-image-canvas,mediakit-smart-crop-image,mediakit-slim-image,mediakit-remove-image-elements,mediakit-translate-image-text,mediakit-face-blur-image,mediakit-generate-product-scene-image,mediakit-add-image-invisible-watermark,mediakit-extract-image-invisible-watermark,mediakit-round-corner-image,mediakit-flip-image,mediakit-rotate-image,mediakit-sharpen-image,mediakit-gaussian-blur-image,mediakit-mosaic-image,mediakit-add-image-watermark,mediakit-adjust-image-color,mediakit-resize-image,mediakit-invert-image,mediakit-crop-image,mediakit-compress-image,mediakit-probe-image-metadata,mediakit-enhance-video-generative,mediakit-enhance-video,mediakit-enhance-video-fast,mediakit-erase-video-subtitle,mediakit-erase-video-subtitle-pro,mediakit-segment-scenes,mediakit-asr-subtitles,mediakit-video-ocr,mediakit-analyze-video-highlights,mediakit-analyze-video-storyline,mediakit-generate-highlights-microdrama,mediakit-generate-highlights-minigame,mediakit-generate-highlights-movie,mediakit-matte-greenscreen-video,mediakit-matte-portrait-video,mediakit-drama-script,mediakit-drama-script-vertical,mediakit-drama-recap,mediakit-drama-recap-vertical,mediakit-add-video-invisible-watermark,mediakit-extract-video-invisible-watermark,mediakit-assess-video-quality,mediakit-transcode-video,mediakit-remux-video,mediakit-martencode-video,mediakit-face-blur-video,mediakit-face-swap-video,mediakit-semantic-segment,mediakit-video-frame-interpolation,mediakit-lip-sync,mediakit-reframe-video-to-vertical,mediakit-extract-frames,mediakit-probe-video-metadata,mediakit-separate-voice,mediakit-transcode-audio,mediakit-detect-voice-activity,mediakit-probe-audio-metadata', @channel_groups, 0, 1,
        JSON_OBJECT(
          'force_format', false,
          'thinking_to_content', false,
@@ -59,7 +61,7 @@ SET @channel_id := IF(
 );
 
 -- 已存在的渠道也把模型列表补全（覆盖式，等于在控制台里把模型勾满）。
-UPDATE channels SET models = 'mediakit-enhance-image,mediakit-remove-image-background,mediakit-image-ocr,mediakit-evaluate-image-quality,mediakit-erase-image,mediakit-expand-image-canvas,mediakit-smart-crop-image,mediakit-slim-image,mediakit-remove-image-elements,mediakit-translate-image-text,mediakit-face-blur-image,mediakit-generate-product-scene-image,mediakit-add-image-invisible-watermark,mediakit-extract-image-invisible-watermark,mediakit-round-corner-image,mediakit-flip-image,mediakit-rotate-image,mediakit-sharpen-image,mediakit-gaussian-blur-image,mediakit-mosaic-image,mediakit-add-image-watermark,mediakit-adjust-image-color,mediakit-resize-image,mediakit-invert-image,mediakit-crop-image,mediakit-compress-image,mediakit-enhance-video-generative,mediakit-enhance-video,mediakit-enhance-video-fast,mediakit-erase-video-subtitle-pro,mediakit-segment-scenes,mediakit-asr-subtitles,mediakit-video-ocr,mediakit-analyze-video-highlights,mediakit-analyze-video-storyline,mediakit-generate-highlights-microdrama,mediakit-generate-highlights-minigame,mediakit-generate-highlights-movie,mediakit-matte-greenscreen-video,mediakit-matte-portrait-video,mediakit-drama-script,mediakit-drama-recap,mediakit-drama-recap-vertical,mediakit-add-video-invisible-watermark,mediakit-extract-video-invisible-watermark,mediakit-assess-video-quality,mediakit-transcode-video,mediakit-remux-video,mediakit-martencode-video,mediakit-face-blur-video,mediakit-face-swap-video,mediakit-semantic-segment,mediakit-video-frame-interpolation,mediakit-lip-sync,mediakit-reframe-video-to-vertical,mediakit-extract-frames,mediakit-separate-voice,mediakit-transcode-audio,mediakit-detect-voice-activity' WHERE id = @channel_id;
+UPDATE channels SET models = 'mediakit-enhance-image,mediakit-remove-image-background,mediakit-image-ocr,mediakit-evaluate-image-quality,mediakit-erase-image,mediakit-expand-image-canvas,mediakit-smart-crop-image,mediakit-slim-image,mediakit-remove-image-elements,mediakit-translate-image-text,mediakit-face-blur-image,mediakit-generate-product-scene-image,mediakit-add-image-invisible-watermark,mediakit-extract-image-invisible-watermark,mediakit-round-corner-image,mediakit-flip-image,mediakit-rotate-image,mediakit-sharpen-image,mediakit-gaussian-blur-image,mediakit-mosaic-image,mediakit-add-image-watermark,mediakit-adjust-image-color,mediakit-resize-image,mediakit-invert-image,mediakit-crop-image,mediakit-compress-image,mediakit-probe-image-metadata,mediakit-enhance-video-generative,mediakit-enhance-video,mediakit-enhance-video-fast,mediakit-erase-video-subtitle,mediakit-erase-video-subtitle-pro,mediakit-segment-scenes,mediakit-asr-subtitles,mediakit-video-ocr,mediakit-analyze-video-highlights,mediakit-analyze-video-storyline,mediakit-generate-highlights-microdrama,mediakit-generate-highlights-minigame,mediakit-generate-highlights-movie,mediakit-matte-greenscreen-video,mediakit-matte-portrait-video,mediakit-drama-script,mediakit-drama-script-vertical,mediakit-drama-recap,mediakit-drama-recap-vertical,mediakit-add-video-invisible-watermark,mediakit-extract-video-invisible-watermark,mediakit-assess-video-quality,mediakit-transcode-video,mediakit-remux-video,mediakit-martencode-video,mediakit-face-blur-video,mediakit-face-swap-video,mediakit-semantic-segment,mediakit-video-frame-interpolation,mediakit-lip-sync,mediakit-reframe-video-to-vertical,mediakit-extract-frames,mediakit-probe-video-metadata,mediakit-separate-voice,mediakit-transcode-audio,mediakit-detect-voice-activity,mediakit-probe-audio-metadata' WHERE id = @channel_id;
 
 -- ── 2. 派生 abilities ──────────────────────────────────────────────────────
 -- 对齐 model/ability.go 的 AddAbilities：group × model 笛卡尔积，
@@ -134,11 +136,15 @@ CROSS JOIN (
     UNION ALL
     SELECT 'mediakit-compress-image' AS model
     UNION ALL
+    SELECT 'mediakit-probe-image-metadata' AS model
+    UNION ALL
     SELECT 'mediakit-enhance-video-generative' AS model
     UNION ALL
     SELECT 'mediakit-enhance-video' AS model
     UNION ALL
     SELECT 'mediakit-enhance-video-fast' AS model
+    UNION ALL
+    SELECT 'mediakit-erase-video-subtitle' AS model
     UNION ALL
     SELECT 'mediakit-erase-video-subtitle-pro' AS model
     UNION ALL
@@ -163,6 +169,8 @@ CROSS JOIN (
     SELECT 'mediakit-matte-portrait-video' AS model
     UNION ALL
     SELECT 'mediakit-drama-script' AS model
+    UNION ALL
+    SELECT 'mediakit-drama-script-vertical' AS model
     UNION ALL
     SELECT 'mediakit-drama-recap' AS model
     UNION ALL
@@ -194,11 +202,15 @@ CROSS JOIN (
     UNION ALL
     SELECT 'mediakit-extract-frames' AS model
     UNION ALL
+    SELECT 'mediakit-probe-video-metadata' AS model
+    UNION ALL
     SELECT 'mediakit-separate-voice' AS model
     UNION ALL
     SELECT 'mediakit-transcode-audio' AS model
     UNION ALL
     SELECT 'mediakit-detect-voice-activity' AS model
+    UNION ALL
+    SELECT 'mediakit-probe-audio-metadata' AS model
 ) m
 WHERE c.id = @channel_id;
 
@@ -209,8 +221,24 @@ COMMIT;
 --   "mediakit model X has no model price configured"；
 -- 异步工具既无 model_price 又无 model_ratio，报 modelPriceNotConfiguredError。
 -- 合并式写入，不动已有模型的价。
+--
+-- 3 个元信息探测工具按上游口径单独定价（官方对它们并非免费）：
+--   · probe-video-metadata / probe-audio-metadata：官方按成功处理次数 0.1 元/千次
+--     → 折合 0.0001 元/次，即 @price_probe。
+--   · probe-image-metadata：官方归在「图像基础编辑」计费单元，按 0.025 元/GiB、
+--     自然月 10 TiB 免费额度后累进。**网关不测量图片体积**（模型定价只有元/次一档，
+--     同步链路里没有任何体积项），所以只能折成元/次近似：按单图 10 MiB 上限
+--     10/1024 GiB × 0.025 = 0.00024 元/次，即 @price_probe_img。
+--     大图不亏、小图略多收，差额在 1e-4 元量级可忽略。
 SET @new_prices := (
-  SELECT JSON_OBJECTAGG(m.model, @price_per_call)
+  SELECT JSON_OBJECTAGG(
+           m.model,
+           CASE m.model
+             WHEN 'mediakit-probe-video-metadata' THEN @price_probe
+             WHEN 'mediakit-probe-audio-metadata' THEN @price_probe
+             WHEN 'mediakit-probe-image-metadata' THEN @price_probe_img
+             ELSE @price_per_call
+           END)
   FROM (    SELECT 'mediakit-enhance-image' AS model
     UNION ALL
     SELECT 'mediakit-remove-image-background' AS model
@@ -263,11 +291,15 @@ SET @new_prices := (
     UNION ALL
     SELECT 'mediakit-compress-image' AS model
     UNION ALL
+    SELECT 'mediakit-probe-image-metadata' AS model
+    UNION ALL
     SELECT 'mediakit-enhance-video-generative' AS model
     UNION ALL
     SELECT 'mediakit-enhance-video' AS model
     UNION ALL
     SELECT 'mediakit-enhance-video-fast' AS model
+    UNION ALL
+    SELECT 'mediakit-erase-video-subtitle' AS model
     UNION ALL
     SELECT 'mediakit-erase-video-subtitle-pro' AS model
     UNION ALL
@@ -292,6 +324,8 @@ SET @new_prices := (
     SELECT 'mediakit-matte-portrait-video' AS model
     UNION ALL
     SELECT 'mediakit-drama-script' AS model
+    UNION ALL
+    SELECT 'mediakit-drama-script-vertical' AS model
     UNION ALL
     SELECT 'mediakit-drama-recap' AS model
     UNION ALL
@@ -323,11 +357,15 @@ SET @new_prices := (
     UNION ALL
     SELECT 'mediakit-extract-frames' AS model
     UNION ALL
+    SELECT 'mediakit-probe-video-metadata' AS model
+    UNION ALL
     SELECT 'mediakit-separate-voice' AS model
     UNION ALL
     SELECT 'mediakit-transcode-audio' AS model
     UNION ALL
-    SELECT 'mediakit-detect-voice-activity' AS model) m
+    SELECT 'mediakit-detect-voice-activity' AS model
+    UNION ALL
+    SELECT 'mediakit-probe-audio-metadata' AS model) m
 );
 
 SET @merged_prices := IF(
@@ -346,7 +384,7 @@ WHERE @set_price = 1
 ON DUPLICATE KEY UPDATE value = @merged_prices;
 
 -- ── 4. 自检 ───────────────────────────────────────────────────────────────
--- 期望：n_models = 59；abilities_rows = 59 × 分组数。
+-- 期望：n_models = 64；abilities_rows = 64 × 分组数。
 SELECT c.id                       AS channel_id,
        c.type                     AS channel_type,
        c.name                     AS channel_name,

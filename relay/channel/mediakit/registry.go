@@ -90,11 +90,18 @@ var toolRegistry = []ToolSpec{
 	{Name: "invert-image", Sync: true, Mode: BillingVolume, ResultKind: ResultImage},
 	{Name: "crop-image", Sync: true, Mode: BillingVolume, ResultKind: ResultImage},
 	{Name: "compress-image", Sync: true, Mode: BillingVolume, ResultKind: ResultImage},
+	// 元信息探测只回 format_meta 等数据、不产出文件；官方把它归在图像基础编辑的
+	// 处理量档里（0.025 元/GiB），故 Mode 与上面这组一致。网关不测图片体积，
+	// 只能在 scripts/mediakit-bootstrap.sql 里按单图 10 MiB 上限折成元/次近似。
+	{Name: "probe-image-metadata", Sync: true, Mode: BillingVolume, ResultKind: ResultNone},
 
 	// ── 异步：视频工具（/api/v1/tools/*）────────────────────────────
 	{Name: "enhance-video-generative", Mode: BillingDuration, ResultKind: ResultVideo},
 	{Name: "enhance-video", Mode: BillingDuration, ResultKind: ResultVideo},
 	{Name: "enhance-video-fast", Mode: BillingDuration, ResultKind: ResultVideo},
+	// 字幕擦除有标准版与精细化版两条独立上游工具，名字只差后缀 -pro，
+	// 别当成同一个：标准版上限 2K 输入 / 1080P 输出，精细化版精度更高。
+	{Name: "erase-video-subtitle", Mode: BillingDuration, ResultKind: ResultVideo},
 	{Name: "erase-video-subtitle-pro", Mode: BillingDuration, ResultKind: ResultVideo},
 	// 场景切分的产物是逐个片段的视频链，放在 segments 数组里。
 	{Name: "segment-scenes", Mode: BillingDuration, ResultKind: ResultNone, ResultPath: "segments.0.segment_video_url"},
@@ -113,6 +120,11 @@ var toolRegistry = []ToolSpec{
 	{Name: "matte-portrait-video", Mode: BillingDuration, ResultKind: ResultVideo},
 	// 剧本还原的产物是 .json.gz 分析包，键名 result_url 不在约定之列。
 	{Name: "drama-script", Mode: BillingDuration, ResultKind: ResultNone, ResultPath: "result_url"},
+	// 重绘场景版剧本还原：与 drama-script 同属「视频 → 结构化剧本」族，但面向多集短剧，
+	// 额外产出角色/场景/预处理资产，并支持 previous_manifest_url 增量接续、
+	// current_asset_url 跳过资产分析。产物同样是 result_url 指向的 manifest.json 清单，
+	// 不是可播视频。它不生成解说成片——那是 drama-recap 族的职责。
+	{Name: "drama-script-vertical", Mode: BillingDuration, ResultKind: ResultNone, ResultPath: "result_url"},
 	{Name: "drama-recap", Mode: BillingDuration, ResultKind: ResultVideo},
 	// 竖版解说把成品放在顶层 video_urls 数组里，没有单数 video_url 键。
 	{Name: "drama-recap-vertical", Mode: BillingDuration, ResultKind: ResultVideo, ResultPath: "video_urls.0"},
@@ -131,12 +143,17 @@ var toolRegistry = []ToolSpec{
 	{Name: "reframe-video-to-vertical", Mode: BillingDuration, ResultKind: ResultVideo},
 	// 抽帧一次产出多张图（snapshots 数组），url 只放第一张作便捷字段，全量在 result 里。
 	{Name: "extract-frames", Mode: BillingPerCall, ResultKind: ResultImage, ResultPath: "snapshots.0.image_url"},
+	// 元信息探测只回 format_meta / video_stream_meta / audio_stream_meta 三段数据，
+	// 无产物 URL。官方按成功处理次数计费（0.1 元/千次），网关按同一口径定价。
+	{Name: "probe-video-metadata", Mode: BillingPerCall, ResultKind: ResultNone},
 
 	// ── 异步：音频工具 ──────────────────────────────────────────────
 	// 人声/伴奏分离同时产出两轨且都在顶层，必须指明取人声轨，否则会随键名字典序漂移。
 	{Name: "separate-voice", Mode: BillingDuration, ResultKind: ResultAudio, ResultPath: "voice_audio_url"},
 	{Name: "transcode-audio", Mode: BillingDuration, ResultKind: ResultAudio},
 	{Name: "detect-voice-activity", Mode: BillingDuration, ResultKind: ResultNone},
+	// 同 probe-video-metadata：只回元数据、无产物，官方按成功次数计费（0.1 元/千次）。
+	{Name: "probe-audio-metadata", Mode: BillingPerCall, ResultKind: ResultNone},
 }
 
 // toolIndex 由 toolRegistry 构建，键为上游 slug。在 init 中填充，保证
