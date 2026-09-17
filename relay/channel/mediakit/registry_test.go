@@ -53,6 +53,32 @@ func TestSyncToolsUseToolsSyncPrefix(t *testing.T) {
 	}
 }
 
+// TestRegistryCoversOfficialCatalog 把条目数钉死在官方目录口径上：视频 33 /
+// 图像 27 / 音频 4，合计 64。这三个集合下的工具已全部登记，不存在「官方有、
+// 网关没接」的遗留——数字对不上就是漏了工具或凭空多了一条。
+// Mode 的分项计数同时兜住计费归类，它是审计行 billing_mode 与文档计费口径的唯一来源。
+func TestRegistryCoversOfficialCatalog(t *testing.T) {
+	syncCount, asyncCount := 0, 0
+	byMode := map[BillingMode]int{}
+	for _, spec := range toolRegistry {
+		if spec.Sync {
+			syncCount++
+		} else {
+			asyncCount++
+		}
+		byMode[spec.Mode]++
+	}
+
+	assert.Equal(t, 64, len(toolRegistry), "官方三个集合共 64 个工具")
+	assert.Equal(t, 27, syncCount, "同步 27 个，全部是图像工具")
+	assert.Equal(t, 37, asyncCount, "异步 37 个 = 视频 33 + 音频 4")
+	assert.Equal(t, 34, byMode[BillingDuration], "按时长：视频 31 + 音频 3")
+	assert.Equal(t, 17, byMode[BillingPerCall], "按次：图像 14 + 视频 2 + 音频 1")
+	assert.Equal(t, 13, byMode[BillingVolume], "按量 GiB：图像基础编辑族 13 个")
+	assert.Equal(t, len(toolRegistry), byMode[BillingDuration]+byMode[BillingPerCall]+byMode[BillingVolume],
+		"每个工具必须落进一个已知计费档")
+}
+
 // TestAnalysisToolsDeclareNoProduct 锁定「只出分析结果、不产出文件」的工具必须声明
 // ResultNone。ResultKind 是「该不该有产物」的唯一判据：声明成 ResultVideo 而实际
 // 拿不到 URL，调用方会把「无产物」误判成网关取件失败。
@@ -70,6 +96,9 @@ func TestAnalysisToolsDeclareNoProduct(t *testing.T) {
 		"evaluate-image-quality",
 		"extract-video-invisible-watermark",
 		"extract-image-invisible-watermark",
+		"probe-video-metadata",
+		"probe-image-metadata",
+		"probe-audio-metadata",
 	}
 	for _, name := range analysisOnly {
 		t.Run(name, func(t *testing.T) {
@@ -152,6 +181,15 @@ func TestResultURLRealToolShapes(t *testing.T) {
 		// 键名不在约定之列，靠 ResultPath 声明。
 		{"semantic-segment", map[string]any{"result_url": "https://x/r.mp4"}, "https://x/r.mp4"},
 		{"drama-script", map[string]any{"duration": 246.656, "result_url": "https://x/d.json.gz"}, "https://x/d.json.gz"},
+		// 竖版剧本还原的 result_url 指向 manifest.json 清单（再索引各产物文件），
+		// 不是可播视频，故与 drama-script 同形声明 ResultNone + ResultPath。
+		{"drama-script-vertical", map[string]any{"duration": 245.5, "input_duration": 245.5, "result_url": "https://x/manifest.json"}, "https://x/manifest.json"},
+		{"erase-video-subtitle", map[string]any{"duration": 12.5, "video_url": "https://x/erased.mp4"}, "https://x/erased.mp4"},
+
+		// 元信息探测只回数据段，没有 URL 可取——网关不编造 url 字段。
+		{"probe-video-metadata", map[string]any{"format_meta": map[string]any{"format": "mp4"}, "video_stream_meta": map[string]any{"width": 1920}, "audio_stream_meta": map[string]any{"channels": 2}}, ""},
+		{"probe-image-metadata", map[string]any{"format_meta": map[string]any{"format": "jpeg"}, "width": 1920, "height": 1080}, ""},
+		{"probe-audio-metadata", map[string]any{"format_meta": map[string]any{"format": "mp3"}, "audio_stream_meta": map[string]any{"sample_rate": 44100}}, ""},
 
 		// 「上游 success 但没有产物」——必须返回空串，调用方不得据此编造网关 URL。
 		{"asr-subtitles", map[string]any{"duration": 14.12, "subtitles": []any{}}, ""},

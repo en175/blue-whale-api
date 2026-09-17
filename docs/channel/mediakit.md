@@ -13,14 +13,23 @@
 
 ## 1. 需求
 
-新增渠道类型 **MediaKit**（`ChannelTypeMediaKit = 65`），把官方工具集的 **59 条**工具对客开放：
+新增渠道类型 **MediaKit**（`ChannelTypeMediaKit = 65`），把官方工具集的 **64 条**工具对客开放（视频 33 / 图像 27 / 音频 4，与官方在这三个集合下登记的条数一一对应）：
 
 1. **一条渠道类型统管全部工具**。同步工具走普通 `Adaptor`（`controller.Relay` 管道），异步工具走 `TaskAdaptor`（`controller.RelayTask` 管道）；两张适配器表互不干扰。
 2. **透传上游协议**。客户端按 MediaKit 原生请求体写，网关一个字都不改写（body 里没有 `model` 字段）。
 3. **工具名只用于查表**。客户端传的 `:tool` 查不到一律 400；上游路径只来自服务端写死的注册表。
 4. **混合计费口径**。按时长 / 按次 / 按量 GiB 三档，用户实际扣费由管理员配的 `model_price` 决定。
 
-不接：`get-audio-meta`（元数据查询，非处理工具）、`video-understand-router` / `chat` / 大模型高光剪辑 / 剪辑套件（依赖方舟按 token 计费，或官方未给独立 slug）。
+**3 个元信息查询工具**（`probe-image-metadata` 同步、`probe-video-metadata` / `probe-audio-metadata` 异步）已登记。它们在**上游并非免费**，网关按官方口径单独定价：
+
+| 工具 | 官方口径 | 网关 `model_price` |
+|---|---|---|
+| `probe-video-metadata` / `probe-audio-metadata` | 按成功处理次数 0.1 元/千次 | 0.0001 元/次（一致） |
+| `probe-image-metadata` | 按处理量 0.025 元/GiB | 0.00024 元/次（**近似**，见下） |
+
+> 图像那条是近似值：模型定价只有「元/次」一档，**网关不测量图片体积**（同步链路里没有任何体积项），故按单图 10 MiB 上限折算 `10/1024 GiB × 0.025 = 0.00024 元/次`。大图不亏、小图略多收。
+
+不接：`video-understand-router` / `chat` / 大模型高光剪辑 / 剪辑套件（拼接、调速、滤镜等约 19 个）——依赖方舟按 token 计费，或官方未给独立 slug。
 
 ---
 
@@ -58,7 +67,7 @@
 
 ## 4. 工具注册表
 
-`relay/channel/mediakit/registry.go` 是唯一事实来源，共 59 条：
+`relay/channel/mediakit/registry.go` 是唯一事实来源，共 64 条：
 
 | 分类 | 条数 | 路径前缀 | 计费模式 |
 |---|---|---|---|
@@ -83,7 +92,7 @@
 
 **上游以 HTTP 200 + `success=false` 表达业务失败**，必须在 `DoResponse` 里拦下——`relay_task.go` 只拦非 200 响应码。
 
-**结果键名不固定**（`video_url` / `image_url` / `audio_url` / 多产物工具的 `images[]` / `video_urls`），故按 `map[string]any` 解析，位置由注册表逐工具声明：`ResultPath` 非空按 gjson 路径精确取值（可指向数组元素与嵌套字段），否则按 `ResultKind` 取约定键名。取不到一律返回空串，不为 59 个工具各写 struct。
+**结果键名不固定**（`video_url` / `image_url` / `audio_url` / 多产物工具的 `images[]` / `video_urls`），故按 `map[string]any` 解析，位置由注册表逐工具声明：`ResultPath` 非空按 gjson 路径精确取值（可指向数组元素与嵌套字段），否则按 `ResultKind` 取约定键名。取不到一律返回空串，不为 64 个工具各写 struct。
 
 > **曾有过、已移除**：早期实现对取不到的键兜底扫任意以 `_url` 结尾的字符串键、按键名排序取第一个。该兜底对多产物工具（`separate-voice` 的人声/伴奏、Drama 场景的 voice/music/sfx）会随键名字典序漂移到语义无关的轨道上，故删除。详见 `registry.go` `ResultURL` 的注释与 `TestResultURLRealToolShapes`。
 
@@ -175,7 +184,7 @@ GiB 档不套阶梯是为了让三类计费量**全部逐请求可算**，网关
 
 表驱动 + `testify`。
 
-1. **注册表**：59 条工具名唯一；`LookupTool` 未登记返回 false；`ToolForModel` 只认 `mediakit-` 前缀；路径由 `Sync` 决定前缀。
+1. **注册表**：64 条工具名唯一；`LookupTool` 未登记返回 false；`ToolForModel` 只认 `mediakit-` 前缀；路径由 `Sync` 决定前缀。
 2. **客户端**：鉴权头正确；非 2xx 保留上游 body（回归 `UpstreamError`）；空 baseURL 回退默认域名；拒绝不以 `/` 开头的路径。
 3. **分销**：同步/异步路由各自解析出 `mediakit-<tool>` 模型名；未登记工具 400；同步工具走异步路由 400（反之亦然）；三者都要覆盖 `../../etc/passwd` 一类的 hostile 输入。
 4. **中继模式**：三个前缀有包含关系，顺序错了会把同步与查询吞成异步。
@@ -192,7 +201,15 @@ GiB 档不套阶梯是为了让三类计费量**全部逐请求可算**，网关
 - 官方价表内置进用户计费（改价要发版）；`cost.go` 落地后只用于审计与默认定价参考。
 - 同步工具批量 v1 一律 400：**上游真实的多产物倍率字段是 `batch_count`**（目前只有 `generate-product-scene-image` 有，官方按生成张数计费、回包为 `result.images[]`）。守卫在 `relay/helper/valid_request.go` 的 `GetAndValidateRequest` → `RelayFormatMediaKit` 分支（`gjson` 扫 `batch_count > 1` 返 400），**不在 `MediaKitSyncHelper` 里**——它必须排在 `controller.Relay` 的定价与预扣之前，落到 handler 阶段再拦已经来不及参与计价。透传路径没有 DTO，拿不到 `TokenCountMeta.BillingRatios` 钩子参与计价，所以不放开。
   早期文档写的守卫字段是 `n`——MediaKit 没有任何工具用这个字段名，按 `n` 写守卫等于不设防。
-- 异步链路的同类守卫：**经核对，异步工具没有等价的可控倍率字段**，故无需守卫。异步侧唯一的按次工具是 `extract-frames`，入参为 `video_url` / `scene_change_threshold` / `enable_sprite` / `sprite_rows` / `sprite_cols` / `scale_long` / `scale_short` / 时间范围，**没有帧数或张数字段**，产出规模由视频内容决定，客户端改不出线性倍率。异步走 `controller.RelayTask`、不经过 `GetAndValidateRequest`，因此不构成少收面。
+- 异步链路的同类守卫：**目前没有，这是一个已确认的少收面**。异步走 `controller.RelayTask`、不经过 `GetAndValidateRequest`，因此同步侧那道 `batch_count` 守卫**不覆盖异步提交**（已核实：`GetAndValidateRequest` 全仓只有 `controller/relay.go:111` 一个调用点，在 `Relay()` 内）。而异步侧确实存在等价的可控倍率字段——上一版文档断言「异步工具没有等价的可控倍率字段」是**错的**，实测有三个多产物字段：
+
+| 工具 | 倍率字段 | 说明 |
+|---|---|---|
+| `drama-recap` | `batch_count` | 一次生成 N 个解说版本，结果在 `result.video_urls` 返回 N 条 |
+| `drama-recap-vertical` | `max_count` | 范围 [1, 100]，**默认值 3**——不传也会产出多条 |
+| `generate-highlights-*` 族 | 无 | 产出条数由视频内容决定，客户端改不出线性倍率 |
+
+  上游会真的按倍数产出，网关只按**一次**计费。待补：在 `TaskAdaptor.ValidateRequestAndSetAction`（`task_adaptor.go:54`，目前只校验工具存在性与 JSON 形状）里加同样的 `> 1` 拒绝。**本期未做**——它会拒掉现有多产物调用，属对客行为变更。在此之前调用方需自行传 `1`。
   但存在口径差需留意：官方对抽帧是**按截图总张数**计费（`截图总张数 / 1000 × 0.1 元`；开启雪碧图时按合成雪碧图所用的帧截图张数，不按雪碧图文件数），网关登记为 `BillingPerCall` 按次收费。这不是漏洞而是定价取舍——管理员配 `model_price` 时应知道单个长视频可能产出上万张截图。
 - 代理上游 `/api/v1/tasks/{id}`。
 - 由客户端字符串拼上游路径。
