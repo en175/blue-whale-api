@@ -1,14 +1,47 @@
 package controller
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 
 	"github.com/gin-gonic/gin"
 )
+
+// parseLogTypes 解析 /api/log/self 的 type 查询参数（IKGCWR）。
+//
+//	缺省 / 空串 / 纯空白  → nil，调用方不加 type 过滤（等价于历史上的 type=0）
+//	"0"                  → nil，0 是「不过滤」哨兵，不是日志类型
+//	"2" / "2,6" / " 2 , 6 " → 对应类型列表，逐项去掉两侧空白
+//
+// 重复值不去重：SQL 的 IN (2,2) 与 IN (2) 等价。数值域也不校验，type=999 照旧查出空列表。
+// 但任一项为空或非整数、或 0 与其他值一起出现，都返回 error —— 这些输入若不拦，
+// 会落进「不过滤」分支静默返回全部类型，与调用方以为的过滤结果不符。
+func parseLogTypes(raw string) ([]int, error) {
+	if strings.TrimSpace(raw) == "" {
+		return nil, nil
+	}
+	parts := strings.Split(raw, ",")
+	logTypes := make([]int, 0, len(parts))
+	for _, part := range parts {
+		logType, err := strconv.Atoi(strings.TrimSpace(part))
+		if err != nil {
+			return nil, fmt.Errorf("日志类型参数非法: %s", raw)
+		}
+		if logType == model.LogTypeUnknown {
+			if len(parts) > 1 {
+				return nil, fmt.Errorf("日志类型参数非法: %s（0 表示不过滤，只能单独使用）", raw)
+			}
+			return nil, nil
+		}
+		logTypes = append(logTypes, logType)
+	}
+	return logTypes, nil
+}
 
 func GetAllLogs(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
@@ -36,7 +69,11 @@ func GetAllLogs(c *gin.Context) {
 func GetUserLogs(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
 	userId := c.GetInt("id")
-	logType, _ := strconv.Atoi(c.Query("type"))
+	logTypes, err := parseLogTypes(c.Query("type"))
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
 	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
 	tokenName := c.Query("token_name")
@@ -44,7 +81,7 @@ func GetUserLogs(c *gin.Context) {
 	group := c.Query("group")
 	requestId := c.Query("request_id")
 	upstreamRequestId := c.Query("upstream_request_id")
-	logs, total, err := model.GetUserLogs(userId, logType, startTimestamp, endTimestamp, modelName, tokenName, pageInfo.GetStartIdx(), pageInfo.GetPageSize(), group, requestId, upstreamRequestId)
+	logs, total, err := model.GetUserLogs(userId, logTypes, startTimestamp, endTimestamp, modelName, tokenName, pageInfo.GetStartIdx(), pageInfo.GetPageSize(), group, requestId, upstreamRequestId)
 	if err != nil {
 		common.ApiError(c, err)
 		return
