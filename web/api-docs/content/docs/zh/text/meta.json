@@ -1,0 +1,5 @@
+{
+  "title": "文本模型 API",
+  "icon": "MessageSquare",
+  "pages": ["chat-completions", "messages", "responses"]
+}

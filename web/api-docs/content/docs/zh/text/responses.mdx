@@ -1,0 +1,116 @@
+---
+title: OpenAI Responses
+description: 以 OpenAI Responses 格式调用文本模型
+---
+
+**POST** `/v1/responses`
+
+OpenAI Responses 兼容接口，支持流式与非流式，适用于[模型列表](../models)中的全部文本模型。
+
+## 请求头
+
+| 名称 | 必填 | 说明 |
+| --- | --- | --- |
+| `Authorization` | 是 | `Bearer sk-xxx`（控制台创建的 API Key，见[鉴权](../authentication)） |
+| `Content-Type` | 是 | `application/json` |
+
+## 请求参数
+
+| 字段 | 类型 | 必填 | 默认 | 说明 |
+| --- | --- | --- | --- | --- |
+| `model` | string | 是 | — | 模型标识，取值见[模型列表](../models) |
+| `input` | string \| array | 是 | — | 输入内容，可为纯字符串，也可为 `{role, content}` 消息数组 |
+| `max_output_tokens` | int | 否 | — | 最大生成 token 数（**含推理 token**） |
+| `stream` | bool | 否 | `false` | 是否以 SSE 流式返回 |
+| `temperature` | number | 否 | — | 采样温度 |
+
+## 示例
+
+```bash
+BASE_URL="https://yunjizi.cn"   # 国内；国外用 https://api.yunjizi.cn
+
+curl "$BASE_URL/v1/responses" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "doubao-seed-2-1-pro-260915",
+    "input": "用一句话介绍你自己",
+    "max_output_tokens": 2048
+  }'
+```
+
+## 响应
+
+```json
+{
+  "id": "resp_021789714808467846a816464a9af9c0791e0f68a2ce03cfda821",
+  "object": "response",
+  "created_at": 1789714808,
+  "model": "doubao-seed-2-1-pro-260915",
+  "status": "completed",
+  "max_output_tokens": 2048,
+  "service_tier": "default",
+  "output": [
+    {
+      "type": "reasoning",
+      "status": "completed",
+      "summary": [
+        {
+          "type": "summary_text",
+          "text": "用户需要一句话介绍自己，我将以简洁准确的方式介绍自身身份。"
+        }
+      ]
+    },
+    {
+      "type": "message",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "output_text",
+          "text": "我是由字节跳动开发的人工智能豆包，可为你提供答疑解惑、聊天互动、内容创作、信息查询等多方面的智能服务。"
+        }
+      ]
+    }
+  ],
+  "usage": {
+    "input_tokens": 51,
+    "output_tokens": 340,
+    "total_tokens": 391,
+    "input_tokens_details": { "cached_tokens": 0 },
+    "output_tokens_details": { "reasoning_tokens": 308 }
+  }
+}
+```
+
+## 响应字段
+
+| 字段 | 说明 |
+| --- | --- |
+| `status` | `completed` 正常结束；`incomplete` 未跑完 |
+| `incomplete_details.reason` | 未跑完的原因，`length` 表示达到 `max_output_tokens` |
+| `output` | 输出项数组，正文项 `type` 为 `message`，推理项为 `reasoning` |
+| `usage.input_tokens` | 输入 token 数 |
+| `usage.output_tokens` | 输出 token 数 |
+| `usage.input_tokens_details.cached_tokens` | 输入中命中上游前缀缓存的部分 |
+| `usage.output_tokens_details.reasoning_tokens` | 输出中属于推理的部分 |
+
+> 取值过小时 `status` 会是 `incomplete`、`incomplete_details.reason` 为 `length`，且 `output` 里可能只有推理项——推理已吃满预算，还没有开始输出正文。建议 `max_output_tokens` 不低于 `512`。
+
+## 流式
+
+`stream: true` 时按 SSE 返回，帧为 `event:` + `data:` 两行一组。事件序列：`response.created` → `response.in_progress` → `response.output_item.added` → 各增量事件（推理为 `response.reasoning_summary_text.delta`，正文为 `response.output_text.delta`）→ `response.output_item.done` → `response.completed`（未跑完则为 `response.incomplete`）。
+
+```bash
+curl -N "$BASE_URL/v1/responses" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "doubao-seed-2-1-pro-260915",
+    "input": "用一句话介绍你自己",
+    "stream": true
+  }'
+```
+
+> 流式下 `usage` 在 `response.completed`（或 `response.incomplete`）事件的 `response.usage` 里。
+
+计费按响应体 `usage` 结算，单价以官方公告为准。

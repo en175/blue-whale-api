@@ -1,0 +1,107 @@
+---
+title: Image Editing
+description: "Image-to-image: generate or compose from reference images"
+---
+
+**POST** `/v1/images/edits`
+
+An OpenAI-compatible image-to-image endpoint that generates a new image from reference images and returns synchronously. Supports single-image editing and multi-reference composition.
+
+## Request Headers
+
+| Name | Required | Description |
+| --- | --- | --- |
+| `Authorization` | Yes | `Bearer sk-xxx` (API key created in the console, see [Authentication](../authentication)) |
+| `Content-Type` | Yes | `application/json` (use `multipart/form-data` for file uploads; curl sets it automatically) |
+
+## Request Parameters
+
+| Field | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `model` | string | Yes | — | Model identifier, see the [model list](../models) |
+| `prompt` | string | Yes | — | The edit instruction; with multiple references, refer to them as "image 1", "image 2" by position |
+| `image` | string \| array \| file | Yes | — | Reference image: a single public URL, an array of URLs (multi-reference), or an uploaded file |
+| `size` | string | No | — | Output size, shaped `2048x2048`; same constraint as [Image Generation](./generations) |
+| `n` | int | No | `1` | Number of images, 1–128 |
+
+## Example
+
+Pass the reference as a **public URL** (the simplest form, with `image` as a single string):
+
+```bash
+BASE_URL="https://yunjizi.cn"   # Domestic; overseas use https://api.yunjizi.cn
+
+curl "$BASE_URL/v1/images/edits" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "doubao-seedream-5-0-260128",
+    "prompt": "Replace the background with the deep sea, keep the subject",
+    "image": "https://example.com/reference.jpeg",
+    "size": "2048x2048",
+    "n": 1
+  }'
+```
+
+Multiple references: pass an array of URLs in `image` and refer to them as "image 1"/"image 2" in `prompt`:
+
+```bash
+curl "$BASE_URL/v1/images/edits" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "doubao-seedream-5-0-260128",
+    "prompt": "Put the subject of image 1 into the background of image 2",
+    "image": [
+      "https://example.com/subject.jpeg",
+      "https://example.com/background.jpeg"
+    ],
+    "size": "2048x2048"
+  }'
+```
+
+For local files use a **form upload** (`multipart/form-data`; repeat `-F image=` for multiple images):
+
+```bash
+curl "$BASE_URL/v1/images/edits" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -F "model=doubao-seedream-5-0-260128" \
+  -F "prompt=Replace the background with the deep sea, keep the subject" \
+  -F "size=2048x2048" \
+  -F "image=@reference.jpeg;type=image/jpeg"
+```
+
+## Response
+
+```json
+{
+  "model": "doubao-seedream-5-0-260128",
+  "created": 1789714950,
+  "data": [
+    {
+      "url": "https://ark-acg-cn-beijing.tos-cn-beijing.volces.com/doubao-seedream-5-0/xxx.jpeg",
+      "size": "2048x2048"
+    }
+  ],
+  "usage": {
+    "generated_images": 1,
+    "output_tokens": 16384,
+    "total_tokens": 16384
+  }
+}
+```
+
+## Response Fields
+
+| Field | Description |
+| --- | --- |
+| `data` | Array of generated results, each shaped `{url, size}` |
+| `data[].url` | Image address, **valid for a limited time** — download and store it promptly |
+| `data[].size` | The actual output size |
+| `usage.generated_images` | Number of generated images billed for this request |
+
+> All three ways of passing images (URL string, URL array, form file) are equivalent — the gateway inlines uploaded files before forwarding upstream. Form uploads are bounded by a per-image size limit, so very large images are better passed as public URLs.
+
+## Billing
+
+Billed **per generated image**, on the same basis as [Image Generation](./generations); the total is unit price × `usage.generated_images`. Unit prices follow the official announcement.

@@ -5,6 +5,8 @@
     "quickstart",
     "authentication",
     "models",
+    "text",
+    "image",
     "video",
     "material",
     "errors",

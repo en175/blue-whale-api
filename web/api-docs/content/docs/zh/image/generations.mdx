@@ -1,0 +1,76 @@
+---
+title: 图片生成
+description: 文生图，根据提示词生成图片
+---
+
+**POST** `/v1/images/generations`
+
+OpenAI 兼容的文生图接口，同步返回结果，适用于[模型列表](../models)中的全部图片模型。
+
+## 请求头
+
+| 名称 | 必填 | 说明 |
+| --- | --- | --- |
+| `Authorization` | 是 | `Bearer sk-xxx`（控制台创建的 API Key，见[鉴权](../authentication)） |
+| `Content-Type` | 是 | `application/json` |
+
+## 请求参数
+
+| 字段 | 类型 | 必填 | 默认 | 说明 |
+| --- | --- | --- | --- | --- |
+| `model` | string | 是 | — | 模型标识，取值见[模型列表](../models) |
+| `prompt` | string | 是 | — | 提示词，描述要生成的画面；不能为空 |
+| `size` | string | 否 | — | 输出尺寸，形如 `2048x2048`；见下方尺寸约束 |
+| `n` | int | 否 | `1` | 生成张数，取值 1–128 |
+| `response_format` | string | 否 | `url` | 返回形式；`url` 返回图片地址 |
+
+## 示例
+
+```bash
+BASE_URL="https://yunjizi.cn"   # 国内；国外用 https://api.yunjizi.cn
+
+curl "$BASE_URL/v1/images/generations" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "doubao-seedream-5-0-260128",
+    "prompt": "蓝鲸跃出海面，慢镜头，电影质感",
+    "size": "2048x2048",
+    "n": 1
+  }'
+```
+
+## 响应
+
+```json
+{
+  "model": "doubao-seedream-5-0-260128",
+  "created": 1789714912,
+  "data": [
+    {
+      "url": "https://ark-acg-cn-beijing.tos-cn-beijing.volces.com/doubao-seedream-5-0/xxx.jpeg",
+      "size": "2048x2048"
+    }
+  ],
+  "usage": {
+    "generated_images": 1,
+    "output_tokens": 16384,
+    "total_tokens": 16384
+  }
+}
+```
+
+## 响应字段
+
+| 字段 | 说明 |
+| --- | --- |
+| `data` | 生成结果数组，元素形如 `{url, size}` |
+| `data[].url` | 图片地址，**有效期有限**，请及时下载转存 |
+| `data[].size` | 实际输出尺寸 |
+| `usage.generated_images` | 本次计费的生成张数 |
+
+> **尺寸有最小像素约束**：请求的 `size` 总像素不得低于 `3,686,400`（即 `1920x1920` 这一档）。低于该值会被上游拒绝，返回 `400`，错误信息形如 `image size must be at least 3686400 pixels`。请在满足该约束的前提下按目标比例选取尺寸。
+
+## 计费
+
+按**生成张数**计费，不同图片模型的单价不同；总价 = 单价 × `usage.generated_images`。具体单价以官方公告为准。

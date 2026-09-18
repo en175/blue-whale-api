@@ -1,0 +1,107 @@
+---
+title: 图片编辑
+description: 图生图，基于参考图生成或合成新图片
+---
+
+**POST** `/v1/images/edits`
+
+OpenAI 兼容的图生图接口，基于参考图生成新图片，同步返回结果。支持单图编辑与多参考图合成。
+
+## 请求头
+
+| 名称 | 必填 | 说明 |
+| --- | --- | --- |
+| `Authorization` | 是 | `Bearer sk-xxx`（控制台创建的 API Key，见[鉴权](../authentication)） |
+| `Content-Type` | 是 | `application/json`（表单上传时为 `multipart/form-data`，由 curl 自动设置） |
+
+## 请求参数
+
+| 字段 | 类型 | 必填 | 默认 | 说明 |
+| --- | --- | --- | --- | --- |
+| `model` | string | 是 | — | 模型标识，取值见[模型列表](../models) |
+| `prompt` | string | 是 | — | 编辑指令；多参考图时用「图1」「图2」指代对应序号的参考图 |
+| `image` | string \| array \| file | 是 | — | 参考图：单张公网 URL、URL 数组（多参考图），或表单上传的文件 |
+| `size` | string | 否 | — | 输出尺寸，形如 `2048x2048`；约束与[图片生成](./generations)一致 |
+| `n` | int | 否 | `1` | 生成张数，取值 1–128 |
+
+## 示例
+
+参考图以**公网 URL** 传入（最简形态，`image` 传单张）：
+
+```bash
+BASE_URL="https://yunjizi.cn"   # 国内；国外用 https://api.yunjizi.cn
+
+curl "$BASE_URL/v1/images/edits" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "doubao-seedream-5-0-260128",
+    "prompt": "把背景换成深海，保留主体",
+    "image": "https://example.com/reference.jpeg",
+    "size": "2048x2048",
+    "n": 1
+  }'
+```
+
+多参考图：`image` 传 URL 数组，并在 `prompt` 中用「图1」「图2」指代：
+
+```bash
+curl "$BASE_URL/v1/images/edits" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "doubao-seedream-5-0-260128",
+    "prompt": "把图1的主体放到图2的背景里",
+    "image": [
+      "https://example.com/subject.jpeg",
+      "https://example.com/background.jpeg"
+    ],
+    "size": "2048x2048"
+  }'
+```
+
+本地文件用**表单上传**（`multipart/form-data`，重复 `-F image=` 传多张）：
+
+```bash
+curl "$BASE_URL/v1/images/edits" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -F "model=doubao-seedream-5-0-260128" \
+  -F "prompt=把背景换成深海，保留主体" \
+  -F "size=2048x2048" \
+  -F "image=@reference.jpeg;type=image/jpeg"
+```
+
+## 响应
+
+```json
+{
+  "model": "doubao-seedream-5-0-260128",
+  "created": 1789714950,
+  "data": [
+    {
+      "url": "https://ark-acg-cn-beijing.tos-cn-beijing.volces.com/doubao-seedream-5-0/xxx.jpeg",
+      "size": "2048x2048"
+    }
+  ],
+  "usage": {
+    "generated_images": 1,
+    "output_tokens": 16384,
+    "total_tokens": 16384
+  }
+}
+```
+
+## 响应字段
+
+| 字段 | 说明 |
+| --- | --- |
+| `data` | 生成结果数组，元素形如 `{url, size}` |
+| `data[].url` | 图片地址，**有效期有限**，请及时下载转存 |
+| `data[].size` | 实际输出尺寸 |
+| `usage.generated_images` | 本次计费的生成张数 |
+
+> 三种传图方式（URL 字符串、URL 数组、表单文件）等价，网关会把文件转成内联数据后转发上游；表单上传的参考图受单图体积上限约束，超大图建议改用公网 URL。
+
+## 计费
+
+按**生成张数**计费，与[图片生成](./generations)同一口径；总价 = 单价 × `usage.generated_images`。具体单价以官方公告为准。
