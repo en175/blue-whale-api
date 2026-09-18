@@ -1,19 +1,19 @@
 ---
 title: Documentation Center
-description: Developer documentation for the Seedance 2.0 Video Generation API
+description: Developer documentation for the text, image and video generation APIs
 ---
 
-import { Rocket, KeyRound, Clapperboard } from 'lucide-react';
+import { Rocket, KeyRound, MessageSquare, ImageIcon, Clapperboard } from 'lucide-react';
 
 ## BLUE WHALE API DOCS
 
-A video generation API for developers: one API key, one billing system, one base_url, delivered in asynchronous task mode. The currently open video models are the **Doubao-Seedance 2.5 / 2.0 / 2.0-mini / 2.0-fast** series, supporting text-to-video, image-to-video, first/last-frame and reference-image control, and audio generation (see the [model list](./models) for details).
+A multimodal generation API for developers: one API key, one billing system, one base_url. Three capability families are currently open — **text models** (with OpenAI Chat Completions, Anthropic Messages and OpenAI Responses call formats), **image models** (image generation and image editing), and **video models** (the Doubao-Seedance 2.5 / 2.0 / 2.0-mini / 2.0-fast series, delivered in asynchronous task mode). See the [model list](./models) for the full catalog.
 
 <Cards>
   <Card
     icon={<Rocket />}
     title="Quick Start"
-    description="From sign-up to your first generated video, run through the whole flow in 5 minutes."
+    description="From sign-up to your first call, run through the whole flow in 5 minutes."
     href="/en/docs/quickstart"
   />
   <Card
@@ -21,6 +21,18 @@ A video generation API for developers: one API key, one billing system, one base
     title="Authentication"
     description="Authenticate requests with an API key."
     href="/en/docs/authentication"
+  />
+  <Card
+    icon={<MessageSquare />}
+    title="Text Model API"
+    description="Three endpoints: chat completions, Anthropic Messages, OpenAI Responses."
+    href="/en/docs/text/chat-completions"
+  />
+  <Card
+    icon={<ImageIcon />}
+    title="Image Model API"
+    description="Two endpoints: image generation and image editing."
+    href="/en/docs/image/generations"
   />
   <Card
     icon={<Clapperboard />}
@@ -32,6 +44,11 @@ A video generation API for developers: one API key, one billing system, one base
 
 ## Currently Open Endpoints
 
+- `POST /v1/chat/completions` — Chat completions (OpenAI Chat Completions format)
+- `POST /v1/messages` — Chat completions (Anthropic Messages format)
+- `POST /v1/responses` — Chat completions (OpenAI Responses format)
+- `POST /v1/images/generations` — Image generation
+- `POST /v1/images/edits` — Image editing
 - `POST /v1/video/generations` — Submit a video generation task
 - `GET /v1/video/generations/{task_id}` — Query task status
 - `GET /v1/videos/{task_id}/content` — Download the generated video

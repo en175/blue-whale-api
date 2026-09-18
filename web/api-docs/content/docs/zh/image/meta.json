@@ -1,0 +1,5 @@
+{
+  "title": "图片模型 API",
+  "icon": "Image",
+  "pages": ["generations", "edits"]
+}

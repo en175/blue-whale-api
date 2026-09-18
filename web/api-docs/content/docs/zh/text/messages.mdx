@@ -1,0 +1,105 @@
+---
+title: Anthropic Messages
+description: 以 Anthropic Messages 格式调用文本模型
+---
+
+**POST** `/v1/messages`
+
+Anthropic Messages 兼容接口，支持流式与非流式，适用于[模型列表](../models)中的全部文本模型。已有 Anthropic 格式客户端可只改 `base_url` 与 `model` 直接接入。
+
+## 请求头
+
+| 名称 | 必填 | 说明 |
+| --- | --- | --- |
+| `x-api-key` | 是 | 控制台创建的 API Key（见[鉴权](../authentication)）；也接受 `Authorization: Bearer sk-xxx` |
+| `anthropic-version` | 是 | 固定填 `2023-06-01` |
+| `Content-Type` | 是 | `application/json` |
+
+## 请求参数
+
+| 字段 | 类型 | 必填 | 默认 | 说明 |
+| --- | --- | --- | --- | --- |
+| `model` | string | 是 | — | 模型标识，取值见[模型列表](../models) |
+| `messages` | array | 是 | — | 消息数组，元素形如 `{role, content}`；`role` 取 `user` / `assistant` |
+| `max_tokens` | int | 是 | — | 最大生成 token 数（**含推理 token**），Anthropic 格式下为必填 |
+| `system` | string \| array | 否 | — | 系统提示词 |
+| `stream` | bool | 否 | `false` | 是否以 SSE 流式返回 |
+| `temperature` | number | 否 | — | 采样温度 |
+
+## 示例
+
+```bash
+BASE_URL="https://yunjizi.cn"   # 国内；国外用 https://api.yunjizi.cn
+
+curl "$BASE_URL/v1/messages" \
+  -H "x-api-key: sk-YOUR-KEY" \
+  -H "anthropic-version: 2023-06-01" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "doubao-seed-2-1-pro-260915",
+    "max_tokens": 512,
+    "messages": [
+      {"role": "user", "content": "用一句话介绍你自己"}
+    ]
+  }'
+```
+
+## 响应
+
+```json
+{
+  "id": "021789714793570846a816464a9af9c0791e0f68a2ce03cbcd322",
+  "type": "message",
+  "role": "assistant",
+  "model": "doubao-seed-2-1-pro-260915",
+  "content": [
+    {
+      "type": "text",
+      "text": "我是由字节跳动开发的人工智能豆包，能够为你提供知识科普、答疑解惑、创意创作、聊天陪伴等多方面的智能服务。"
+    }
+  ],
+  "stop_reason": "end_turn",
+  "usage": {
+    "input_tokens": 51,
+    "output_tokens": 552,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0
+  }
+}
+```
+
+## 响应字段
+
+| 字段 | 说明 |
+| --- | --- |
+| `content` | 内容块数组，元素形如 `{type: "text", text}` |
+| `stop_reason` | `end_turn` 正常结束；`max_tokens` 达到 `max_tokens` |
+| `usage.input_tokens` | 输入 token 数 |
+| `usage.output_tokens` | 输出 token 数 |
+| `usage.cache_read_input_tokens` | 输入中命中上游前缀缓存的部分 |
+| `usage.cache_creation_input_tokens` | 显式建缓存的部分（当前恒为 `0`，见下方说明） |
+
+> 缓存为**上游自动前缀缓存**：命中量看 `cache_read_input_tokens`。请求里的 `cache_control` 会原样透传给上游，但网关不依它做计费决策；`cache_creation_input_tokens` 恒为 `0`。
+
+## 流式
+
+`stream: true` 时按 SSE 返回，帧为 `event:` + `data:` 两行一组，事件序列为 `message_start` → `content_block_start` → `content_block_delta` → `content_block_stop` → `message_delta` → `message_stop`。
+
+```bash
+curl -N "$BASE_URL/v1/messages" \
+  -H "x-api-key: sk-YOUR-KEY" \
+  -H "anthropic-version: 2023-06-01" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "doubao-seed-2-1-pro-260915",
+    "max_tokens": 512,
+    "stream": true,
+    "messages": [{"role": "user", "content": "用一句话介绍你自己"}]
+  }'
+```
+
+推理模型会先开一个 `thinking` 内容块再开 `text` 块，对应的增量类型为 `thinking_delta` 与 `text_delta`。
+
+> **计费取数：流式下必须读 `message_delta` 事件的 `usage`。** `message_start` 里的 `usage` 是**预估值**（`input_tokens` 明显偏高、`cache_read_input_tokens` 恒为 `0`），只有末尾 `message_delta` 的 `usage` 是真实值。非流式响应无此差异，直接读响应体即可。
+
+计费按响应体 `usage` 结算，单价以官方公告为准。

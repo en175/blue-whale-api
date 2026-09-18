@@ -1,9 +1,9 @@
 ---
 title: Quick Start
-description: From sign-up to your first generated video in about 5 minutes
+description: From sign-up to your first API call in about 5 minutes
 ---
 
-From sign-up to your first generated video, the whole flow takes about 5 minutes.
+From sign-up to your first API call result, the whole flow takes about 5 minutes.
 
 ## 1. Get an API Key
 
@@ -11,13 +11,43 @@ From sign-up to your first generated video, the whole flow takes about 5 minutes
 2. Open the "Tokens" page and create a new API key (in the form `sk-xxxxxx`)
 3. Store it safely — the key is shown in full only once, at creation time
 
-## 2. Submit a Generation Task
+## 2. Text Models: A Chat Completion
 
 > **Base URL**: Domestic `https://yunjizi.cn`; Overseas `https://api.yunjizi.cn`. Choose per the gateway you integrate with; `BASE_URL` in the examples below is the corresponding domain.
 
 ```bash
 BASE_URL="https://yunjizi.cn"   # Domestic; overseas use https://api.yunjizi.cn
 
+curl "$BASE_URL/v1/chat/completions" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "doubao-seed-2-1-pro-260915",
+    "messages": [{"role": "user", "content": "Introduce the blue whale in one sentence"}],
+    "max_tokens": 512
+  }'
+```
+
+`choices[0].message.content` holds the model output. All text models are reasoning models, so keep `max_tokens` at 512 or above — a lower value may return only the reasoning trace with no answer. See the [Text Model API](./text/chat-completions).
+
+## 3. Image Models: An Image Generation
+
+```bash
+curl "$BASE_URL/v1/images/generations" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "doubao-seedream-5-0-260128",
+    "prompt": "A blue whale leaping out of the ocean, photorealistic",
+    "size": "2048x2048"
+  }'
+```
+
+`data[0].url` in the response is the generated image URL. See the [Image Model API](./image/generations).
+
+## 4. Video Models: Submit a Generation Task
+
+```bash
 curl "$BASE_URL/v1/video/generations" \
   -H "Authorization: Bearer sk-YOUR-KEY" \
   -H "Content-Type: application/json" \
@@ -44,7 +74,7 @@ The `id` (same as `task_id`) in the response is the unique identifier of this ta
 }
 ```
 
-## 3. Poll the Task Status
+## 5. Poll the Task Status
 
 Video generation is asynchronous. We recommend polling every 5–10 seconds:
 
@@ -55,7 +85,7 @@ curl "$BASE_URL/v1/video/generations/task_9f3a2b7c" \
 
 When `data.status` becomes `SUCCESS`, generation is complete. See [Query a Task](./video/query).
 
-## 4. Download the Video
+## 6. Download the Video
 
 ```bash
 curl "$BASE_URL/v1/videos/task_9f3a2b7c/content" \
@@ -65,5 +95,7 @@ curl "$BASE_URL/v1/videos/task_9f3a2b7c/content" \
 ## Next Steps
 
 - [Authentication](./authentication): using API keys and their lifecycle
-- [Models](./models): full parameter reference for doubao-seedance-2-0-260128
+- [Text Model API](./text/chat-completions): three call formats (Chat Completions / Messages / Responses)
+- [Image Model API](./image/generations): image generation and image editing
+- [Models](./models): available models and their capabilities
 - [Error Codes](./errors): look here when something goes wrong

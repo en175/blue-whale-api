@@ -1,0 +1,109 @@
+---
+title: 对话补全
+description: 以 OpenAI Chat Completions 格式调用文本模型
+---
+
+**POST** `/v1/chat/completions`
+
+OpenAI 兼容的对话补全接口，支持流式与非流式，适用于[模型列表](../models)中的全部文本模型。
+
+## 请求头
+
+| 名称 | 必填 | 说明 |
+| --- | --- | --- |
+| `Authorization` | 是 | `Bearer sk-xxx`（控制台创建的 API Key，见[鉴权](../authentication)） |
+| `Content-Type` | 是 | `application/json` |
+
+## 请求参数
+
+| 字段 | 类型 | 必填 | 默认 | 说明 |
+| --- | --- | --- | --- | --- |
+| `model` | string | 是 | — | 模型标识，取值见[模型列表](../models) |
+| `messages` | array | 是 | — | 消息数组，元素形如 `{role, content}`；`role` 取 `system` / `user` / `assistant` |
+| `stream` | bool | 否 | `false` | 是否以 SSE 流式返回 |
+| `stream_options` | object | 否 | — | 流式专用，`{"include_usage": true}` 时在末片返回 `usage` |
+| `max_tokens` | int | 否 | — | 最大生成 token 数（**含推理 token**） |
+| `temperature` | number | 否 | — | 采样温度 |
+
+## 示例
+
+```bash
+BASE_URL="https://yunjizi.cn"   # 国内；国外用 https://api.yunjizi.cn
+
+curl "$BASE_URL/v1/chat/completions" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "doubao-seed-2-1-pro-260915",
+    "messages": [
+      {"role": "system", "content": "你是一个严谨的技术助手。"},
+      {"role": "user", "content": "用一句话介绍你自己"}
+    ],
+    "max_tokens": 512
+  }'
+```
+
+## 响应
+
+```json
+{
+  "id": "02178971496553678af8113c224ccdd69578c3b63d1e71a9",
+  "object": "chat.completion",
+  "created": 1789714912,
+  "model": "doubao-seed-2-1-pro-260915",
+  "service_tier": "default",
+  "choices": [
+    {
+      "index": 0,
+      "finish_reason": "stop",
+      "logprobs": null,
+      "message": {
+        "role": "assistant",
+        "content": "我是字节跳动研发的人工智能，能为你提供信息查询、知识解答、文案创作等多方面的协助。",
+        "reasoning_content": "用户要求用一句话介绍自己，符合技术助手定位的规范表述方向，我已明确。"
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 47,
+    "completion_tokens": 90,
+    "total_tokens": 137,
+    "prompt_tokens_details": { "cached_tokens": 0 },
+    "completion_tokens_details": { "reasoning_tokens": 64 }
+  }
+}
+```
+
+## 响应字段
+
+| 字段 | 说明 |
+| --- | --- |
+| `choices[0].message.content` | 回复正文 |
+| `choices[0].message.reasoning_content` | 推理过程（推理模型返回） |
+| `choices[0].finish_reason` | `stop` 正常结束；`length` 达到 `max_tokens` |
+| `usage.prompt_tokens` | 输入 token 数 |
+| `usage.completion_tokens` | 输出 token 数 |
+| `usage.prompt_tokens_details.cached_tokens` | 输入中命中上游前缀缓存的部分 |
+| `usage.completion_tokens_details.reasoning_tokens` | 输出中属于推理的部分 |
+
+> 本平台文本模型均为**推理模型**：`max_tokens` 会被推理过程一并消耗。取值过小时可能出现 `content` 为空、`finish_reason` 为 `length` 的情况——推理已吃满预算，还没有开始输出正文。建议 `max_tokens` 不低于 `512`。
+
+## 流式
+
+`stream: true` 时按 SSE 返回，每片形如 `data: {...}`，以 `data: [DONE]` 收尾。
+
+```bash
+curl -N "$BASE_URL/v1/chat/completions" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "doubao-seed-2-1-pro-260915",
+    "messages": [{"role": "user", "content": "用一句话介绍你自己"}],
+    "stream": true,
+    "stream_options": {"include_usage": true}
+  }'
+```
+
+> 流式下 `usage` **只出现在最后一个分片**（此前的分片该字段为 `null`），且必须显式带上 `stream_options.include_usage: true`，否则不返回。
+
+计费按响应体 `usage` 结算，单价以官方公告为准；缓存命中的部分单独计价，`cached_tokens` 即命中量。

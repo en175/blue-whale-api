@@ -7,14 +7,17 @@ const forbiddenTerms = [
   { label: 'Gemini', pattern: /gemini/i },
   { label: '充值', pattern: /充值/ },
   { label: '免费额度', pattern: /免费额度/ },
-  { label: 'Chat Completions', pattern: /\/v1\/chat\/completions/i },
   { label: 'Embeddings', pattern: /\/v1\/embeddings/i },
-  { label: 'Images API', pattern: /\/v1\/images/i },
   { label: 'Audio API', pattern: /\/v1\/audio/i },
   { label: 'Management API', pattern: /management\s*api/i }
 ]
 
 const allowedApiPaths = new Set([
+  '/v1/chat/completions',
+  '/v1/messages',
+  '/v1/responses',
+  '/v1/images/generations',
+  '/v1/images/edits',
   '/v1/video/generations',
   '/v1/video/generations/{task_id}',
   '/v1/videos/{task_id}/content'
@@ -51,7 +54,7 @@ function scanDirectory(root: string): string[] {
 }
 
 function main() {
-  // 只扫描对外公开的新增章节（index/quickstart/authentication/models/video/errors/rate-limits/faq）
+  // 只扫描对外公开的新增章节（index/quickstart/authentication/models/text/image/video/errors/rate-limits/faq）
   // 被导航隐藏的旧章节（api/apps/en）不参与公开面检查
   const zhRoot = join(process.cwd(), 'content', 'docs', 'zh')
   const publicEntries = [
@@ -59,6 +62,8 @@ function main() {
     'quickstart.mdx',
     'authentication.mdx',
     'models.mdx',
+    'text',
+    'image',
     'video',
     'errors.mdx',
     'rate-limits.mdx',
