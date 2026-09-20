@@ -1,6 +1,6 @@
 # AI MediaKit 工具接口文档
 
-火山引擎 **AI MediaKit** 是视频云的智能多媒体工具集：图像的增强/抠图/擦除/翻译、视频的增强/转码/字幕/抠像/换脸、音频的分离/转码等，共 **64 个工具**。
+火山引擎 **AI MediaKit** 是视频云的智能多媒体工具集：图像的增强/抠图/擦除/翻译、视频的增强/转码/字幕/抠像/换脸、音频的分离/转码/抽音轨等。本网关共开放 **65 个工具**——官方三大集合下的 64 个，外加集合外的 `extract-audio`（视频抽音轨）。
 
 本网关把它整体接进来，**请求体与上游完全一致、零改写**——你按 MediaKit 原生协议写请求，网关只做三件事：**鉴权、按工具路由、计费**。所以本页的每个示例都可以直接复制运行。
 
@@ -156,7 +156,7 @@ curl -X GET 'https://<网关域名>/v1/mediakit/tasks/task_xxxxxxxxxxxxxxxx' \
 | 计费维度 | 覆盖 | 说明 |
 |---|---|---|
 | **按次** | 17 个（图像 14 + 视频 2 + 音频 1） | 每次调用一个固定价 |
-| **按时长** | 34 个（视频 31 + 音频 3） | 按处理时长（元/分钟）计。提交时按预估时长**预扣**，任务完成后用上游回包的真实时长**结算差额**（多退少补） |
+| **按时长** | 35 个（视频 31 + 音频 4，音频含集合外的 `extract-audio`） | 按处理时长（元/分钟）计。提交时按预估时长**预扣**，任务完成后用上游回包的真实时长**结算差额**（多退少补） |
 | **按量 GiB** | 13 个（图像基础编辑族） | 按处理量计 |
 
 **3 个元信息获取工具的定价说明**：`probe-image-metadata`、`probe-video-metadata`、`probe-audio-metadata` 只读素材的容器/流信息、不产出文件，网关按上游口径给它们单独定价：
@@ -259,16 +259,17 @@ curl -X GET 'https://<网关域名>/v1/mediakit/tasks/task_xxxxxxxxxxxxxxxx' \
 | 32 | 剧本还原（重绘场景） | `POST /v1/mediakit/drama-script-vertical` |
 | 33 | 视频元信息获取 | `POST /v1/mediakit/probe-video-metadata` |
 
-**音频工具（异步，4 个）**
+**音频工具（异步，5 个）**
 
 | # | 工具 | 端点 |
 |---|---|---|
 | 1 | 人声背景音分离 | `POST /v1/mediakit/separate-voice` |
 | 2 | 音频转码 | `POST /v1/mediakit/transcode-audio` |
-| 3 | 语音端点识别 | `POST /v1/mediakit/detect-voice-activity` |
-| 4 | 音频元信息获取 | `POST /v1/mediakit/probe-audio-metadata` |
+| 3 | 视频抽音轨 | `POST /v1/mediakit/extract-audio` |
+| 4 | 语音端点识别 | `POST /v1/mediakit/detect-voice-activity` |
+| 5 | 音频元信息获取 | `POST /v1/mediakit/probe-audio-metadata` |
 
-> **本页覆盖全部 64 个工具**，与火山官方在这三个集合下登记的数量一一对应（视频 33 / 图像 27 / 音频 4）——没有遗漏。
+> **本页覆盖全部 65 个工具**：官方三个集合下的 64 个与火山登记的数量一一对应（视频 33 / 图像 27 / 音频 4）——没有遗漏；在此之上另开放 1 个集合外的 `extract-audio`（第 3 行，详见 [§7.3](#73-视频抽音轨-extract-audio)），它不在官方那三个集合里，是应下游「音频提取」需求额外接入的。
 >
 > 另有「剪辑工具 API」（27 个）与「大模型处理工具 API」（3 个）两个集合整体未接入：前者官方未给出逐工具的独立标识，后者依赖火山方舟按 token 计费。详见 [`mediakit.md`](./mediakit.md) 第 1 节。
 
@@ -3932,9 +3933,11 @@ curl -X POST 'https://<网关域名>/v1/mediakit/probe-video-metadata' \
 
 ---
 
-## 7. 音频工具（异步，4 个）
+## 7. 音频工具（异步，5 个）
 
 全部为异步工具，端点为 `POST /v1/mediakit/{tool}`。流程同视频工具。除「音频元信息获取」按次计费外，其余均按处理时长计费。
+
+> 其中 `extract-audio`（视频抽音轨）**不在火山官方那三个工具集合内**——它不属于视频 33 / 图像 27 / 音频 4 的任何一类，是应「音频提取」需求额外接入的，上游有独立 slug 与独立产物。其余 4 个是官方音频集合的完整登记。
 
 ### 7.1 人声背景音分离 `separate-voice`
 
@@ -4059,7 +4062,63 @@ curl -X POST 'https://<网关域名>/v1/mediakit/transcode-audio' \
 
 ---
 
-### 7.3 语音端点识别 `detect-voice-activity`
+### 7.3 视频抽音轨 `extract-audio`
+
+**作用：** 把视频里的音轨单独抽出来存成一个音频文件，视频画面丢弃。与 [7.1 人声背景音分离](#71-人声背景音分离-separate-voice) 不同——那个是把音频拆成人声与伴奏两条轨，本工具只做「视频 → 音频」的提取，不做分离。适合从视频素材里取配音/原声做二次利用、给语音转写准备纯音频输入、以及把视频里的 BGM 单独导出等场景。
+
+- **端点：** `POST /v1/mediakit/extract-audio`
+- **计费：** 按时长（元/分钟）
+
+**请求参数**
+
+| 参数 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `video_url` | string | 是 | 待提取音轨的视频地址（公网 HTTP/HTTPS URL）。缺此字段上游直接报 `InvalidParameter: required: missing properties: ["video_url"]` |
+| `format` | string | 否 | 输出音频格式，取值 `mp3` / `m4a` / `ogg` / `flac` / `wav`。**默认 `m4a`**。非法值会被上游拒绝，不会静默回退 |
+
+> 本工具不在火山官方「视频 / 图像 / 音频」三个工具集合内，参数以上游实测为准。传参一律走**网关**，不要直连上游。
+
+**调用示例**
+
+```bash
+curl -X POST 'https://<网关域名>/v1/mediakit/extract-audio' \
+  -H 'Authorization: Bearer sk-<你的网关令牌>' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "video_url": "https://example.com/your_video.mp4",
+    "format": "m4a"
+  }'
+```
+
+**响应**
+
+```json
+{
+  "success": true,
+  "task_id": "amk-tool-extract-audio-1163743796738",
+  "message": ""
+}
+```
+
+拿到 `task_id` 后用 `GET /v1/mediakit/tasks/{task_id}` 轮询，直到 `status` 为 `completed` / `failed`：
+
+```json
+{
+  "success": true,
+  "task_id": "amk-tool-extract-audio-1163743796738",
+  "status": "completed",
+  "result": {
+    "audio_url": "https://example.com/extracted.m4a?auth_key=...",
+    "duration": 38.961
+  }
+}
+```
+
+**产物字段：** `result.audio_url`（约 24h 有效的临时下载链接，请及时转存）、`result.duration`（秒，精确值）。
+
+---
+
+### 7.4 语音端点识别 `detect-voice-activity`
 
 **作用：** 从音频/视频里找出「哪几段有人在说话」——自动定位有效语音的起止时间，把有人声的片段与静音、背景噪声区分开，返回一份带时间戳的语音片段列表。适合按说话段落自动切片、跳过静音段再做 ASR/转写以节省识别成本、以及给后续分析或模型训练准备干净音频输入等场景。
 
@@ -4113,7 +4172,7 @@ curl -X POST 'https://<网关域名>/v1/mediakit/detect-voice-activity' \
 
 **产物字段：** 无文件产物，语音分段见上方响应示例的 `result.voice_segments[]`
 
-### 7.4 音频元信息获取 `probe-audio-metadata`
+### 7.5 音频元信息获取 `probe-audio-metadata`
 
 **作用：** 探测一个音频 URL 的媒资元信息——容器层信息与音频流信息，**不转码、不产出新文件**。适合入库前校验格式与编码、按采样率/声道数分流处理策略、核对接入素材是否符合前置条件等场景。与 [6.33 视频元信息获取](#633-视频元信息获取-probe-video-metadata) 同族，只是输入换成纯音频。
 
@@ -4250,7 +4309,7 @@ curl -X POST 'https://<网关域名>/v1/mediakit/probe-audio-metadata' \
    - **API Key 填在渠道的「密钥」字段**，不是你自建的别的字段——MediaKit 用单头 `Authorization: Bearer <apiKey>` 鉴权，天然适配渠道密钥机制
    - 上游域名走渠道的「代理/Base URL」字段，默认 `https://mediakit.cn-beijing.volces.com`，一般不用改
 2. **把要开放的模型勾进渠道的模型列表**
-   - 对客模型名是 `mediakit-<工具名>`，例如 `mediakit-enhance-image`。共 64 个，按需勾选即可分批放量
+   - 对客模型名是 `mediakit-<工具名>`，例如 `mediakit-enhance-image`。共 65 个，按需勾选即可分批放量
    - 少勾一个，对应的工具就无法路由
 3. **配模型定价**
    - **同步工具必须配**，否则会直接 `400`（报 `has no model price configured`）；按次/按量的工具填固定价即可
@@ -4262,6 +4321,6 @@ curl -X POST 'https://<网关域名>/v1/mediakit/probe-audio-metadata' \
 - **令牌的模型白名单**：如果给调用方的令牌限制了可用模型，需要把 `mediakit-<工具名>` 加进白名单，否则会被令牌层拦掉。
 - **`mediakit_default_minutes`**：渠道设置里的一项（0–60），用于时长类工具**提交时拿不到真实时长**的估算预扣。填 0 时预扣退回按 `model_price` 基准额度（约 1 分钟量），真实时长的差额在任务完成时补扣——不是「预扣为 0、先用后付」。
 
-一键配置脚本：`scripts/mediakit-bootstrap.sql`（建渠道 + 写全 64 个模型 + 派生路由表 + 可选写定价，幂等可重复执行）。
+一键配置脚本：`scripts/mediakit-bootstrap.sql`（建渠道 + 写全 65 个模型 + 派生路由表 + 可选写定价，幂等可重复执行）。
 
 > 若目标环境设了 `MEMORY_CACHE_ENABLED=true`，直接改数据库不会立刻生效，需要重启服务或触发一次渠道缓存刷新。

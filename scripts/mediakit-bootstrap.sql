@@ -1,11 +1,12 @@
 -- ============================================================================
 -- MediaKit 渠道一键配置（渠道类型 65）
--- 模型清单生成自 relay/channel/mediakit/registry.go，共 64 个工具。
+-- 模型清单生成自 relay/channel/mediakit/registry.go，共 65 个工具
+-- （官方三个集合 64 + 集合外的 extract-audio 1）。
 -- 注册表加工具后重新生成本文件的模型段即可。
 --
 -- 为什么不能只配一样：建渠道 ≠ 能用，三件事都得做，缺一样就报错 ——
 --   ① channels 行（密钥走 key 字段，不是 setting）
---   ② channels.models 里列全 64 个模型
+--   ② channels.models 里列全 65 个模型
 --   ③ abilities 行 —— 对客路由查的是这张表，由 ② × 分组派生
 --   （同步工具还要求 model_price 已配，见第 3 节，否则 400）
 --
@@ -43,7 +44,7 @@ INSERT INTO channels
   (type, `key`, status, name, weight, created_time, base_url,
    models, `group`, priority, auto_ban, setting, channel_info, tag)
 SELECT 65, @mediakit_key, 1, @channel_name, 0, UNIX_TIMESTAMP(), '',
-       'mediakit-enhance-image,mediakit-remove-image-background,mediakit-image-ocr,mediakit-evaluate-image-quality,mediakit-erase-image,mediakit-expand-image-canvas,mediakit-smart-crop-image,mediakit-slim-image,mediakit-remove-image-elements,mediakit-translate-image-text,mediakit-face-blur-image,mediakit-generate-product-scene-image,mediakit-add-image-invisible-watermark,mediakit-extract-image-invisible-watermark,mediakit-round-corner-image,mediakit-flip-image,mediakit-rotate-image,mediakit-sharpen-image,mediakit-gaussian-blur-image,mediakit-mosaic-image,mediakit-add-image-watermark,mediakit-adjust-image-color,mediakit-resize-image,mediakit-invert-image,mediakit-crop-image,mediakit-compress-image,mediakit-probe-image-metadata,mediakit-enhance-video-generative,mediakit-enhance-video,mediakit-enhance-video-fast,mediakit-erase-video-subtitle,mediakit-erase-video-subtitle-pro,mediakit-segment-scenes,mediakit-asr-subtitles,mediakit-video-ocr,mediakit-analyze-video-highlights,mediakit-analyze-video-storyline,mediakit-generate-highlights-microdrama,mediakit-generate-highlights-minigame,mediakit-generate-highlights-movie,mediakit-matte-greenscreen-video,mediakit-matte-portrait-video,mediakit-drama-script,mediakit-drama-script-vertical,mediakit-drama-recap,mediakit-drama-recap-vertical,mediakit-add-video-invisible-watermark,mediakit-extract-video-invisible-watermark,mediakit-assess-video-quality,mediakit-transcode-video,mediakit-remux-video,mediakit-martencode-video,mediakit-face-blur-video,mediakit-face-swap-video,mediakit-semantic-segment,mediakit-video-frame-interpolation,mediakit-lip-sync,mediakit-reframe-video-to-vertical,mediakit-extract-frames,mediakit-probe-video-metadata,mediakit-separate-voice,mediakit-transcode-audio,mediakit-detect-voice-activity,mediakit-probe-audio-metadata', @channel_groups, 0, 1,
+       'mediakit-enhance-image,mediakit-remove-image-background,mediakit-image-ocr,mediakit-evaluate-image-quality,mediakit-erase-image,mediakit-expand-image-canvas,mediakit-smart-crop-image,mediakit-slim-image,mediakit-remove-image-elements,mediakit-translate-image-text,mediakit-face-blur-image,mediakit-generate-product-scene-image,mediakit-add-image-invisible-watermark,mediakit-extract-image-invisible-watermark,mediakit-round-corner-image,mediakit-flip-image,mediakit-rotate-image,mediakit-sharpen-image,mediakit-gaussian-blur-image,mediakit-mosaic-image,mediakit-add-image-watermark,mediakit-adjust-image-color,mediakit-resize-image,mediakit-invert-image,mediakit-crop-image,mediakit-compress-image,mediakit-probe-image-metadata,mediakit-enhance-video-generative,mediakit-enhance-video,mediakit-enhance-video-fast,mediakit-erase-video-subtitle,mediakit-erase-video-subtitle-pro,mediakit-segment-scenes,mediakit-asr-subtitles,mediakit-video-ocr,mediakit-analyze-video-highlights,mediakit-analyze-video-storyline,mediakit-generate-highlights-microdrama,mediakit-generate-highlights-minigame,mediakit-generate-highlights-movie,mediakit-matte-greenscreen-video,mediakit-matte-portrait-video,mediakit-drama-script,mediakit-drama-script-vertical,mediakit-drama-recap,mediakit-drama-recap-vertical,mediakit-add-video-invisible-watermark,mediakit-extract-video-invisible-watermark,mediakit-assess-video-quality,mediakit-transcode-video,mediakit-remux-video,mediakit-martencode-video,mediakit-face-blur-video,mediakit-face-swap-video,mediakit-semantic-segment,mediakit-video-frame-interpolation,mediakit-lip-sync,mediakit-reframe-video-to-vertical,mediakit-extract-frames,mediakit-probe-video-metadata,mediakit-separate-voice,mediakit-transcode-audio,mediakit-extract-audio,mediakit-detect-voice-activity,mediakit-probe-audio-metadata', @channel_groups, 0, 1,
        JSON_OBJECT(
          'force_format', false,
          'thinking_to_content', false,
@@ -69,7 +70,7 @@ SET @channel_id := IF(
 );
 
 -- 已存在的渠道也把模型列表补全（覆盖式，等于在控制台里把模型勾满）。
-UPDATE channels SET models = 'mediakit-enhance-image,mediakit-remove-image-background,mediakit-image-ocr,mediakit-evaluate-image-quality,mediakit-erase-image,mediakit-expand-image-canvas,mediakit-smart-crop-image,mediakit-slim-image,mediakit-remove-image-elements,mediakit-translate-image-text,mediakit-face-blur-image,mediakit-generate-product-scene-image,mediakit-add-image-invisible-watermark,mediakit-extract-image-invisible-watermark,mediakit-round-corner-image,mediakit-flip-image,mediakit-rotate-image,mediakit-sharpen-image,mediakit-gaussian-blur-image,mediakit-mosaic-image,mediakit-add-image-watermark,mediakit-adjust-image-color,mediakit-resize-image,mediakit-invert-image,mediakit-crop-image,mediakit-compress-image,mediakit-probe-image-metadata,mediakit-enhance-video-generative,mediakit-enhance-video,mediakit-enhance-video-fast,mediakit-erase-video-subtitle,mediakit-erase-video-subtitle-pro,mediakit-segment-scenes,mediakit-asr-subtitles,mediakit-video-ocr,mediakit-analyze-video-highlights,mediakit-analyze-video-storyline,mediakit-generate-highlights-microdrama,mediakit-generate-highlights-minigame,mediakit-generate-highlights-movie,mediakit-matte-greenscreen-video,mediakit-matte-portrait-video,mediakit-drama-script,mediakit-drama-script-vertical,mediakit-drama-recap,mediakit-drama-recap-vertical,mediakit-add-video-invisible-watermark,mediakit-extract-video-invisible-watermark,mediakit-assess-video-quality,mediakit-transcode-video,mediakit-remux-video,mediakit-martencode-video,mediakit-face-blur-video,mediakit-face-swap-video,mediakit-semantic-segment,mediakit-video-frame-interpolation,mediakit-lip-sync,mediakit-reframe-video-to-vertical,mediakit-extract-frames,mediakit-probe-video-metadata,mediakit-separate-voice,mediakit-transcode-audio,mediakit-detect-voice-activity,mediakit-probe-audio-metadata' WHERE id = @channel_id;
+UPDATE channels SET models = 'mediakit-enhance-image,mediakit-remove-image-background,mediakit-image-ocr,mediakit-evaluate-image-quality,mediakit-erase-image,mediakit-expand-image-canvas,mediakit-smart-crop-image,mediakit-slim-image,mediakit-remove-image-elements,mediakit-translate-image-text,mediakit-face-blur-image,mediakit-generate-product-scene-image,mediakit-add-image-invisible-watermark,mediakit-extract-image-invisible-watermark,mediakit-round-corner-image,mediakit-flip-image,mediakit-rotate-image,mediakit-sharpen-image,mediakit-gaussian-blur-image,mediakit-mosaic-image,mediakit-add-image-watermark,mediakit-adjust-image-color,mediakit-resize-image,mediakit-invert-image,mediakit-crop-image,mediakit-compress-image,mediakit-probe-image-metadata,mediakit-enhance-video-generative,mediakit-enhance-video,mediakit-enhance-video-fast,mediakit-erase-video-subtitle,mediakit-erase-video-subtitle-pro,mediakit-segment-scenes,mediakit-asr-subtitles,mediakit-video-ocr,mediakit-analyze-video-highlights,mediakit-analyze-video-storyline,mediakit-generate-highlights-microdrama,mediakit-generate-highlights-minigame,mediakit-generate-highlights-movie,mediakit-matte-greenscreen-video,mediakit-matte-portrait-video,mediakit-drama-script,mediakit-drama-script-vertical,mediakit-drama-recap,mediakit-drama-recap-vertical,mediakit-add-video-invisible-watermark,mediakit-extract-video-invisible-watermark,mediakit-assess-video-quality,mediakit-transcode-video,mediakit-remux-video,mediakit-martencode-video,mediakit-face-blur-video,mediakit-face-swap-video,mediakit-semantic-segment,mediakit-video-frame-interpolation,mediakit-lip-sync,mediakit-reframe-video-to-vertical,mediakit-extract-frames,mediakit-probe-video-metadata,mediakit-separate-voice,mediakit-transcode-audio,mediakit-extract-audio,mediakit-detect-voice-activity,mediakit-probe-audio-metadata' WHERE id = @channel_id;
 
 -- ── 2. 派生 abilities ──────────────────────────────────────────────────────
 -- 对齐 model/ability.go 的 AddAbilities：group × model 笛卡尔积，
@@ -215,6 +216,8 @@ CROSS JOIN (
     SELECT 'mediakit-separate-voice' AS model
     UNION ALL
     SELECT 'mediakit-transcode-audio' AS model
+    UNION ALL
+    SELECT 'mediakit-extract-audio' AS model
     UNION ALL
     SELECT 'mediakit-detect-voice-activity' AS model
     UNION ALL
@@ -371,6 +374,8 @@ SET @new_prices := (
     UNION ALL
     SELECT 'mediakit-transcode-audio' AS model
     UNION ALL
+    SELECT 'mediakit-extract-audio' AS model
+    UNION ALL
     SELECT 'mediakit-detect-voice-activity' AS model
     UNION ALL
     SELECT 'mediakit-probe-audio-metadata' AS model) m
@@ -392,7 +397,7 @@ WHERE @set_price = 1
 ON DUPLICATE KEY UPDATE value = @merged_prices;
 
 -- ── 4. 自检 ───────────────────────────────────────────────────────────────
--- 期望：n_models = 64；abilities_rows = 64 × 分组数。
+-- 期望：n_models = 65；abilities_rows = 65 × 分组数。
 SELECT c.id                       AS channel_id,
        c.type                     AS channel_type,
        c.name                     AS channel_name,

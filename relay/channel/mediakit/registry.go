@@ -151,6 +151,9 @@ var toolRegistry = []ToolSpec{
 	// 人声/伴奏分离同时产出两轨且都在顶层，必须指明取人声轨，否则会随键名字典序漂移。
 	{Name: "separate-voice", Mode: BillingDuration, ResultKind: ResultAudio, ResultPath: "voice_audio_url"},
 	{Name: "transcode-audio", Mode: BillingDuration, ResultKind: ResultAudio},
+	// 视频抽音轨。不在官方那三个集合（视频 33 / 图像 27 / 音频 4）内，属集合外额外接入，
+	// 供下游「音频提取」功能使用；上游路径与产物形状（result.audio_url + duration）已实测核对。
+	{Name: "extract-audio", Mode: BillingDuration, ResultKind: ResultAudio},
 	{Name: "detect-voice-activity", Mode: BillingDuration, ResultKind: ResultNone},
 	// 同 probe-video-metadata：只回元数据、无产物，官方按成功次数计费（0.1 元/千次）。
 	{Name: "probe-audio-metadata", Mode: BillingPerCall, ResultKind: ResultNone},
