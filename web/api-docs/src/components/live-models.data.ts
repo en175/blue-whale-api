@@ -42,6 +42,20 @@ export const STATIC_MODELS: DocModel[] = [
     category: 'text',
     sort_order: 4,
   },
+  {
+    model_name: 'deepseek-v4-pro-ga-260813',
+    description: 'DeepSeek V4 Pro',
+    tag: '',
+    category: 'text',
+    sort_order: 5,
+  },
+  {
+    model_name: 'deepseek-v4-flash-ga-260731',
+    description: 'DeepSeek V4 Flash',
+    tag: '',
+    category: 'text',
+    sort_order: 6,
+  },
   // 图片模型
   {
     model_name: 'doubao-seedream-5-0-pro-260628',
