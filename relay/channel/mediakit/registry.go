@@ -154,6 +154,11 @@ var toolRegistry = []ToolSpec{
 	// 视频抽音轨。不在官方那三个集合（视频 33 / 图像 27 / 音频 4）内，属集合外额外接入，
 	// 供下游「音频提取」功能使用；上游路径与产物形状（result.audio_url + duration）已实测核对。
 	{Name: "extract-audio", Mode: BillingDuration, ResultKind: ResultAudio},
+	// 音频截取。同 extract-audio 属集合外额外接入（官方把它与 video 裁剪并列在「音视频裁剪」
+	// 一族，不在那三个集合内），供下游「音频截取」功能使用。上游入参是 audio_url +
+	// start_time/end_time，产物形状与 extract-audio 同形（result.audio_url + duration），
+	// 已实测核对：回包 task_type 为 trim-audio、duration 为裁剪后时长（秒），故无需 ResultPath。
+	{Name: "trim-audio", Mode: BillingDuration, ResultKind: ResultAudio},
 	{Name: "detect-voice-activity", Mode: BillingDuration, ResultKind: ResultNone},
 	// 同 probe-video-metadata：只回元数据、无产物，官方按成功次数计费（0.1 元/千次）。
 	{Name: "probe-audio-metadata", Mode: BillingPerCall, ResultKind: ResultNone},

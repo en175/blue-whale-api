@@ -13,7 +13,7 @@
 
 ## 1. 需求
 
-新增渠道类型 **MediaKit**（`ChannelTypeMediaKit = 65`），把官方工具集的 **64 条**工具对客开放（视频 33 / 图像 27 / 音频 4，与官方在这三个集合下登记的条数一一对应），并在此之上另接入 1 条**集合外**的 `extract-audio`（视频抽音轨，供下游「音频提取」功能使用），合计 **65 条**：
+新增渠道类型 **MediaKit**（`ChannelTypeMediaKit = 65`），把官方工具集的 **64 条**工具对客开放（视频 33 / 图像 27 / 音频 4，与官方在这三个集合下登记的条数一一对应），并在此之上另接入 2 条**集合外**的工具——`extract-audio`（视频抽音轨，供下游「音频提取」功能使用）与 `trim-audio`（音频截取，供下游「音频截取」功能使用），合计 **66 条**：
 
 1. **一条渠道类型统管全部工具**。同步工具走普通 `Adaptor`（`controller.Relay` 管道），异步工具走 `TaskAdaptor`（`controller.RelayTask` 管道）；两张适配器表互不干扰。
 2. **透传上游协议**。客户端按 MediaKit 原生请求体写，网关一个字都不改写（body 里没有 `model` 字段）。
@@ -31,7 +31,7 @@
 
 不接：`video-understand-router` / `chat` / 大模型高光剪辑 / 剪辑套件（拼接、调速、滤镜等约 19 个）——依赖方舟按 token 计费，或官方未给独立 slug。
 
-**例外**：`extract-audio`（视频抽音轨）同样不在这三个集合内，但它在上游有独立 slug 与独立产物，应下游「音频提取」需求额外接入，见 §4。
+**例外**：`extract-audio`（视频抽音轨）与 `trim-audio`（音频截取）同样不在这三个集合内，但它们在上游各有独立 slug 与独立产物，分别应下游「音频提取」「音频截取」需求额外接入，见 §4。
 
 ---
 
@@ -69,16 +69,16 @@
 
 ## 4. 工具注册表
 
-`relay/channel/mediakit/registry.go` 是唯一事实来源，共 65 条（官方三个集合 64 + 集合外 `extract-audio` 1）：
+`relay/channel/mediakit/registry.go` 是唯一事实来源，共 66 条（官方三个集合 64 + 集合外 `extract-audio` 1 + `trim-audio` 1）：
 
 | 分类 | 条数 | 路径前缀 | 计费模式 |
 |---|---|---|---|
 | 视频 | 33 | `/api/v1/tools/` | 按时长（`extract-frames` / `probe-video-metadata` 按次） |
 | 图像 | 14 | `/api/v1/tools-sync/` | 按次 |
 | 图像基础编辑 | 13 | `/api/v1/tools-sync/` | 按量 GiB |
-| 音频 | 5 | `/api/v1/tools/` | 按时长（`probe-audio-metadata` 按次） |
+| 音频 | 6 | `/api/v1/tools/` | 按时长（`probe-audio-metadata` 按次） |
 
-音频 5 条含集合外的 `extract-audio`——它不属于官方那三个集合，是应下游需求额外接入的，上游路径与产物形状已实测核对。
+音频 6 条含集合外的 `extract-audio` 与 `trim-audio`——这两条不属于官方那三个集合，是应下游需求额外接入的，上游路径与产物形状均已实测核对。
 
 每条记录 `{Name, Path, Sync, Mode, ResultKind}`。**路径不接受客户端输入**：客户端传的 `:tool` 只用于 `LookupTool` 查表，上游 URL 由表项写死的 `Path` 拼成，否则 `base + "/api/v1/tools/" + 客户端输入` 是明显的路径穿越面。
 
@@ -96,7 +96,7 @@
 
 **上游以 HTTP 200 + `success=false` 表达业务失败**，必须在 `DoResponse` 里拦下——`relay_task.go` 只拦非 200 响应码。
 
-**结果键名不固定**（`video_url` / `image_url` / `audio_url` / 多产物工具的 `images[]` / `video_urls`），故按 `map[string]any` 解析，位置由注册表逐工具声明：`ResultPath` 非空按 gjson 路径精确取值（可指向数组元素与嵌套字段），否则按 `ResultKind` 取约定键名。取不到一律返回空串，不为 65 个工具各写 struct。
+**结果键名不固定**（`video_url` / `image_url` / `audio_url` / 多产物工具的 `images[]` / `video_urls`），故按 `map[string]any` 解析，位置由注册表逐工具声明：`ResultPath` 非空按 gjson 路径精确取值（可指向数组元素与嵌套字段），否则按 `ResultKind` 取约定键名。取不到一律返回空串，不为 66 个工具各写 struct。
 
 > **曾有过、已移除**：早期实现对取不到的键兜底扫任意以 `_url` 结尾的字符串键、按键名排序取第一个。该兜底对多产物工具（`separate-voice` 的人声/伴奏、Drama 场景的 voice/music/sfx）会随键名字典序漂移到语义无关的轨道上，故删除。详见 `registry.go` `ResultURL` 的注释与 `TestResultURLRealToolShapes`。
 
@@ -108,7 +108,7 @@
 
 | 模式 | 覆盖 | 对客口径 |
 |---|---|---|
-| 按时长 | 视频 31 + 音频 4（含集合外 `extract-audio`） | 管理员按元/分钟配 `model_price`；提交按预估分钟预扣，完成用上游回包真实时长结算差额 |
+| 按时长 | 视频 31 + 音频 5（含集合外 `extract-audio` 与 `trim-audio`） | 管理员按元/分钟配 `model_price`；提交按预估分钟预扣，完成用上游回包真实时长结算差额 |
 | 按次 | 图像 14 + 视频 2 + 音频 1 | 每次固定价 |
 | 按量 GiB | 图像基础编辑 13 | 直接按超出档单价 0.025 元/GiB，**不套官方「前 10 TiB 免费 + 自然月阶梯」** |
 
@@ -188,7 +188,7 @@ GiB 档不套阶梯是为了让三类计费量**全部逐请求可算**，网关
 
 表驱动 + `testify`。
 
-1. **注册表**：65 条工具名唯一；`LookupTool` 未登记返回 false；`ToolForModel` 只认 `mediakit-` 前缀；路径由 `Sync` 决定前缀。
+1. **注册表**：66 条工具名唯一；`LookupTool` 未登记返回 false；`ToolForModel` 只认 `mediakit-` 前缀；路径由 `Sync` 决定前缀。
 2. **客户端**：鉴权头正确；非 2xx 保留上游 body（回归 `UpstreamError`）；空 baseURL 回退默认域名；拒绝不以 `/` 开头的路径。
 3. **分销**：同步/异步路由各自解析出 `mediakit-<tool>` 模型名；未登记工具 400；同步工具走异步路由 400（反之亦然）；三者都要覆盖 `../../etc/passwd` 一类的 hostile 输入。
 4. **中继模式**：三个前缀有包含关系，顺序错了会把同步与查询吞成异步。
