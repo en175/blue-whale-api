@@ -235,9 +235,19 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	if err := common.Unmarshal(responseBody, &submit); err != nil {
 		return "", nil, service.TaskErrorWrapper(fmt.Errorf("unmarshal_response_body_failed: %w", err), "unmarshal_response_body_failed", http.StatusInternalServerError)
 	}
-	if !submit.Success || submit.TaskID == "" {
+	// 上游业务失败：实测提交期 success=false 只出现在请求体不符合上游 schema 时
+	// （InvalidParameter 类）；素材问题（死链、内容不符）会正常受理，失败延后到
+	// 轮询期以 status=failed 表达，不走这条分支。故这里是纯入参错误 → 400，
+	// 同时让 shouldRetryTaskRelay 不再跨渠道重试一个注定失败的请求。
+	if !submit.Success {
 		return "", nil, service.TaskErrorWrapper(
 			fmt.Errorf("mediakit submit failed: %s", failureReason(submit.Error, submit.Message)),
+			"invalid_response", http.StatusBadRequest)
+	}
+	// 上游声称成功却没给 task_id：畸形成功响应，是上游侧的异常，维持 5xx。
+	if submit.TaskID == "" {
+		return "", nil, service.TaskErrorWrapper(
+			fmt.Errorf("mediakit submit succeeded but returned no task_id"),
 			"invalid_response", http.StatusBadGateway)
 	}
 
