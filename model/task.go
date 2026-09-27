@@ -80,6 +80,9 @@ type Properties struct {
 	Input             string `json:"input"`
 	UpstreamModelName string `json:"upstream_model_name,omitempty"`
 	OriginModelName   string `json:"origin_model_name,omitempty"`
+	// Draft 标记这是火山样片（Seedance 2.5 样片模式）任务，公开可见，
+	// 客户端据此判断该任务能否作为 POST /v1/videos/{id}/finalize 的成片源。
+	Draft bool `json:"draft,omitempty"`
 }
 
 func (m *Properties) Scan(val interface{}) error {
@@ -126,6 +129,11 @@ type TaskPrivateData struct {
 	ChannelOriginalQuotaDeducted int     `json:"channel_original_quota_deducted,omitempty"`
 	ChannelCostUsesUpstreamTier  bool    `json:"channel_cost_uses_upstream_tier,omitempty"`
 	UpstreamVideoInputRatio      float64 `json:"upstream_video_input_ratio,omitempty"`
+
+	// Seedance 2.5 draft mode (type 66)
+	// HasVideoInput 记录样片提交时是否含视频输入；成片（finalize）的 1080p
+	// 档位单价取决于这个维度，而 finalize 请求体本身没有 content，只能从这里继承。
+	HasVideoInput bool `json:"has_video_input,omitempty"`
 }
 
 // TaskBillingContext 记录任务提交时的计费参数，以便轮询阶段可以重新计算额度。
@@ -261,6 +269,8 @@ func InitTask(platform constant.TaskPlatform, relayInfo *commonRelay.RelayInfo) 
 			properties.OriginModelName = relayInfo.OriginModelName
 		}
 		if relayInfo.TaskRelayInfo != nil {
+			properties.Draft = relayInfo.TaskRelayInfo.Draft
+			privateData.HasVideoInput = relayInfo.TaskRelayInfo.HasVideoInput
 			privateData.RequestedResolution = relayInfo.RequestedResolution
 			privateData.UpstreamResolution = relayInfo.UpstreamResolution
 			privateData.RequestedRatio = relayInfo.RequestedRatio

@@ -46,6 +46,7 @@ import (
 	tasktokenhub "github.com/QuantumNous/new-api/relay/channel/task/tokenhub"
 	taskvertex "github.com/QuantumNous/new-api/relay/channel/task/vertex"
 	taskVidu "github.com/QuantumNous/new-api/relay/channel/task/vidu"
+	taskvolc25 "github.com/QuantumNous/new-api/relay/channel/task/volcengine25"
 	taskvolcplus "github.com/QuantumNous/new-api/relay/channel/task/volcengine_plus"
 	taskxfai "github.com/QuantumNous/new-api/relay/channel/task/xfai"
 	"github.com/QuantumNous/new-api/relay/channel/tencent"
@@ -171,6 +172,8 @@ func GetTaskAdaptor(platform constant.TaskPlatform) channel.TaskAdaptor {
 			return &taskdoubao.TaskAdaptor{}
 		case constant.ChannelTypeVolcEngineEnhanced:
 			return &taskvolcplus.TaskAdaptor{}
+		case constant.ChannelTypeVolcEngine25:
+			return &taskvolc25.TaskAdaptor{}
 		case constant.ChannelTypeSora, constant.ChannelTypeOpenAI:
 			return &tasksora.TaskAdaptor{}
 		case constant.ChannelTypeNewAPI:

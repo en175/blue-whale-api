@@ -229,6 +229,19 @@ export const CHANNEL_TYPE_CONFIGS: Record<number, ChannelTypeConfig> = {
         'Volcengine AI MediaKit toolkit. Requests are passed through in the upstream protocol: POST /v1/mediakit/{tool} for async tools, POST /v1/mediakit/sync/{tool} for sync tools, GET /v1/mediakit/tasks/{task_id} to poll.',
     },
   },
+  66: {
+    id: 66,
+    name: CHANNEL_TYPES[66],
+    icon: 'volcengine',
+    defaultBaseUrl: 'https://ark.cn-beijing.volces.com',
+    hints: {
+      baseUrl: 'Default: https://ark.cn-beijing.volces.com',
+      key: 'Ark API Key (Bearer)',
+      models: 'doubao-seedance-2-5-260628',
+      other:
+        'Seedance 2.5 only. No lottery, no downgrade, no MediaKit super-resolution. Draft mode: submit with metadata.draft=true (or top-level draft) to get a 480p preview, then POST /v1/videos/{task_id}/finalize to render the 1080p final from that draft. Draft accepts 480p only; finalize is always 1080p. Both steps are billed separately. No channel setting needed.',
+    },
+  },
 }
 
 /**

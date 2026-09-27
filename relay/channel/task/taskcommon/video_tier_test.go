@@ -3,6 +3,7 @@ package taskcommon
 import (
 	"testing"
 
+	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/setting/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -136,4 +137,66 @@ func TestHasVideoInputInMetadata(t *testing.T) {
 			assert.Equal(t, tt.want, HasVideoInputInMetadata(tt.metadata))
 		})
 	}
+}
+
+// TestEstimateVideoTierBillingForTier 显式档位入口（Seedance 2.5 成片用）：
+// hasVideo 不来自当次请求体，而是由调用方喂进来，因此必须确认同一个 1080p 档在
+// 两种 hasVideo 下得到不同倍率——这是「继承样片输入维度」的全部意义。
+// 同时覆盖两种返回 nil 的情形：未配置的组合（倍率 1）与完全没有价格表。
+func TestEstimateVideoTierBillingForTier(t *testing.T) {
+	resetVideoTierConfig(t)
+	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
+		"video_tier_pricing.price_table": `{
+			"doubao-seedance-2-5-260628": {"base": 46, "video": 28, "1080p": 55, "1080p_video": 30}
+		}`,
+	}))
+
+	const model = "doubao-seedance-2-5-260628"
+	info := &relaycommon.RelayInfo{OriginModelName: model, ChannelMeta: &relaycommon.ChannelMeta{}}
+
+	withVideo := EstimateVideoTierBillingForTier(info, "1080p", true)
+	withoutVideo := EstimateVideoTierBillingForTier(info, "1080p", false)
+	require.NotNil(t, withVideo)
+	require.NotNil(t, withoutVideo)
+	assert.InDelta(t, 30.0/46.0, withVideo["video_input"], 1e-9)
+	assert.InDelta(t, 55.0/46.0, withoutVideo["video_input"], 1e-9)
+	assert.NotEqual(t, withVideo["video_input"], withoutVideo["video_input"],
+		"1080p 档含/不含视频输入的倍率必须不同")
+
+	// 未配置的档位回退基准价 → 倍率 1 → 不产生 OtherRatio
+	assert.Nil(t, EstimateVideoTierBillingForTier(info, "4k", false))
+	// 没有价格表的模型同样返回 nil，而不是悄悄按 1 计费
+	assert.Nil(t, EstimateVideoTierBillingForTier(
+		&relaycommon.RelayInfo{OriginModelName: "no-such-model", ChannelMeta: &relaycommon.ChannelMeta{}}, "1080p", true))
+}
+
+// TestEstimateVideoTierBilling_Regression 回归：拆分出显式档位入口后，
+// 原来的「从请求体读档位」入口行为不变（doubao / newapi 适配器仍在用）。
+func TestEstimateVideoTierBilling_Regression(t *testing.T) {
+	resetVideoTierConfig(t)
+	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
+		"video_tier_pricing.price_table": `{
+			"doubao-seedance-2-5-260628": {"base": 46, "video": 28, "1080p": 55, "1080p_video": 30}
+		}`,
+	}))
+	info := &relaycommon.RelayInfo{OriginModelName: "doubao-seedance-2-5-260628", ChannelMeta: &relaycommon.ChannelMeta{}}
+
+	// 请求体里带 video_url 的 content → hasVideo 为真，取 1080p_video 档
+	ratios := EstimateVideoTierBilling(info, &relaycommon.TaskSubmitReq{
+		Metadata: map[string]interface{}{
+			"resolution": "1080p",
+			"content": []interface{}{
+				map[string]interface{}{"type": "video_url", "video_url": map[string]interface{}{"url": "https://v.mp4"}},
+			},
+		},
+	})
+	require.NotNil(t, ratios)
+	assert.InDelta(t, 30.0/46.0, ratios["video_input"], 1e-9)
+
+	// 不含视频输入 → 取 1080p 档，与上面必须不同
+	ratios = EstimateVideoTierBilling(info, &relaycommon.TaskSubmitReq{
+		Metadata: map[string]interface{}{"resolution": "1080p"},
+	})
+	require.NotNil(t, ratios)
+	assert.InDelta(t, 55.0/46.0, ratios["video_input"], 1e-9)
 }

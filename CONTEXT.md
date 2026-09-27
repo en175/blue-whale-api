@@ -42,6 +42,10 @@ _Avoid_: 图生视频、视频生视频
 基于已有公开任务ID再生成的提交形态。入口是 `POST /v1/videos/{公开任务ID}/remix`，渠道锁定为原任务渠道，客户端主要改 prompt。不是请求里带 `video_url` 的视频生视频，也不是超分。
 _Avoid_: remixGenerate（那是落库的 action 值）、视频生视频、超分
 
+**样片模式（draft）**:
+火山 Seedance 2.5 的两步出片：先出 480p 低价预览（样片），再基于它出 1080p 成片。两步是**两条独立计费的上游任务**，不是一次请求的两种输出。样片入口是提交时带 `draft=true`，成片入口是 `POST /v1/videos/{公开任务ID}/finalize`。成片源只由网关从原任务推导，客户端指定不了。
+_Avoid_: 超分、低清试看、finalizeDraft（那是落库的 action 值）
+
 ### 渠道与上游
 
 **渠道（channel）**:
