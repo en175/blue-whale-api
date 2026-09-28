@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -30,20 +31,25 @@ type TaskSubmitResult struct {
 	//PerCallPrice   types.PriceData
 }
 
-// ResolveOriginTask 处理基于已有任务的提交（remix / continuation）：
+// ResolveOriginTask 处理基于已有任务的提交（remix / finalize）：
 // 查找原始任务、从中提取模型名称、将渠道锁定到原始任务的渠道
 // （通过 info.LockedChannel，重试时复用同一渠道并轮换 key），
 // 以及提取 OtherRatios（时长、分辨率）。
 // 该函数在控制器的重试循环之前调用一次，其结果通过 info 字段和上下文持久化。
 func ResolveOriginTask(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskError {
-	// 检测 remix action
+	// 检测 remix / finalize action
 	path := c.Request.URL.Path
-	if strings.Contains(path, "/v1/videos/") && strings.HasSuffix(path, "/remix") {
-		info.Action = constant.TaskActionRemix
+	if strings.Contains(path, "/v1/videos/") {
+		switch {
+		case strings.HasSuffix(path, "/remix"):
+			info.Action = constant.TaskActionRemix
+		case strings.HasSuffix(path, "/finalize"):
+			info.Action = constant.TaskActionFinalize
+		}
 	}
 
-	// 提取 remix 任务的 video_id
-	if info.Action == constant.TaskActionRemix {
+	// 提取 remix / finalize 任务的 video_id
+	if info.Action == constant.TaskActionRemix || info.Action == constant.TaskActionFinalize {
 		videoID := c.Param("video_id")
 		if strings.TrimSpace(videoID) == "" {
 			return service.TaskErrorWrapperLocal(fmt.Errorf("video_id is required"), "invalid_request", http.StatusBadRequest)
@@ -54,6 +60,13 @@ func ResolveOriginTask(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskErr
 	if info.OriginTaskID == "" {
 		return nil
 	}
+
+	// 下面要读 info.ChannelId（ChannelMeta 的提升字段）来判断本次请求是否已经落在
+	// 原任务的渠道上。ChannelMeta 由 InitChannelMeta 填充，而它在 ResolveOriginTask
+	// 之后才被 RelayTaskSubmit 调用——不在这里补一次，info.ChannelId 就是解引用空指针。
+	// 锁原任务的路径本来就没有选中渠道，因此这里拿到的是「无渠道」状态，比较结果
+	// 正是「需要切到原任务渠道」，与既有语义一致。
+	info.InitChannelMeta(c)
 
 	// 查找原始任务
 	originTask, exist, err := model.GetByTaskId(info.UserId, info.OriginTaskID)
@@ -103,6 +116,45 @@ func ResolveOriginTask(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskErr
 		info.ChannelId = originTask.ChannelId
 		info.ChannelType = ch.Type
 		info.ApiKey = key
+	}
+
+	// finalize（样片出成片）：只有本人的、已成功的、7 天内的 draft 任务才能作为成片源。
+	// 校验通过后把上游 draft id 与 Step 1 的 hasVideo 维度写入 info——前者是请求体的
+	// 唯一来源（绝不接受客户端传入），后者是 Step 2 的 1080p 档位单价的决定因素。
+	// 这里提前 return，绝不能继承 Step 1 的 OtherRatios：它的 seconds/size 会把
+	// Step 2 的 token 结算放大数倍（对比下面 remix 的整份复制）。
+	if info.Action == constant.TaskActionFinalize {
+		// 模型名为空时上游请求会退化成无价格的 "66_finalizedraft"，导致静默少收
+		if info.OriginModelName == "" {
+			return service.TaskErrorWrapperLocal(errors.New("origin model name is missing"), "origin_model_name_missing", http.StatusBadRequest)
+		}
+		if !originTask.Properties.Draft {
+			return service.TaskErrorWrapperLocal(errors.New("the origin task is not a draft"), "origin_not_draft", http.StatusBadRequest)
+		}
+		if originTask.Status != model.TaskStatusSuccess {
+			return service.TaskErrorWrapperLocal(errors.New("the origin draft task is not finished"), "origin_task_not_finished", http.StatusConflict)
+		}
+		// 上游文档：样片 id 的有效期 7 天，从样片任务的 created_at 起算。这里用网关
+		// 的 SubmitTime（与上游 created_at 只差一次网络往返）。不能用 FinishTime——
+		// 它在样片生成完成之后，窗口比上游允许的更长，会把上游已判过期的样片放行，
+		// 白跑一次预扣费。旧数据缺 SubmitTime 时退回 CreatedAt。
+		draftStartedAt := originTask.SubmitTime
+		if draftStartedAt <= 0 {
+			draftStartedAt = originTask.CreatedAt
+		}
+		if draftStartedAt > 0 && time.Now().Unix()-draftStartedAt > relaycommon.DraftTaskValidSeconds {
+			return service.TaskErrorWrapperLocal(errors.New("the origin draft task has expired"), "origin_draft_expired", http.StatusBadRequest)
+		}
+		// 必须取 PrivateData 里的上游 ID，不能用 GetUpstreamTaskID()——后者在
+		// PrivateData 为空时回退到 task.TaskID，而那是网关的公开 ID（task_xxx）。
+		// 把它当 draft_task.id 发出去，上游必然报错，而预扣费已经发生。
+		upstreamTaskID := originTask.PrivateData.UpstreamTaskID
+		if upstreamTaskID == "" {
+			return service.TaskErrorWrapperLocal(errors.New("the origin task has no upstream task id"), "origin_upstream_id_missing", http.StatusBadRequest)
+		}
+		info.OriginUpstreamTaskID = upstreamTaskID
+		info.OriginHasVideoInput = originTask.PrivateData.HasVideoInput
+		return nil
 	}
 
 	// 提取 remix 参数（时长、分辨率 → OtherRatios）

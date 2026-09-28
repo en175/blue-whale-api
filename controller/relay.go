@@ -628,6 +628,12 @@ func shouldRetryTaskRelay(c *gin.Context, channelId int, taskErr *dto.TaskError,
 	if taskErr == nil {
 		return false
 	}
+	// finalize 的上游 create 接口不是幂等的，而绑定原任务渠道的提交路径没有
+	// specific_channel_id，下面的守卫拦不住。重试会导致同一份样片被出成两段
+	// 成片、扣两次费。重试次数默认 0 所以今天不会触发，但运维一旦调大就会。
+	if strings.HasSuffix(c.Request.URL.Path, "/finalize") {
+		return false
+	}
 	if service.ShouldSkipRetryAfterChannelAffinityFailure(c) {
 		return false
 	}

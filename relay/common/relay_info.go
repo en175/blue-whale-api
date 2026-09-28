@@ -718,6 +718,18 @@ type TaskRelayInfo struct {
 	ChannelOriginalQuota        int
 	ChannelCostUsesUpstreamTier bool
 	UpstreamVideoInputRatio     float64
+
+	// Seedance 2.5 draft mode (channel type 66).
+	// Draft 标记本次提交是样片（强制 480p），落地到 Properties.Draft 供客户端判断可否 finalize。
+	Draft bool
+	// HasVideoInput 记录本次请求是否含视频输入，落地到 PrivateData 供 finalize 继承档位。
+	HasVideoInput bool
+	// OriginUpstreamTaskID 是 finalize 时上游样片的真实 task id（cgt-...），
+	// 由 ResolveOriginTask 从原任务推导，绝不接受客户端传入。
+	OriginUpstreamTaskID string
+	// OriginHasVideoInput 是 finalize 继承自样片任务的 hasVideo 维度，
+	// 决定成片的 1080p 档位单价。
+	OriginHasVideoInput bool
 }
 
 type TaskSubmitReq struct {
@@ -731,6 +743,8 @@ type TaskSubmitReq struct {
 	Seconds        string                 `json:"seconds,omitempty"`
 	InputReference string                 `json:"input_reference,omitempty"`
 	Metadata       map[string]interface{} `json:"metadata,omitempty"`
+	// Draft 对齐 Ark 顶层 draft 参数（样片模式开关）；仅 Seedance 2.5 渠道读取。
+	Draft *dto.BoolValue `json:"draft,omitempty"`
 }
 
 func (t *TaskSubmitReq) GetPrompt() string {

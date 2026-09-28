@@ -63,6 +63,7 @@ const (
 	ChannelTypeHighwayAPI         = 63
 	ChannelTypeVolcEngineEnhanced = 64
 	ChannelTypeMediaKit           = 65
+	ChannelTypeVolcEngine25       = 66
 	ChannelTypeDummy              // this one is only for count, do not add any channel after this
 
 )
@@ -134,6 +135,7 @@ var ChannelBaseURLs = []string{
 	"https://api.highwayapi.ai/v3",              //63
 	"https://ark.cn-beijing.volces.com",         //64
 	"https://mediakit.cn-beijing.volces.com",    //65
+	"https://ark.cn-beijing.volces.com",         //66
 }
 
 var ChannelTypeNames = map[int]string{
@@ -199,6 +201,7 @@ var ChannelTypeNames = map[int]string{
 	ChannelTypeHighwayAPI:         "jiekouAI",
 	ChannelTypeVolcEngineEnhanced: "VolcEngineEnhanced",
 	ChannelTypeMediaKit:           "MediaKit",
+	ChannelTypeVolcEngine25:       "VolcEngine25",
 }
 
 func GetChannelTypeName(channelType int) string {
