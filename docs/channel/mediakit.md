@@ -13,7 +13,7 @@
 
 ## 1. 需求
 
-新增渠道类型 **MediaKit**（`ChannelTypeMediaKit = 65`），把官方工具集的 **64 条**工具对客开放（视频 33 / 图像 27 / 音频 4，与官方在这三个集合下登记的条数一一对应），并在此之上另接入 2 条**集合外**的工具——`extract-audio`（视频抽音轨，供下游「音频提取」功能使用）与 `trim-audio`（音频截取，供下游「音频截取」功能使用），合计 **66 条**：
+新增渠道类型 **MediaKit**（`ChannelTypeMediaKit = 65`），把官方工具集的 **64 条**工具对客开放（视频 33 / 图像 27 / 音频 4，与官方在这三个集合下登记的条数一一对应），并在此之上另接入 5 条**集合外**的工具——`extract-audio`（视频抽音轨，供下游「音频提取」）、`trim-audio`（音频截取，供下游「音频截取」）、`mix-audio`（音频混合）、`mux-audio-video`（音视频合成）、`adjust-audio-speed`（音频调速），合计 **69 条**：
 
 1. **一条渠道类型统管全部工具**。同步工具走普通 `Adaptor`（`controller.Relay` 管道），异步工具走 `TaskAdaptor`（`controller.RelayTask` 管道）；两张适配器表互不干扰。
 2. **透传上游协议**。客户端按 MediaKit 原生请求体写，网关一个字都不改写（body 里没有 `model` 字段）。
@@ -31,7 +31,9 @@
 
 不接：`video-understand-router` / `chat` / 大模型高光剪辑 / 剪辑套件（拼接、调速、滤镜等约 19 个）——依赖方舟按 token 计费，或官方未给独立 slug。
 
-**例外**：`extract-audio`（视频抽音轨）与 `trim-audio`（音频截取）同样不在这三个集合内，但它们在上游各有独立 slug 与独立产物，分别应下游「音频提取」「音频截取」需求额外接入，见 §4。
+**例外（5 条，集合外额外接入）**：`extract-audio`（视频抽音轨）、`trim-audio`（音频截取）、`mix-audio`（音频混合）、`mux-audio-video`（音视频合成）、`adjust-audio-speed`（音频调速）同样不在这三个集合内，但它们在上游各有独立 slug 与独立产物，是分别应下游同名功能需求额外接入的，见 §4。
+
+> 证据强度分两档，改动这一节时别混：`extract-audio` / `trim-audio` 的**上游路径与产物形状均已实测核对**；`mix-audio` / `mux-audio-video` / `adjust-audio-speed` 的上游契约目前**只来自官方开发指南，尚未实测**（本仓踩过「官方文档写的 slug 是错的」——文档写 `scale-image`、真 slug 是 `resize-image`）。三条待核对的点见 §4 表下说明。
 
 ---
 
@@ -69,16 +71,30 @@
 
 ## 4. 工具注册表
 
-`relay/channel/mediakit/registry.go` 是唯一事实来源，共 66 条（官方三个集合 64 + 集合外 `extract-audio` 1 + `trim-audio` 1）：
+`relay/channel/mediakit/registry.go` 是唯一事实来源，共 69 条（官方三个集合 64 + 集合外 5）：
 
 | 分类 | 条数 | 路径前缀 | 计费模式 |
 |---|---|---|---|
-| 视频 | 33 | `/api/v1/tools/` | 按时长（`extract-frames` / `probe-video-metadata` 按次） |
+| 视频 | 34 | `/api/v1/tools/` | 按时长（`extract-frames` / `probe-video-metadata` 按次） |
 | 图像 | 14 | `/api/v1/tools-sync/` | 按次 |
 | 图像基础编辑 | 13 | `/api/v1/tools-sync/` | 按量 GiB |
-| 音频 | 6 | `/api/v1/tools/` | 按时长（`probe-audio-metadata` 按次） |
+| 音频 | 8 | `/api/v1/tools/` | 按时长（`probe-audio-metadata` 按次） |
 
-音频 6 条含集合外的 `extract-audio` 与 `trim-audio`——这两条不属于官方那三个集合，是应下游需求额外接入的，上游路径与产物形状均已实测核对。
+视频 34 条含集合外的 `mux-audio-video`，音频 8 条含集合外的 `extract-audio` / `trim-audio` / `mix-audio` / `adjust-audio-speed`——这 5 条不属于官方那三个集合，是应下游需求额外接入的，登记在各自产物形态最接近的一栏。
+
+**5 条集合外工具的证据强度**：
+
+| 工具 | 上游路径 | 产物 | 状态 |
+|---|---|---|---|
+| `extract-audio` | `/api/v1/tools/extract-audio` | `result.audio_url` + `duration` | 已实测 |
+| `trim-audio` | `/api/v1/tools/trim-audio` | `result.audio_url` + `duration`（**裁剪后**片段时长） | 已实测 |
+| `mix-audio` | `/api/v1/tools/mix-audio` | `result.audio_url` + `duration`（秒） | 取自官方文档，**待实测** |
+| `mux-audio-video` | `/api/v1/tools/mux-audio-video` | `result.video_url` + `resolution` + `duration`（秒） | 取自官方文档，**待实测** |
+| `adjust-audio-speed` | `/api/v1/tools/adjust-audio-speed` | `result.audio_url` + `duration`（秒） | 取自官方文档，**待实测** |
+
+三条待实测的工具，slug 是否真实存在也由真机兜底：slug 错时上游回 NotFound，与「缺字段」的 400 可区分（参照 `scale-image` 那次）。`duration` 三个工具一律**以秒为单位**。
+
+**`mux-audio-video` 的计费口径与注册表声明不一致**（详见 §6.5）：官方对音视频合成按「输出时长 × **分辨率换算系数** × 单价」计费，而注册表只声明了平坦的按分钟。**本期零价，两种口径都得 0，不影响**；收费前必须先决定怎么处理。
 
 每条记录 `{Name, Path, Sync, Mode, ResultKind}`。**路径不接受客户端输入**：客户端传的 `:tool` 只用于 `LookupTool` 查表，上游 URL 由表项写死的 `Path` 拼成，否则 `base + "/api/v1/tools/" + 客户端输入` 是明显的路径穿越面。
 
@@ -96,7 +112,7 @@
 
 **上游以 HTTP 200 + `success=false` 表达业务失败**，必须在 `DoResponse` 里拦下——`relay_task.go` 只拦非 200 响应码。
 
-**结果键名不固定**（`video_url` / `image_url` / `audio_url` / 多产物工具的 `images[]` / `video_urls`），故按 `map[string]any` 解析，位置由注册表逐工具声明：`ResultPath` 非空按 gjson 路径精确取值（可指向数组元素与嵌套字段），否则按 `ResultKind` 取约定键名。取不到一律返回空串，不为 66 个工具各写 struct。
+**结果键名不固定**（`video_url` / `image_url` / `audio_url` / 多产物工具的 `images[]` / `video_urls`），故按 `map[string]any` 解析，位置由注册表逐工具声明：`ResultPath` 非空按 gjson 路径精确取值（可指向数组元素与嵌套字段），否则按 `ResultKind` 取约定键名。取不到一律返回空串，不为 69 个工具各写 struct。
 
 > **曾有过、已移除**：早期实现对取不到的键兜底扫任意以 `_url` 结尾的字符串键、按键名排序取第一个。该兜底对多产物工具（`separate-voice` 的人声/伴奏、Drama 场景的 voice/music/sfx）会随键名字典序漂移到语义无关的轨道上，故删除。详见 `registry.go` `ResultURL` 的注释与 `TestResultURLRealToolShapes`。
 
@@ -108,7 +124,7 @@
 
 | 模式 | 覆盖 | 对客口径 |
 |---|---|---|
-| 按时长 | 视频 31 + 音频 5（含集合外 `extract-audio` 与 `trim-audio`） | 管理员按元/分钟配 `model_price`；提交按预估分钟预扣，完成用上游回包真实时长结算差额 |
+| 按时长 | 视频 32 + 音频 7（含集合外 5 条中的全部——它们都是时长类） | 管理员按元/分钟配 `model_price`；提交按预估分钟预扣，完成用上游回包真实时长结算差额 |
 | 按次 | 图像 14 + 视频 2 + 音频 1 | 每次固定价 |
 | 按量 GiB | 图像基础编辑 13 | 直接按超出档单价 0.025 元/GiB，**不套官方「前 10 TiB 免费 + 自然月阶梯」** |
 
@@ -133,6 +149,37 @@ GiB 档不套阶梯是为了让三类计费量**全部逐请求可算**，网关
 同步链路（`MediaKitSyncHelper`）在预扣前检查 `model_price` 是否命中，未命中返 400。
 
 原因：MediaKit 请求体里没有 token，按次计价的唯一来源是模型定价。只配了倍率时，预扣按倍率算、结算却按上游返回的 1 个 token 折算并把差额退回，**实际等于白送**。管理员确实要免费就把 `model_price` 配成 0。
+
+### 6.5 分辨率换算系数：`mux-audio-video` 尚未实现（收费前必读）
+
+> **跟踪工单：IKITTA**（「MediaKit 音视频合成按分辨率换算系数计费」，收费前置，本期不做）。本节是它的设计输入，改动计费前先把本节读完。
+
+官方对**音视频合成**不是单一的「元/分钟」：
+
+```
+费用 = 输出文件时长（分钟） × 分辨率换算系数 × 单价（每分钟）
+```
+
+| 输出分辨率档 | 换算系数 |
+|---|---|
+| 4K（3840×2160）及以下 | 24 |
+| 2K（2560×1440）及以下 | 12 |
+| 1080P（1920×1080）及以下 | 6 |
+| 720P（1280×720）及以下 | 3 |
+| 540P（720×540）及以下 | 2 |
+| 480P（640×480）及以下 | 1.5 |
+| 360P（480×360）及以下（含纯音频） | 1 |
+
+系数取**输出**分辨率（回包 `result.resolution`），不是输入视频的分辨率。
+
+**注册表只声明了 `BillingDuration`（平坦元/分钟），没有实现这个系数。** 原因是结算路径用的倍率由「提交时已知的 `OtherRatios`」× 「回包时长」组成，而分辨率只有**任务完成后**才拿得到，`TaskBillingContext` 里没有承载「响应派生倍率」的位置。
+
+**当前后果（本期零价，两种口径都算得 0，不影响对客）**：
+
+- 若收费时**不补**这个系数：所有分辨率档收同一个价——低分辨率档（该乘 1.5/2）多收，高分辨率档（该乘 6~24）**少收**。4K 输出会少收到 1/24。
+- 若收费时要**对齐官方**：需要在结算阶段从 `task.Data` 的 `result.resolution` 取档、映射成系数并乘进倍率。这是新增机制，不是改一行。
+
+另外三条新工具（`mix-audio` / `adjust-audio-speed`，以及既有的 `trim-audio` / `extract-audio`）输出都是**纯音频**，落在系数表最低档 `1`，所以它们的「元/分钟」就是完整口径，不受这一节影响。
 
 ---
 
@@ -188,7 +235,7 @@ GiB 档不套阶梯是为了让三类计费量**全部逐请求可算**，网关
 
 表驱动 + `testify`。
 
-1. **注册表**：66 条工具名唯一；`LookupTool` 未登记返回 false；`ToolForModel` 只认 `mediakit-` 前缀；路径由 `Sync` 决定前缀。
+1. **注册表**：69 条工具名唯一；`LookupTool` 未登记返回 false；`ToolForModel` 只认 `mediakit-` 前缀；路径由 `Sync` 决定前缀。
 2. **客户端**：鉴权头正确；非 2xx 保留上游 body（回归 `UpstreamError`）；空 baseURL 回退默认域名；拒绝不以 `/` 开头的路径。
 3. **分销**：同步/异步路由各自解析出 `mediakit-<tool>` 模型名；未登记工具 400；同步工具走异步路由 400（反之亦然）；三者都要覆盖 `../../etc/passwd` 一类的 hostile 输入。
 4. **中继模式**：三个前缀有包含关系，顺序错了会把同步与查询吞成异步。

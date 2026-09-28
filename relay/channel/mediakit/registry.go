@@ -146,6 +146,19 @@ var toolRegistry = []ToolSpec{
 	// 元信息探测只回 format_meta / video_stream_meta / audio_stream_meta 三段数据，
 	// 无产物 URL。官方按成功处理次数计费（0.1 元/千次），网关按同一口径定价。
 	{Name: "probe-video-metadata", Mode: BillingPerCall, ResultKind: ResultNone},
+	// 音视频合成（保原声混合 / 换掉原声二选一）。不在官方那三个集合（视频 33 /
+	// 图像 27 / 音频 4）内，属集合外额外接入，供下游「音视频合成」功能使用。
+	// 上游入参 video_url + audio_url（可选 is_audio_reserve / is_video_audio_sync /
+	// sync_mode / sync_method），产物 result.video_url + resolution + duration（秒）。
+	//
+	// ⚠️ 计费口径与注册表当前声明**不一致**，本期零价所以无影响，收费前必须处理：
+	// 官方的音视频合成价 = 输出时长（分钟）× 分辨率换算系数 × 单价，系数取**输出**
+	// 分辨率（4K 24 / 2K 12 / 1080P 6 / 720P 3 / 540P 2 / 480P 1.5 / 360P 含纯音频 1）。
+	// 而这里只声明了 BillingDuration（平坦元/分钟），AdjustBillingOnCompleteWithClamp
+	// 用的倍率由提交时的 OtherRatios 与回包时长组成，**没有承载「响应派生倍率」的位置**
+	// ——分辨率只有任务完成后才从 result.resolution 拿得到。详见 docs/channel/mediakit.md
+	// §6.5，跟进工单 IKITTA。
+	{Name: "mux-audio-video", Mode: BillingDuration, ResultKind: ResultVideo},
 
 	// ── 异步：音频工具 ──────────────────────────────────────────────
 	// 人声/伴奏分离同时产出两轨且都在顶层，必须指明取人声轨，否则会随键名字典序漂移。
@@ -162,6 +175,16 @@ var toolRegistry = []ToolSpec{
 	{Name: "detect-voice-activity", Mode: BillingDuration, ResultKind: ResultNone},
 	// 同 probe-video-metadata：只回元数据、无产物，官方按成功次数计费（0.1 元/千次）。
 	{Name: "probe-audio-metadata", Mode: BillingPerCall, ResultKind: ResultNone},
+	// 音频混合（多轨混成一条，1–100 个输入）。集合外额外接入，供下游「音频混合」
+	// 功能使用。上游入参 audio_urls 数组，产物 result.audio_url + duration（秒），
+	// 两个键都在约定之列，故无需 ResultPath。输出时长由最长输入决定。
+	// 输出为纯音频，落在官方分辨率换算系数表的最低档（系数 1），故平坦元/分钟即完整口径。
+	{Name: "mix-audio", Mode: BillingDuration, ResultKind: ResultAudio},
+	// 音频调速（speed > 1 快放，< 1 慢放）。集合外额外接入，供下游「音频调速」使用。
+	// 产物 result.audio_url + duration（秒）——注意是 audio_url 而非视频调速
+	// （adjust-video-speed）的 video_url，两者流程一致、只差路径与这个键名。
+	// 输出为纯音频，落在官方分辨率换算系数表的最低档（系数 1），故平坦元/分钟即完整口径。
+	{Name: "adjust-audio-speed", Mode: BillingDuration, ResultKind: ResultAudio},
 }
 
 // toolIndex 由 toolRegistry 构建，键为上游 slug。在 init 中填充，保证

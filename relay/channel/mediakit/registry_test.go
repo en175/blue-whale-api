@@ -55,8 +55,9 @@ func TestSyncToolsUseToolsSyncPrefix(t *testing.T) {
 
 // TestRegistryCoversOfficialCatalog 把条目数钉死在目录口径上：官方那三个集合
 // （视频 33 / 图像 27 / 音频 4）共 64 条已全部登记，不存在「官方有、网关没接」的
-// 遗留；在此之上另接入 2 条集合外的工具（extract-audio 供下游「音频提取」、
-// trim-audio 供下游「音频截取」），合计 66。数字对不上就是漏了工具或凭空多了一条。
+// 遗留；在此之上另接入 5 条集合外的工具（extract-audio 供下游「音频提取」、
+// trim-audio 供下游「音频截取」、mix-audio / mux-audio-video / adjust-audio-speed
+// 供下游音视频编辑），合计 69。数字对不上就是漏了工具或凭空多了一条。
 // Mode 的分项计数同时兜住计费归类，它是审计行 billing_mode 与文档计费口径的唯一来源。
 func TestRegistryCoversOfficialCatalog(t *testing.T) {
 	syncCount, asyncCount := 0, 0
@@ -70,10 +71,10 @@ func TestRegistryCoversOfficialCatalog(t *testing.T) {
 		byMode[spec.Mode]++
 	}
 
-	assert.Equal(t, 66, len(toolRegistry), "66 = 官方三个集合 64 + 集合外 extract-audio 1 + trim-audio 1")
+	assert.Equal(t, 69, len(toolRegistry), "69 = 官方三个集合 64 + 集合外 5（extract-audio、trim-audio、mix-audio、mux-audio-video、adjust-audio-speed）")
 	assert.Equal(t, 27, syncCount, "同步 27 个，全部是图像工具")
-	assert.Equal(t, 39, asyncCount, "异步 39 个 = 视频 33 + 音频 4 + 集合外 extract-audio 1 + trim-audio 1")
-	assert.Equal(t, 36, byMode[BillingDuration], "按时长：视频 31 + 音频 3 + 集合外 extract-audio 1 + trim-audio 1")
+	assert.Equal(t, 42, asyncCount, "异步 42 个 = 视频 34 + 音频 8")
+	assert.Equal(t, 39, byMode[BillingDuration], "按时长：视频 32 + 音频 7（含集合外的 5 个）")
 	assert.Equal(t, 17, byMode[BillingPerCall], "按次：图像 14 + 视频 2 + 音频 1")
 	assert.Equal(t, 13, byMode[BillingVolume], "按量 GiB：图像基础编辑族 13 个")
 	assert.Equal(t, len(toolRegistry), byMode[BillingDuration]+byMode[BillingPerCall]+byMode[BillingVolume],
