@@ -100,9 +100,9 @@ GiB 档不套阶梯是为了让三类计费量**全部逐请求可算**，网关
    **取自官方开发指南、尚待实测**（IKIT9I）：
 
    - `mix-audio`（音频混合，供下游「音频混合」）：`/api/v1/tools/mix-audio`，入参 `audio_urls` 数组（1–100 个），产物 `result.audio_url` + `duration`（秒）。输出时长由**最长输入**决定。
-   - `mux-audio-video`（音视频合成，供下游「音视频合成」）：`/api/v1/tools/mux-audio-video`，入参 `video_url` + `audio_url`（可选 `is_audio_reserve` / `is_video_audio_sync` / `sync_mode` / `sync_method`），产物 `result.video_url`。⚠️ 官方完整响应示例里 **result 只有 `video_url`、没有 `duration`**；若真机确认如此，本工具完成时取不到真实时长，差额结算会退化成「保持预扣」（见 `AdjustBillingOnCompleteWithClamp`），开始收费前必须核对。
-   - `adjust-audio-speed`（音频调速，供下游「音频调速」）：`/api/v1/tools/adjust-audio-speed`，入参 `audio_url` + `speed`（> 1 快放、< 1 慢放）。⚠️ 官方只给了**视频**调速的完整示例，音频调速仅一句「流程完全一致，把 `video_url` 换成 `audio_url`」，故 `task_type=adjust-audio-speed` 与产物键 `result.audio_url` 均为**推断**。真机若键名不同，`ResultURL` 会取到空串，需在注册表显式补 `ResultPath`。
+   - `mux-audio-video`（音视频合成，供下游「音视频合成」）：`/api/v1/tools/mux-audio-video`，入参 `video_url` + `audio_url`（可选 `is_audio_reserve` / `is_video_audio_sync` / `sync_mode` / `sync_method`），产物 `result.video_url` + `resolution` + `duration`（秒）。⚠️ **计费口径与本注册表声明不一致**：官方按「输出时长 × 分辨率换算系数（4K 24 / 2K 12 / 1080P 6 / 720P 3 / 540P 2 / 480P 1.5 / 360P 含纯音频 1）× 单价」计费，系数取**输出**分辨率；而注册表只声明 `BillingDuration`（平坦元/分钟），结算倍率的现有结构里没有承载「响应派生倍率」的位置。本期零价两种口径都得 0，收费前须决定（详见 `docs/channel/mediakit.md` §6.5）。
+   - `adjust-audio-speed`（音频调速，供下游「音频调速」）：`/api/v1/tools/adjust-audio-speed`，入参 `audio_url` + `speed`（> 1 快放、< 1 慢放），产物 `result.audio_url` + `duration`（**非**视频调速的 `video_url`；两者流程一致，只差路径与这个键名）。输出为纯音频，落在系数表最低档 `1`。
 
-   三者的 slug 是否真实存在也由实测兜底：slug 错时上游回 NotFound，与「缺字段」的 400 可区分（参照 `scale-image` 那次）。
+   三者的 `duration` 一律以**秒**为单位。slug 是否真实存在由真机兜底：slug 错时上游回 NotFound，与「缺字段」的 400 可区分。
 
    本文早期版本写「`get-audio-meta`（音频元信息获取）刻意未登记——官方也不按处理量计费」，**双重错误**：真实 slug 是 `probe-audio-metadata`（`get-audio-meta` 不存在），且官方**确实计费**——视频/音频元信息按成功处理次数 0.1 元/千次，图像元信息归在「图像基础编辑」计费单元（0.025 元/GiB，自然月 10 TiB 免费额度后累进）。三者现均已登记并按官方口径定价：视频/音频 0.0001 元/次；图像因网关不测体积，按单图 10 MiB 上限折成 0.00024 元/次近似。同类的 `video-understand-router` / `chat` / 大模型高光剪辑 / 剪辑套件（拼接、调速、滤镜等约 19 个）仍未登记：前者依赖方舟按 token 计费（MediaKit 侧只按时长收），后者官方未给出逐工具的独立 slug 表。

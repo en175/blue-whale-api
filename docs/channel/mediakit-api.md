@@ -3988,18 +3988,38 @@ curl -X POST 'https://<网关域名>/v1/mediakit/mux-audio-video' \
   "task_type": "mux-audio-video",
   "status": "completed",
   "result": {
-    "video_url": "https://example.volcvideo.com/final_video.mp4?auth_key=..."
+    "video_url": "https://storage.example.com/outputs/xxx.mp4?auth_key=...",
+    "resolution": "540p",
+    "duration": 240.578
   },
   "expires_at": 1774615474,
   "finished_at": 1774442675
 }
 ```
 
-**产物字段：** `result.video_url`（约 24h 有效的临时下载链接，请及时转存）。默认输出容器为 **MP4**。
+**产物字段：** `result.video_url`（约 24h 有效的临时下载链接，请及时转存）、`result.resolution`（输出分辨率档）、`result.duration`（**秒**）。默认输出容器为 **MP4**。
 
-> ⚠️ **本工具的 `result` 里没有 `duration`**（上游官方响应示例即如此）。本渠道是按时长计费的——提交时按渠道配的预估分钟预扣，任务完成后用真实时长结算差额；取不到真实时长时网关**保持预扣不变**（不报错、不会按猜测的时长收费，只在后端日志留一行 `result 键：…`）。因此在管理员把真实时长口径确认下来之前，本工具实际是**按预估分钟**收费。**本期对客零价，不影响；开始收费前必须核对这一条。**
+> ⚠️ 拿 `.mp4` 后缀当心：`?auth_key=...` 是签名参数，拼接其他参数时要用 `&` 而不是 `?`。
+
+**计费：时长 × 分辨率换算系数 × 单价（元/分钟）**
+
+官方对音视频合成不是单一的「元/分钟」——它按**输出分辨率**再乘一个换算系数：
+
+| 输出分辨率档 | 换算系数 |
+|---|---|
+| 4K（3840×2160）及以下 | 24 |
+| 2K（2560×1440）及以下 | 12 |
+| 1080P（1920×1080）及以下 | 6 |
+| 720P（1280×720）及以下 | 3 |
+| 540P（720×540）及以下 | 2 |
+| 480P（640×480）及以下 | 1.5 |
+| 360P（480×360）及以下（含纯音频） | 1 |
+
+即：`费用 = 输出时长（分钟）× 系数 × 单价`。系数取**输出分辨率**（`result.resolution`）落进的那一档，不是输入视频的分辨率——比如输入 1080P、输出 540P，按 540P 的 `2` 算。
+
+> ⚠️ **网关目前按平坦的「元/分钟」计费，没有实现这个分辨率系数。** 结算路径（`AdjustBillingOnCompleteWithClamp`）用的倍率只含真实时长与提交时已知的维度，而分辨率只有**任务完成后**从 `result.resolution` 才拿得到，现有结构里没有承载「响应派生倍率」的位置。**本期对客零价，两种口径的结果都是 0，不影响**；但**开始收费前必须先决定**：要么把该系数补进结算，要么知悉并按平坦单价定价（等于对所有分辨率档收同一个价，低分辨率档多收、高分辨率档少收）。
 >
-> 另：本工具的上游 slug 与产物键取自官方开发指南，**尚未在真实上游实测**（本仓踩过文档 slug 写错的前例）。验收时以「返回的 400 来自上游并报缺字段」为准——那是 slug 存在的证据。
+> 另一处未实测：本工具的上游 slug 与产物键取自官方文档，**尚未在真实上游调用过**（本仓踩过文档 slug 写错的前例——文档写 `scale-image`、真 slug 是 `resize-image`）。验收时以「返回的 400 来自上游并报缺字段」为准——那是 slug 存在的证据。
 
 ---
 
@@ -4012,7 +4032,9 @@ curl -X POST 'https://<网关域名>/v1/mediakit/mux-audio-video' \
 
 > 其中 `extract-audio`（视频抽音轨）、`trim-audio`（音频截取）、`mix-audio`（音频混合）、`adjust-audio-speed`（音频调速）**不在火山官方那三个工具集合内**——它们不属于视频 33 / 图像 27 / 音频 4 的任何一类，是分别应下游同名需求额外接入的，上游各有独立 slug 与独立产物。其余 4 个是官方音频集合的完整登记。
 >
-> 集合外工具的证据强度分两档，别混：`extract-audio` / `trim-audio` 的上游契约**已实测核对**；`mix-audio` / `adjust-audio-speed` 目前**只来自官方开发指南**（其中 `adjust-audio-speed` 的产物键是推断，见 [§7.8](#78-音频调速-adjust-audio-speed)）。
+> 本节工具的输出都是**纯音频**，在官方的分辨率换算系数表里落在最低档（系数 `1`），所以下面各节的「元/分钟」就是完整口径，**不涉及分辨率系数**——那个只影响输出视频的 [6.34 音视频合成](#634-音视频合成-mux-audio-video)。
+>
+> 三条集合外工具（`mix-audio` / `adjust-audio-speed` 及视频侧的 `mux-audio-video`）**均尚未在真实上游调用过**，上游 slug 与产物键取自官方文档（本仓踩过文档 slug 写错的前例——文档写 `scale-image`、真 slug 是 `resize-image`）。`extract-audio` / `trim-audio` 则是已实测核对的。
 
 ### 7.1 人声背景音分离 `separate-voice`
 
@@ -4429,7 +4451,7 @@ curl -X POST 'https://<网关域名>/v1/mediakit/mix-audio' \
 
 > **输出时长由最长的输入决定。** 混一段 30 秒旁白与一段 60 秒 BGM，成品是 60 秒：前 30 秒两条同时播放，后 30 秒只剩 BGM。按多长的素材送进来就按多长计费，先裁短再混能省钱。
 >
-> ⚠️ 上游 slug 与产物键取自官方开发指南，**尚未在真实上游实测**。验收时以「返回的 400 来自上游并报缺字段」为准。
+> ⚠️ 上游 slug 与产物键取自官方文档，**尚未在真实上游调用过**。验收时以「返回的 400 来自上游并报缺字段」为准。
 
 ---
 
@@ -4461,7 +4483,7 @@ curl -X POST 'https://<网关域名>/v1/mediakit/adjust-audio-speed' \
 
 **响应**
 
-拿到 `task_id` 后用 `GET /v1/mediakit/tasks/{task_id}` 轮询，直到 `status` 为 `completed` / `failed`：
+拿到 `task_id` 后用 `GET /v1/mediakit/tasks/{task_id}` 轮询，直到 `status` 为 `completed` / `failed`。响应形状与视频调速一致，只是产物键为 `audio_url`：
 
 ```json
 {
@@ -4470,17 +4492,19 @@ curl -X POST 'https://<网关域名>/v1/mediakit/adjust-audio-speed' \
   "task_type": "adjust-audio-speed",
   "status": "completed",
   "result": {
-    "audio_url": "https://example.volcvideo.com/speed-adjusted-audio.mp3?auth_key=...",
+    "audio_url": "https://storage.example.com/outputs/xxx.mp3?auth_key=...",
     "duration": 16.47
   }
 }
 ```
 
-**产物字段：** `result.audio_url`（约 24h 有效的临时下载链接，请及时转存）、`result.duration`（调速**后**的时长，秒）。按它结算。
+**产物字段：** `result.audio_url`（约 24h 有效的临时下载链接，请及时转存）、`result.duration`（调速**后**的时长，**秒**）。按它结算。
 
 > **输出时长 ≈ 输入时长 ÷ `speed`。** 一段 32.94 秒的音频按 `2.0` 处理得到约 16.47 秒。注意计费按**输出**时长走，快放会**减少**收费时长。
 >
-> ⚠️ **本节的响应形状是推断的，必须实测核对。** 官方只给出了**视频**调速（`adjust-video-speed`）的完整响应示例——`task_type` 为 `adjust-video-speed`、`result` 含 `video_url` + `resolution` + `duration`；音频调速仅在文末一句说明「流程完全一致，唯一的区别是调用 `adjust-audio-speed` 并把参数名从 `video_url` 换成 `audio_url`」。据此推得 `task_type=adjust-audio-speed` 与产物键 `result.audio_url`，但**官方未给出音频版的响应样例**。若实测键名不同，网关会取到空产物（`result` 里没有约定的 `audio_url` 键），届时需在注册表给该工具显式声明产物路径——**调用方在验收前不要依赖这个字段名**。
+> 产物键为 `audio_url`（**非**视频调速的 `video_url`）——两者流程完全一致，唯一区别就是路径与这个入参/产物键名。
+>
+> ⚠️ **本工具尚未在真实上游调用过**，上游 slug 取自官方文档（本仓踩过文档 slug 写错的前例——文档写 `scale-image`、真 slug 是 `resize-image`）。验收时以「返回的 400 来自上游并报缺字段」为准。
 >
 > 另：「视频调速」`adjust-video-speed` 与本工具同族但**网关未登记**（不在本期范围），调用 `POST /v1/mediakit/adjust-video-speed` 会得到 `unknown mediakit tool`。
 

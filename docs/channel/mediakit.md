@@ -88,15 +88,13 @@
 |---|---|---|---|
 | `extract-audio` | `/api/v1/tools/extract-audio` | `result.audio_url` + `duration` | 已实测 |
 | `trim-audio` | `/api/v1/tools/trim-audio` | `result.audio_url` + `duration`（**裁剪后**片段时长） | 已实测 |
-| `mix-audio` | `/api/v1/tools/mix-audio` | `result.audio_url` + `duration`（秒） | 取自官方指南，**待实测** |
-| `mux-audio-video` | `/api/v1/tools/mux-audio-video` | `result.video_url`（**无 `duration`**） | 取自官方指南，**待实测** |
-| `adjust-audio-speed` | `/api/v1/tools/adjust-audio-speed` | `result.audio_url`（**推断**） | 取自官方指南，**待实测** |
+| `mix-audio` | `/api/v1/tools/mix-audio` | `result.audio_url` + `duration`（秒） | 取自官方文档，**待实测** |
+| `mux-audio-video` | `/api/v1/tools/mux-audio-video` | `result.video_url` + `resolution` + `duration`（秒） | 取自官方文档，**待实测** |
+| `adjust-audio-speed` | `/api/v1/tools/adjust-audio-speed` | `result.audio_url` + `duration`（秒） | 取自官方文档，**待实测** |
 
-后两条的坑要说清：
+三条待实测的工具，slug 是否真实存在也由真机兜底：slug 错时上游回 NotFound，与「缺字段」的 400 可区分（参照 `scale-image` 那次）。`duration` 三个工具一律**以秒为单位**。
 
-- **`mux-audio-video` 可能取不到真实时长。** 官方完整响应示例里 `result` 只有 `video_url`、没有 `duration`。若真机确认如此，本工具完成时 `TaskDurationSeconds` 返回 0，差额结算按设计**保持预扣不变**（不报错、不打用户可见的日志，只在后端打一行 `result 键：…`），也就是按时长计费的语义退化成「按渠道配的预估分钟收费」。开收费前必须核对。
-- **`adjust-audio-speed` 的产物键是推断的。** 官方只给了**视频**调速的完整示例（`task_type=adjust-video-speed`、`result.video_url` + `resolution` + `duration`），音频调速仅一句「流程完全一致，把 `video_url` 换成 `audio_url`」。真机若键名不同，`ResultURL` 取到空串、客户端拿不到产物，需在注册表显式补 `ResultPath`。
-- 三条的 slug 是否真实存在也由真机兜底：slug 错时上游回 NotFound，与「缺字段」的 400 可区分。
+**`mux-audio-video` 的计费口径与注册表声明不一致**（详见 §6.5）：官方对音视频合成按「输出时长 × **分辨率换算系数** × 单价」计费，而注册表只声明了平坦的按分钟。**本期零价，两种口径都得 0，不影响**；收费前必须先决定怎么处理。
 
 每条记录 `{Name, Path, Sync, Mode, ResultKind}`。**路径不接受客户端输入**：客户端传的 `:tool` 只用于 `LookupTool` 查表，上游 URL 由表项写死的 `Path` 拼成，否则 `base + "/api/v1/tools/" + 客户端输入` 是明显的路径穿越面。
 
@@ -151,6 +149,35 @@ GiB 档不套阶梯是为了让三类计费量**全部逐请求可算**，网关
 同步链路（`MediaKitSyncHelper`）在预扣前检查 `model_price` 是否命中，未命中返 400。
 
 原因：MediaKit 请求体里没有 token，按次计价的唯一来源是模型定价。只配了倍率时，预扣按倍率算、结算却按上游返回的 1 个 token 折算并把差额退回，**实际等于白送**。管理员确实要免费就把 `model_price` 配成 0。
+
+### 6.5 分辨率换算系数：`mux-audio-video` 尚未实现（收费前必读）
+
+官方对**音视频合成**不是单一的「元/分钟」：
+
+```
+费用 = 输出文件时长（分钟） × 分辨率换算系数 × 单价（每分钟）
+```
+
+| 输出分辨率档 | 换算系数 |
+|---|---|
+| 4K（3840×2160）及以下 | 24 |
+| 2K（2560×1440）及以下 | 12 |
+| 1080P（1920×1080）及以下 | 6 |
+| 720P（1280×720）及以下 | 3 |
+| 540P（720×540）及以下 | 2 |
+| 480P（640×480）及以下 | 1.5 |
+| 360P（480×360）及以下（含纯音频） | 1 |
+
+系数取**输出**分辨率（回包 `result.resolution`），不是输入视频的分辨率。
+
+**注册表只声明了 `BillingDuration`（平坦元/分钟），没有实现这个系数。** 原因是结算路径用的倍率由「提交时已知的 `OtherRatios`」× 「回包时长」组成，而分辨率只有**任务完成后**才拿得到，`TaskBillingContext` 里没有承载「响应派生倍率」的位置。
+
+**当前后果（本期零价，两种口径都算得 0，不影响对客）**：
+
+- 若收费时**不补**这个系数：所有分辨率档收同一个价——低分辨率档（该乘 1.5/2）多收，高分辨率档（该乘 6~24）**少收**。4K 输出会少收到 1/24。
+- 若收费时要**对齐官方**：需要在结算阶段从 `task.Data` 的 `result.resolution` 取档、映射成系数并乘进倍率。这是新增机制，不是改一行。
+
+另外三条新工具（`mix-audio` / `adjust-audio-speed`，以及既有的 `trim-audio` / `extract-audio`）输出都是**纯音频**，落在系数表最低档 `1`，所以它们的「元/分钟」就是完整口径，不受这一节影响。
 
 ---
 
