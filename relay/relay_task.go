@@ -134,7 +134,15 @@ func ResolveOriginTask(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskErr
 		if originTask.Status != model.TaskStatusSuccess {
 			return service.TaskErrorWrapperLocal(errors.New("the origin draft task is not finished"), "origin_task_not_finished", http.StatusConflict)
 		}
-		if originTask.FinishTime > 0 && time.Now().Unix()-originTask.FinishTime > relaycommon.DraftTaskValidSeconds {
+		// 上游文档：样片 id 的有效期 7 天，从样片任务的 created_at 起算。这里用网关
+		// 的 SubmitTime（与上游 created_at 只差一次网络往返）。不能用 FinishTime——
+		// 它在样片生成完成之后，窗口比上游允许的更长，会把上游已判过期的样片放行，
+		// 白跑一次预扣费。旧数据缺 SubmitTime 时退回 CreatedAt。
+		draftStartedAt := originTask.SubmitTime
+		if draftStartedAt <= 0 {
+			draftStartedAt = originTask.CreatedAt
+		}
+		if draftStartedAt > 0 && time.Now().Unix()-draftStartedAt > relaycommon.DraftTaskValidSeconds {
 			return service.TaskErrorWrapperLocal(errors.New("the origin draft task has expired"), "origin_draft_expired", http.StatusBadRequest)
 		}
 		// 必须取 PrivateData 里的上游 ID，不能用 GetUpstreamTaskID()——后者在

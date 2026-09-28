@@ -28,7 +28,7 @@ Seedance 2.5 专用渠道，承载样片模式的两步流程。**没有抽奖�
 |---|---|
 | 样片（draft） | 第一步。强制 480p 的低价预览，独立计费、独立任务行。 |
 | 成片（finalize） | 第二步。基于样片的 1080p 输出，独立计费、独立任务行。 |
-| 样片源 | 成片所引用的样片任务。必须是**本人的、SUCCESS 的、7 天内**的 draft 任务。 |
+| 样片源 | 成片所引用的样片任务。必须是**本人的、SUCCESS 的、7 天内**的 draft 任务（窗口从**提交时刻**起算，见下）。 |
 | 上游样片 ID | 样片在火山方的任务 ID（`cgt-...`），存 `private_data.upstream_task_id`，只由网关读取。 |
 | 含视频输入 | 计费用语：样片请求 `metadata.content` 里出现 `video_url`。成片的 1080p 档单价取它。 |
 
@@ -98,11 +98,13 @@ Seedance 2.5 专用渠道，承载样片模式的两步流程。**没有抽奖�
 | 任务是本人的 | 400 `task_not_exist` |
 | `properties.draft == true` | 400 `origin_not_draft` |
 | `status == SUCCESS` | 409 `origin_task_not_finished` |
-| 完成时间在 7 天内 | 400 `origin_draft_expired` |
+| 提交时刻在 7 天内 | 400 `origin_draft_expired` |
 | 原任务模型名可推导 | 400 `origin_model_name_missing` |
 | `private_data.upstream_task_id` 非空 | 400 `origin_upstream_id_missing` |
 
 最后一条**不用** `Task.GetUpstreamTaskID()`：它在 `PrivateData` 为空时回退到公开 ID `task_xxx`，把它当 `draft_task.id` 发出去上游必然报错。
+
+7 天窗口**从样片任务的提交时刻起算**（上游文档：从 `created_at` 起算），取网关的 `SubmitTime`、退回 `CreatedAt`。**不能用 `FinishTime`**——它在样片生成完成之后，窗口比上游允许的更长，会把上游已判过期的样片放行，白跑一次预扣费。
 
 ### 5.3 请求体白名单
 

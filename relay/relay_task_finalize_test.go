@@ -26,10 +26,15 @@ const (
 )
 
 // finalizeFixture 是一次 finalize 解析测试的输入：原任务的样片标记、状态、
-// 完成时间与上游 ID。
+// 提交/完成时间与上游 ID。
+//
+// SubmitTime 与 FinishTime 分开给：有效期从上游样片的 created_at 起算（网关侧对应
+// SubmitTime），不是从生成完成时刻。测试必须能构造出「刚生成完、但提交已超 7 天」
+// 的样片，否则选错字段也测不出来。
 type finalizeFixture struct {
 	Draft          bool
 	Status         model.TaskStatus
+	SubmitTime     int64
 	FinishTime     int64
 	UpstreamTaskID string
 	HasVideoInput  bool
@@ -81,6 +86,7 @@ func seedOriginFixture(t *testing.T, tc finalizeFixture, suffix string) *gin.Con
 		Platform:   constant.TaskPlatform("66"),
 		Action:     constant.TaskActionGenerate,
 		Status:     tc.Status,
+		SubmitTime: tc.SubmitTime,
 		FinishTime: tc.FinishTime,
 		Properties: model.Properties{
 			Draft:             tc.Draft,
@@ -127,7 +133,8 @@ func TestResolveOriginTaskFinalizeHappyPath(t *testing.T) {
 	info, code := runResolveOriginTask(t, finalizeFixture{
 		Draft:          true,
 		Status:         model.TaskStatusSuccess,
-		FinishTime:     time.Now().Unix() - 3600,
+		SubmitTime:     time.Now().Unix() - 3600,
+		FinishTime:     time.Now().Unix() - 3500,
 		UpstreamTaskID: "cgt-origin-123",
 		HasVideoInput:  true,
 	})
@@ -156,7 +163,7 @@ func TestResolveOriginTaskFinalizeRejections(t *testing.T) {
 		{
 			name: "非样片任务",
 			tc: finalizeFixture{
-				Draft: false, Status: model.TaskStatusSuccess, FinishTime: now,
+				Draft: false, Status: model.TaskStatusSuccess, SubmitTime: now, FinishTime: now,
 				UpstreamTaskID: "cgt-1", QueryVideoID: finalizeTestOriginID,
 			},
 			want: "origin_not_draft",
@@ -164,16 +171,19 @@ func TestResolveOriginTaskFinalizeRejections(t *testing.T) {
 		{
 			name: "样片尚未完成",
 			tc: finalizeFixture{
-				Draft: true, Status: model.TaskStatusInProgress, FinishTime: 0,
+				Draft: true, Status: model.TaskStatusInProgress, SubmitTime: now, FinishTime: 0,
 				UpstreamTaskID: "cgt-1", QueryVideoID: finalizeTestOriginID,
 			},
 			want: "origin_task_not_finished",
 		},
 		{
-			name: "样片已过期（超过 7 天）",
+			// FinishTime 故意设成刚刚——有效期从 created_at（网关侧 SubmitTime）起算，
+			// 不是从生成完成时刻。按 FinishTime 判会把上游已过期的样片放行。
+			name: "样片已过期（提交超过 7 天，但刚生成完）",
 			tc: finalizeFixture{
 				Draft: true, Status: model.TaskStatusSuccess,
-				FinishTime:     now - relaycommon.DraftTaskValidSeconds - 1,
+				SubmitTime:     now - relaycommon.DraftTaskValidSeconds - 1,
+				FinishTime:     now,
 				UpstreamTaskID: "cgt-1", QueryVideoID: finalizeTestOriginID,
 			},
 			want: "origin_draft_expired",
@@ -181,7 +191,7 @@ func TestResolveOriginTaskFinalizeRejections(t *testing.T) {
 		{
 			name: "上游任务 ID 缺失",
 			tc: finalizeFixture{
-				Draft: true, Status: model.TaskStatusSuccess, FinishTime: now,
+				Draft: true, Status: model.TaskStatusSuccess, SubmitTime: now, FinishTime: now,
 				UpstreamTaskID: "", QueryVideoID: finalizeTestOriginID,
 			},
 			want: "origin_upstream_id_missing",
@@ -189,7 +199,7 @@ func TestResolveOriginTaskFinalizeRejections(t *testing.T) {
 		{
 			name: "越权（他人任务）",
 			tc: finalizeFixture{
-				Draft: true, Status: model.TaskStatusSuccess, FinishTime: now,
+				Draft: true, Status: model.TaskStatusSuccess, SubmitTime: now, FinishTime: now,
 				UpstreamTaskID: "cgt-1", OtherUserID: finalizeTestUserID + 1,
 				QueryVideoID: finalizeTestOriginID,
 			},
@@ -220,7 +230,8 @@ func TestResolveOriginTaskWithoutChannelMeta(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := seedOriginFixture(t, finalizeFixture{
-				Draft: true, Status: model.TaskStatusSuccess, FinishTime: time.Now().Unix() - 60,
+				Draft: true, Status: model.TaskStatusSuccess,
+				SubmitTime: time.Now().Unix() - 60, FinishTime: time.Now().Unix() - 30,
 				UpstreamTaskID: "cgt-origin-nil-meta",
 			}, tt.pathSuffix)
 
@@ -245,7 +256,8 @@ func TestResolveOriginTaskWithoutChannelMeta(t *testing.T) {
 func TestResolveOriginTaskFinalizeJustInsideValidity(t *testing.T) {
 	info, code := runResolveOriginTask(t, finalizeFixture{
 		Draft: true, Status: model.TaskStatusSuccess,
-		FinishTime:     time.Now().Unix() - relaycommon.DraftTaskValidSeconds + 60,
+		SubmitTime:     time.Now().Unix() - relaycommon.DraftTaskValidSeconds + 60,
+		FinishTime:     time.Now().Unix() - 60,
 		UpstreamTaskID: "cgt-1", QueryVideoID: finalizeTestOriginID,
 	})
 

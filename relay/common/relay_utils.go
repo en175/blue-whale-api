@@ -146,8 +146,8 @@ func validatePrompt(prompt string) *dto.TaskError {
 const MaxTaskDurationSeconds = 3600
 
 // DraftTaskValidSeconds 是火山样片（draft）任务可作为成片源的时长上限。
-// 上游文档：样片 id 有效期 7 天，过期后 finalize 必然失败，因此在网关侧提前拒绝，
-// 避免白跑一次预扣费。
+// 上游文档：样片 id 有效期 7 天，**从样片任务的 created_at 起算**（不是从生成完成
+// 时刻），过期后 finalize 必然失败，因此在网关侧提前拒绝，避免白跑一次预扣费。
 const DraftTaskValidSeconds = 7 * 24 * 3600
 
 func validateTaskDurationBounds(req TaskSubmitReq) *dto.TaskError {

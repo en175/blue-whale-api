@@ -21,7 +21,7 @@ Seedance 2.5 的样片模式是**两次独立计费的上游任务**（480p 样�
 
 **3. `draft_task.id` 永远由网关从原任务推导，绝不接受客户端传入。** 成片请求体用白名单结构体构造，结构上不表达 `content` / `prompt` / `duration` / `ratio` / `seed`，客户端无论传什么都改不动成片内容与时长。
 
-**4. 成片源必须是本人的、已成功的、7 天内的样片。** 校验失败在预扣费之前返回 400 / 409。上游 ID 明确取 `PrivateData.UpstreamTaskID`，**不用** `GetUpstreamTaskID()`——后者在 `PrivateData` 为空时回退到公开 ID `task_xxx`，把它当 `draft_task.id` 发出去上游必然报错。
+**4. 成片源必须是本人的、已成功的、7 天内的样片。** 窗口**从样片任务的 `created_at` 起算**（网关侧取 `SubmitTime`，不是 `FinishTime`——后者在生成完成之后，窗口比上游允许的更长，会放行上游已判过期的样片）。校验失败在预扣费之前返回 400 / 409。上游 ID 明确取 `PrivateData.UpstreamTaskID`，**不用** `GetUpstreamTaskID()`——后者在 `PrivateData` 为空时回退到公开 ID `task_xxx`，把它当 `draft_task.id` 发出去上游必然报错。
 
 **5. 步骤一记录「是否含视频输入」，步骤二继承这一维度做档位计费。** 成片请求体里没有 `content`，1080p 档单价取决于样片是否含视频输入，只能继承。为此在 `taskcommon` 拆出 `EstimateVideoTierBillingForTier(info, resolution, hasVideo)` 显式档位入口。
 
