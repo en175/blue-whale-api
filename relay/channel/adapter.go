@@ -1,6 +1,7 @@
 package channel
 
 import (
+	"context"
 	"io"
 	"net/http"
 
@@ -86,4 +87,13 @@ type OpenAIVideoConverter interface {
 // 实现该接口的适配器使查询任务响应返回一等 usage 字段；未实现则不返回。
 type TaskUsageExtractor interface {
 	ExtractTaskUsage(task *model.Task) *dto.TaskUsage
+}
+
+// TaskEnhancer is optional. Seedance-ready tasks may need a post-process (超分)
+// before the result URL is user-visible. Implemented by volcengine_plus.
+type TaskEnhancer interface {
+	EnsureEnhanced(ctx context.Context, task *model.Task, upstreamResultURL string) (finalURL string, done bool, err error)
+	// RedactUserVisible hides 上游档 resolution / tokens / URLs on task.Data
+	// while Seedance is still running (before EnsureEnhanced).
+	RedactUserVisible(task *model.Task)
 }

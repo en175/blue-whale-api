@@ -14,11 +14,25 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/relay/channel/task/taskcommon"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/system_setting"
 
 	"github.com/gin-gonic/gin"
 )
+
+func videoDownloadDisposition(taskID string) string {
+	name := strings.Map(func(r rune) rune {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-' {
+			return r
+		}
+		return -1
+	}, taskID)
+	if name == "" {
+		name = "video"
+	}
+	return fmt.Sprintf(`attachment; filename="%s.mp4"`, name)
+}
 
 // videoProxyError returns a standardized OpenAI-style error response.
 func videoProxyError(c *gin.Context, status int, errType, message string) {
@@ -37,8 +51,7 @@ func VideoProxy(c *gin.Context) {
 		return
 	}
 
-	userID := c.GetInt("id")
-	task, exists, err := model.GetByTaskId(userID, taskID)
+	task, exists, err := model.GetByOnlyTaskId(taskID)
 	if err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to query task %s: %s", taskID, err.Error()))
 		videoProxyError(c, http.StatusInternalServerError, "server_error", "Failed to query task")
@@ -126,6 +139,15 @@ func VideoProxy(c *gin.Context) {
 		return
 	}
 
+	// 存的是本网关自己的 /content 地址，说明轮询层没从上游取到产物——那是
+	// taskcommon.BuildProxyURL 的兜底写入，不是一个下载地址。继续转发等于网关
+	// 请求自己，生产环境（ServerAddress 为公网域名、443 端口放行）会无限套娃。
+	if taskcommon.IsProxyURL(videoURL, task.TaskID) {
+		logger.LogWarn(c.Request.Context(), fmt.Sprintf("Task %s has no upstream artifact: stored result URL points back at this gateway", taskID))
+		videoProxyError(c, http.StatusNotFound, "server_error", "Task has no downloadable artifact")
+		return
+	}
+
 	if strings.HasPrefix(videoURL, "data:") {
 		if err := writeVideoDataURL(c, videoURL); err != nil {
 			logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to decode video data URL for task %s: %s", taskID, err.Error()))
@@ -176,6 +198,7 @@ func VideoProxy(c *gin.Context) {
 	}
 
 	c.Writer.Header().Set("Cache-Control", "public, max-age=86400")
+	c.Writer.Header().Set("Content-Disposition", videoDownloadDisposition(taskID))
 	c.Writer.WriteHeader(resp.StatusCode)
 	if _, err = io.Copy(c.Writer, resp.Body); err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to stream video content: %s", err.Error()))
@@ -210,6 +233,7 @@ func writeVideoDataURL(c *gin.Context, dataURL string) error {
 
 	c.Writer.Header().Set("Content-Type", mimeType)
 	c.Writer.Header().Set("Cache-Control", "public, max-age=86400")
+	c.Writer.Header().Set("Content-Disposition", videoDownloadDisposition(c.Param("task_id")))
 	c.Writer.WriteHeader(http.StatusOK)
 	_, err = c.Writer.Write(videoBytes)
 	return err

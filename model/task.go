@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"database/sql/driver"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	commonRelay "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/setting/system_setting"
 )
 
 type TaskStatus string
@@ -78,6 +80,9 @@ type Properties struct {
 	Input             string `json:"input"`
 	UpstreamModelName string `json:"upstream_model_name,omitempty"`
 	OriginModelName   string `json:"origin_model_name,omitempty"`
+	// Draft 标记这是火山样片（Seedance 2.5 样片模式）任务，公开可见，
+	// 客户端据此判断该任务能否作为 POST /v1/videos/{id}/finalize 的成片源。
+	Draft bool `json:"draft,omitempty"`
 }
 
 func (m *Properties) Scan(val interface{}) error {
@@ -106,6 +111,29 @@ type TaskPrivateData struct {
 	TokenId        int                 `json:"token_id,omitempty"`        // 令牌 ID，用于令牌额度退款
 	NodeName       string              `json:"node_name,omitempty"`       // 发起任务的节点名，轮询结算阶段据此归属日志而非最后查询节点
 	BillingContext *TaskBillingContext `json:"billing_context,omitempty"` // 计费参数快照（用于轮询阶段重新计算）
+
+	// VolcEngine Enhanced (type 64)
+	RequestedResolution          string  `json:"requested_resolution,omitempty"`
+	UpstreamResolution           string  `json:"upstream_resolution,omitempty"`
+	RequestedRatio               string  `json:"requested_ratio,omitempty"`
+	OriginModelName              string  `json:"origin_model_name,omitempty"`
+	UpstreamCompletionTokens     int     `json:"upstream_completion_tokens,omitempty"`
+	UpstreamTotalTokens          int     `json:"upstream_total_tokens,omitempty"`
+	PeeledTotalTokens            int     `json:"peeled_total_tokens,omitempty"`
+	EnhanceJobID                 string  `json:"enhance_job_id,omitempty"`
+	EnhanceAttempt               int     `json:"enhance_attempt,omitempty"`
+	EnhanceStatus                string  `json:"enhance_status,omitempty"`
+	EnhanceSourceURL             string  `json:"enhance_source_url,omitempty"`
+	OutputDurationMs             int64   `json:"output_duration_ms,omitempty"`
+	SourceFps                    int     `json:"source_fps,omitempty"`
+	ChannelOriginalQuotaDeducted int     `json:"channel_original_quota_deducted,omitempty"`
+	ChannelCostUsesUpstreamTier  bool    `json:"channel_cost_uses_upstream_tier,omitempty"`
+	UpstreamVideoInputRatio      float64 `json:"upstream_video_input_ratio,omitempty"`
+
+	// Seedance 2.5 draft mode (type 66)
+	// HasVideoInput 记录样片提交时是否含视频输入；成片（finalize）的 1080p
+	// 档位单价取决于这个维度，而 finalize 请求体本身没有 content，只能从这里继承。
+	HasVideoInput bool `json:"has_video_input,omitempty"`
 }
 
 // TaskBillingContext 记录任务提交时的计费参数，以便轮询阶段可以重新计算额度。
@@ -116,6 +144,11 @@ type TaskBillingContext struct {
 	OtherRatios     map[string]float64 `json:"other_ratios,omitempty"`      // 附加倍率（时长、分辨率等）
 	OriginModelName string             `json:"origin_model_name,omitempty"` // 模型名称，必须为OriginModelName
 	PerCallBilling  bool               `json:"per_call_billing,omitempty"`  // 按次计费：跳过轮询阶段的差额结算
+	// DurationSettlement 显式要求完成时做差额结算。按次计费的判定条件之一是
+	// 「命中 model_price」，而按时长计费的渠道（元/分钟）同样要把价格配在
+	// model_price 上，于是会被误判为按次、整段跳过差额结算。这个标志让这类
+	// 渠道可以opt-in，重新打开结算（见 service/task_polling.go）。
+	DurationSettlement bool `json:"duration_settlement,omitempty"`
 }
 
 // GetUpstreamTaskID 获取上游真实 task ID（用于与 provider 通信）
@@ -134,6 +167,56 @@ func (t *Task) GetResultURL() string {
 		return t.PrivateData.ResultURL
 	}
 	return t.FailReason
+}
+
+// PublicResultURL is the client/admin API download link. Type-64 tasks store
+// the TOS/VOD origin in ResultURL for /content proxy fetch, but never expose
+// that origin — both enhance and skip look like the same gateway path.
+func (t *Task) PublicResultURL() string {
+	if t == nil {
+		return ""
+	}
+	if t.PrivateData.EnhanceStatus != "" && t.TaskID != "" {
+		return fmt.Sprintf("%s/v1/videos/%s/content", system_setting.ServerAddress, t.TaskID)
+	}
+	return t.GetResultURL()
+}
+
+// PublicData is the task JSON returned to user and admin APIs. Stored Data
+// may still hold a TOS/VOD origin from older writes; replace that URL only
+// in the copy we serialize.
+func (t *Task) PublicData() json.RawMessage {
+	if t == nil || len(t.Data) == 0 {
+		if t == nil {
+			return nil
+		}
+		return t.Data
+	}
+	if t.PrivateData.EnhanceStatus == "" {
+		return t.Data
+	}
+	var m map[string]any
+	if err := common.Unmarshal(t.Data, &m); err != nil {
+		return t.Data
+	}
+	content, ok := m["content"].(map[string]any)
+	if !ok {
+		return t.Data
+	}
+	if t.Status == TaskStatusSuccess {
+		if url := t.PublicResultURL(); url != "" {
+			content["video_url"] = url
+		} else {
+			delete(content, "video_url")
+		}
+	} else {
+		delete(content, "video_url")
+	}
+	out, err := common.Marshal(m)
+	if err != nil {
+		return t.Data
+	}
+	return out
 }
 
 // GenerateTaskID 生成对外暴露的 task_xxxx 格式 ID
@@ -168,6 +251,7 @@ type SyncTaskQueryParams struct {
 	StartTimestamp int64
 	EndTimestamp   int64
 	UserIDs        []int
+	EnhancedOnly   bool
 }
 
 func InitTask(platform constant.TaskPlatform, relayInfo *commonRelay.RelayInfo) *Task {
@@ -183,6 +267,18 @@ func InitTask(platform constant.TaskPlatform, relayInfo *commonRelay.RelayInfo) 
 		}
 		if relayInfo.OriginModelName != "" {
 			properties.OriginModelName = relayInfo.OriginModelName
+		}
+		if relayInfo.TaskRelayInfo != nil {
+			properties.Draft = relayInfo.TaskRelayInfo.Draft
+			privateData.HasVideoInput = relayInfo.TaskRelayInfo.HasVideoInput
+			privateData.RequestedResolution = relayInfo.RequestedResolution
+			privateData.UpstreamResolution = relayInfo.UpstreamResolution
+			privateData.RequestedRatio = relayInfo.RequestedRatio
+			privateData.OriginModelName = relayInfo.OriginModelName
+			privateData.OutputDurationMs = relayInfo.OutputDurationMs
+			privateData.ChannelOriginalQuotaDeducted = relayInfo.ChannelOriginalQuota
+			privateData.ChannelCostUsesUpstreamTier = relayInfo.ChannelCostUsesUpstreamTier
+			privateData.UpstreamVideoInputRatio = relayInfo.UpstreamVideoInputRatio
 		}
 	}
 
@@ -280,6 +376,7 @@ func TaskGetAllTasks(startIdx int, num int, queryParams SyncTaskQueryParams) []*
 	if queryParams.EndTimestamp != 0 {
 		query = query.Where("submit_time <= ?", queryParams.EndTimestamp)
 	}
+	query = applyEnhancedOnlyFilter(query, queryParams.EnhancedOnly)
 
 	// 获取数据
 	err = query.Order("id desc").Limit(num).Offset(startIdx).Find(&tasks).Error
@@ -497,6 +594,7 @@ func TaskCountAllTasks(queryParams SyncTaskQueryParams) int64 {
 	if queryParams.EndTimestamp != 0 {
 		query = query.Where("submit_time <= ?", queryParams.EndTimestamp)
 	}
+	query = applyEnhancedOnlyFilter(query, queryParams.EnhancedOnly)
 	_ = query.Count(&total).Error
 	return total
 }
@@ -534,6 +632,6 @@ func (t *Task) ToOpenAIVideo() *dto.OpenAIVideo {
 	openAIVideo.SetProgressStr(t.Progress)
 	openAIVideo.CreatedAt = t.CreatedAt
 	openAIVideo.CompletedAt = t.UpdatedAt
-	openAIVideo.SetMetadata("url", t.GetResultURL())
+	openAIVideo.SetMetadata("url", t.PublicResultURL())
 	return openAIVideo
 }

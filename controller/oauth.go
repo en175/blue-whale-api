@@ -274,6 +274,8 @@ func findOrCreateOAuthUser(c *gin.Context, provider oauth.Provider, oauthUser *o
 	}
 	user.Role = common.RoleCommonUser
 	user.Status = common.UserStatusEnabled
+	// OAuth 回调是浏览器 302 重定向，无 X-Client-System 头 → 新注册默认只允许控制台（api）。
+	user.AllowedSystems = common.AllowedSystemApi
 
 	// Handle affiliate code
 	affCode := session.Get("aff")

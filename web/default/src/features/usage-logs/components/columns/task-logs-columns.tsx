@@ -212,6 +212,43 @@ export function useTaskLogsColumns(isAdmin: boolean): ColumnDef<TaskLog>[] {
         )
       },
     },
+    ...(isAdmin
+      ? [
+          {
+            id: 'enhance',
+            header: t('Enhanced'),
+            accessorFn: (row: TaskLog) => row.enhance?.status,
+            cell: function EnhanceCell({ row }: { row: { original: TaskLog } }) {
+              const enhance = row.original.enhance
+              if (!enhance) {
+                return (
+                  <span className='text-muted-foreground/60 text-xs'>-</span>
+                )
+              }
+              const succeeded = enhance.status === 'succeeded'
+              const title = t(
+                '{{requested}} → {{upstream}} · {{count}} attempts · {{fen}} fen',
+                {
+                  requested: enhance.requested_resolution || '-',
+                  upstream: enhance.upstream_resolution || '-',
+                  count: enhance.attempt_count ?? 0,
+                  fen: enhance.amount_fen ?? 0,
+                }
+              )
+              return (
+                <StatusBadge
+                  label={succeeded ? t('Enhanced') : t('Enhance failed')}
+                  variant={succeeded ? 'success' : 'danger'}
+                  size='sm'
+                  copyable={false}
+                  className='-ml-1.5'
+                  title={title}
+                />
+              )
+            },
+          } satisfies ColumnDef<TaskLog>,
+        ]
+      : []),
     createProgressColumn<TaskLog>({ headerLabel: t('Progress') }),
     {
       accessorKey: 'fail_reason',
@@ -253,11 +290,10 @@ export function useTaskLogsColumns(isAdmin: boolean): ColumnDef<TaskLog>[] {
           return (
             <a
               href={videoUrl}
-              target='_blank'
-              rel='noopener noreferrer'
+              download={`${log.task_id}.mp4`}
               className='text-foreground text-xs hover:underline'
             >
-              {t('Click to preview video')}
+              {t('Click to download video')}
             </a>
           )
         }

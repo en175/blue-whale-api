@@ -34,6 +34,15 @@ type ContentItem struct {
 	VideoURL *MediaURL `json:"video_url,omitempty"`
 	AudioURL *MediaURL `json:"audio_url,omitempty"`
 	Role     string    `json:"role,omitempty"`
+	// DraftTask 是 Seedance 2.5 样片模式第二步（由样片出成片）的引用项，
+	// 与 Type=="draft_task" 搭配使用。45/54 渠道不会设置它，omitempty 保证
+	// 既有渠道的 payload 逐位不变。
+	DraftTask *DraftTaskRef `json:"draft_task,omitempty"`
+}
+
+// DraftTaskRef 指向一个已完成的样片任务（上游真实 task id）。
+type DraftTaskRef struct {
+	ID string `json:"id"`
 }
 
 type MediaURL struct {

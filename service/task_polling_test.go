@@ -414,3 +414,44 @@ func TestUpdateVideoTasksResultURLFallbackProxy(t *testing.T) {
 	assert.Equal(t, model.TaskStatus(model.TaskStatusSuccess), got.Status)
 	assert.Equal(t, taskcommon.BuildProxyURL("task_public_nourl"), got.PrivateData.ResultURL)
 }
+
+type fakeTaskEnhancer struct {
+	done     bool
+	err      error
+	finalURL string
+	redacted int
+}
+
+func (f *fakeTaskEnhancer) EnsureEnhanced(context.Context, *model.Task, string) (string, bool, error) {
+	return f.finalURL, f.done, f.err
+}
+
+func (f *fakeTaskEnhancer) RedactUserVisible(*model.Task) {
+	f.redacted++
+}
+
+func TestApplyTaskEnhancerRedactsWhenNotSuccess(t *testing.T) {
+	enh := &fakeTaskEnhancer{}
+	result := &relaycommon.TaskInfo{Status: model.TaskStatusInProgress, Url: "https://up.example/720.mp4"}
+	applyTaskEnhancer(context.Background(), enh, &model.Task{}, result)
+	assert.Equal(t, 1, enh.redacted)
+	assert.Equal(t, "https://up.example/720.mp4", result.Url)
+}
+
+func TestApplyTaskEnhancerKeepsInProgressUntilDone(t *testing.T) {
+	enh := &fakeTaskEnhancer{done: false}
+	result := &relaycommon.TaskInfo{Status: model.TaskStatusSuccess, Url: "https://up.example/720.mp4"}
+	applyTaskEnhancer(context.Background(), enh, &model.Task{}, result)
+	assert.Equal(t, model.TaskStatusInProgress, result.Status)
+	assert.Equal(t, "50%", result.Progress)
+	assert.Empty(t, result.Url)
+}
+
+func TestApplyTaskEnhancerFailedHidesURL(t *testing.T) {
+	enh := &fakeTaskEnhancer{done: true, err: io.EOF}
+	result := &relaycommon.TaskInfo{Status: model.TaskStatusSuccess, Url: "https://up.example/720.mp4"}
+	applyTaskEnhancer(context.Background(), enh, &model.Task{}, result)
+	assert.Equal(t, model.TaskStatusFailure, result.Status)
+	assert.Equal(t, io.EOF.Error(), result.Reason)
+	assert.Empty(t, result.Url)
+}

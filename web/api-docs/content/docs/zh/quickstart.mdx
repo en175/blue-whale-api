@@ -1,9 +1,9 @@
 ---
 title: 快速开始
-description: 从注册到第一条生成视频，5 分钟跑通全流程
+description: 从注册到第一次调用，5 分钟跑通全流程
 ---
 
-从注册到拿到第一条生成视频，全程约 5 分钟。
+从注册到拿到第一次调用结果，全程约 5 分钟。
 
 ## 1. 获取 API Key
 
@@ -11,13 +11,43 @@ description: 从注册到第一条生成视频，5 分钟跑通全流程
 2. 进入「令牌」页面，创建一个新的 API Key（形如 `sk-xxxxxx`）
 3. 妥善保存——Key 只在创建时完整展示一次
 
-## 2. 提交生成任务
+## 2. 文本模型：一次对话补全
 
 > **Base URL**：国内 `https://yunjizi.cn`；国外 `https://api.yunjizi.cn`。请按对接环境选择，下文示例中的 `BASE_URL` 即对应域名。
 
 ```bash
 BASE_URL="https://yunjizi.cn"   # 国内；国外用 https://api.yunjizi.cn
 
+curl "$BASE_URL/v1/chat/completions" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "doubao-seed-2-1-pro-260915",
+    "messages": [{"role": "user", "content": "用一句话介绍蓝鲸"}],
+    "max_tokens": 512
+  }'
+```
+
+`choices[0].message.content` 即模型输出。文本模型均为推理模型，`max_tokens` 建议不低于 512，否则可能只有思考过程、没有正文。详见[文本模型 API](./text/chat-completions)。
+
+## 3. 图片模型：一次图片生成
+
+```bash
+curl "$BASE_URL/v1/images/generations" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "doubao-seedream-5-0-260128",
+    "prompt": "蓝鲸跃出海面，写实摄影",
+    "size": "2048x2048"
+  }'
+```
+
+响应 `data[0].url` 即生成图片地址。详见[图片模型 API](./image/generations)。
+
+## 4. 视频模型：提交生成任务
+
+```bash
 curl "$BASE_URL/v1/video/generations" \
   -H "Authorization: Bearer sk-YOUR-KEY" \
   -H "Content-Type: application/json" \
@@ -44,7 +74,7 @@ curl "$BASE_URL/v1/video/generations" \
 }
 ```
 
-## 3. 轮询任务状态
+## 5. 轮询任务状态
 
 视频生成为异步任务，建议每 5–10 秒轮询一次：
 
@@ -55,16 +85,17 @@ curl "$BASE_URL/v1/video/generations/task_9f3a2b7c" \
 
 当 `data.status` 变为 `SUCCESS` 时，生成完成。详见[查询任务](./video/query)。
 
-## 4. 下载视频
+## 6. 下载视频
 
 ```bash
 curl "$BASE_URL/v1/videos/task_9f3a2b7c/content" \
-  -H "Authorization: Bearer sk-YOUR-KEY" \
   -o result.mp4
 ```
 
 ## 下一步
 
 - [鉴权](./authentication)：API Key 的使用与生命周期
-- [模型列表](./models)：doubao-seedance-2-0-260128 支持的完整参数
+- [文本模型 API](./text/chat-completions)：三种调用格式（Chat Completions / Messages / Responses）
+- [图片模型 API](./image/generations)：图片生成与图片编辑
+- [模型列表](./models)：可用模型与对应能力
 - [错误码](./errors)：遇到问题时查这里

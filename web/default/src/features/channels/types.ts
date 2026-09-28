@@ -92,6 +92,12 @@ export interface ChannelSettings {
   pass_through_body_enabled?: boolean
   system_prompt?: string
   system_prompt_override?: boolean
+  '1080p_to_720p_percent'?: number
+  '1080p_to_480p_percent'?: number
+  '720p_to_480p_percent'?: number
+  mediakit_api_key?: string
+  mediakit_base_url?: string
+  mediakit_submit_path?: string
 }
 
 export interface ChannelOtherSettings {

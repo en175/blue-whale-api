@@ -39,11 +39,7 @@
             }
           }
         ],
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
+        "security": [],
         "responses": {
           "200": {
             "description": "成功获取视频内容",

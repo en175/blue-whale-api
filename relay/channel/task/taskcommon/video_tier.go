@@ -94,8 +94,14 @@ func ResolveVideoInputRatio(modelName, resolution string, hasVideo bool) (float6
 // newapi 与 doubao 适配器共用此实现（入参契约同源：metadata.content 的
 // video_url 条目 + metadata.resolution）。
 func EstimateVideoTierBilling(info *relaycommon.RelayInfo, req *relaycommon.TaskSubmitReq) map[string]float64 {
-	hasVideo := HasVideoInputInMetadata(req.Metadata)
 	resolution, _ := req.Metadata["resolution"].(string)
+	return EstimateVideoTierBillingForTier(info, resolution, HasVideoInputInMetadata(req.Metadata))
+}
+
+// EstimateVideoTierBillingForTier 是 EstimateVideoTierBilling 的显式档位版本，
+// 供 hasVideo 不来自当次请求体的路径使用：Seedance 2.5 finalize（成片）请求体里
+// 没有 content，输入视频维度继承自第一步的样片任务。
+func EstimateVideoTierBillingForTier(info *relaycommon.RelayInfo, resolution string, hasVideo bool) map[string]float64 {
 	ratio, ok := ResolveVideoInputRatio(info.UpstreamModelName, resolution, hasVideo)
 	if !ok {
 		ratio, ok = ResolveVideoInputRatio(info.OriginModelName, resolution, hasVideo)

@@ -17,6 +17,46 @@ type ChannelSettings struct {
 	PassThroughBodyEnabled bool   `json:"pass_through_body_enabled,omitempty"`
 	SystemPrompt           string `json:"system_prompt,omitempty"`
 	SystemPromptOverride   bool   `json:"system_prompt_override,omitempty"`
+	// VolcEngine Enhanced (type 64) lottery + MediaKit.
+	Lottery1080To720Percent int    `json:"1080p_to_720p_percent,omitempty"`
+	Lottery1080To480Percent int    `json:"1080p_to_480p_percent,omitempty"`
+	Lottery720To480Percent  int    `json:"720p_to_480p_percent,omitempty"`
+	MediaKitAPIKey          string `json:"mediakit_api_key,omitempty"`
+	MediaKitBaseURL         string `json:"mediakit_base_url,omitempty"`
+	MediaKitSubmitPath      string `json:"mediakit_submit_path,omitempty"`
+	// MediaKit channel (type 65). 时长类工具入参多为 URL，提交时拿不到真实时长，
+	// 用本值做预扣估算，任务完成时按回包时长结算差额。
+	MediaKitDefaultMinutes float64 `json:"mediakit_default_minutes,omitempty"`
+}
+
+func (s ChannelSettings) ValidateVolcEngineEnhanced() error {
+	n := s.Lottery1080To720Percent
+	m := s.Lottery1080To480Percent
+	p := s.Lottery720To480Percent
+	if n < 0 || m < 0 || p < 0 {
+		return fmt.Errorf("lottery percents must be >= 0")
+	}
+	if n+m > 100 {
+		return fmt.Errorf("1080p_to_720p_percent + 1080p_to_480p_percent must be <= 100")
+	}
+	if p > 100 {
+		return fmt.Errorf("720p_to_480p_percent must be <= 100")
+	}
+	if (n > 0 || m > 0 || p > 0) && strings.TrimSpace(s.MediaKitAPIKey) == "" {
+		return fmt.Errorf("mediakit_api_key is required when lottery percents are non-zero")
+	}
+	return nil
+}
+
+// ValidateMediaKit 校验 MediaKit 渠道（type 65）专有配置。
+//
+// 不校验 mediakit_base_url：那是 type 64 的键，type 65 的上游域名取自渠道自身
+// 的 base_url 字段（info.ChannelBaseUrl），本包不做第二处取值。
+func (s ChannelSettings) ValidateMediaKit() error {
+	if s.MediaKitDefaultMinutes < 0 || s.MediaKitDefaultMinutes > 60 {
+		return fmt.Errorf("mediakit_default_minutes must be between 0 and 60")
+	}
+	return nil
 }
 
 type VertexKeyType string

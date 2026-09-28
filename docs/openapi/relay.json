@@ -825,11 +825,7 @@
             "headers": {}
           }
         },
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ]
+        "security": []
       }
     },
     "/kling/v1/videos/text2video": {

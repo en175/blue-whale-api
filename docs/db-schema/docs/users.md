@@ -33,6 +33,7 @@ CREATE TABLE `users` (
   `linux_do_id` varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `setting` text COLLATE utf8mb4_unicode_ci,
   `remark` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `allowed_systems` varchar(128) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `stripe_customer` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `created_at` bigint DEFAULT NULL,
   `last_login_at` bigint DEFAULT '0',
@@ -90,6 +91,7 @@ CREATE TABLE `users` (
 | linux_do_id | varchar(191) |  | true |  |  |  |  |
 | setting | text |  | true |  |  |  |  |
 | remark | varchar(255) |  | true |  |  |  |  |
+| allowed_systems | varchar(128) |  | true |  |  |  | 可登录系统白名单，逗号分隔(bluewhale,api)，空=全放行 |
 | stripe_customer | varchar(64) |  | true |  |  |  |  |
 | created_at | bigint |  | true |  |  |  |  |
 | last_login_at | bigint | 0 | true |  |  |  |  |

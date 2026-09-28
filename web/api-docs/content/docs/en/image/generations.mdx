@@ -1,0 +1,76 @@
+---
+title: Image Generation
+description: Text-to-image generation from a prompt
+---
+
+**POST** `/v1/images/generations`
+
+An OpenAI-compatible text-to-image endpoint that returns synchronously, available to every image model in the [model list](../models).
+
+## Request Headers
+
+| Name | Required | Description |
+| --- | --- | --- |
+| `Authorization` | Yes | `Bearer sk-xxx` (API key created in the console, see [Authentication](../authentication)) |
+| `Content-Type` | Yes | `application/json` |
+
+## Request Parameters
+
+| Field | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `model` | string | Yes | — | Model identifier, see the [model list](../models) |
+| `prompt` | string | Yes | — | The prompt describing the image; must not be empty |
+| `size` | string | No | — | Output size, shaped `2048x2048`; see the size constraint below |
+| `n` | int | No | `1` | Number of images, 1–128 |
+| `response_format` | string | No | `url` | Return form; `url` returns an image address |
+
+## Example
+
+```bash
+BASE_URL="https://yunjizi.cn"   # Domestic; overseas use https://api.yunjizi.cn
+
+curl "$BASE_URL/v1/images/generations" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "doubao-seedream-5-0-260128",
+    "prompt": "A blue whale breaching the surface, slow motion, cinematic",
+    "size": "2048x2048",
+    "n": 1
+  }'
+```
+
+## Response
+
+```json
+{
+  "model": "doubao-seedream-5-0-260128",
+  "created": 1789714912,
+  "data": [
+    {
+      "url": "https://ark-acg-cn-beijing.tos-cn-beijing.volces.com/doubao-seedream-5-0/xxx.jpeg",
+      "size": "2048x2048"
+    }
+  ],
+  "usage": {
+    "generated_images": 1,
+    "output_tokens": 16384,
+    "total_tokens": 16384
+  }
+}
+```
+
+## Response Fields
+
+| Field | Description |
+| --- | --- |
+| `data` | Array of generated results, each shaped `{url, size}` |
+| `data[].url` | Image address, **valid for a limited time** — download and store it promptly |
+| `data[].size` | The actual output size |
+| `usage.generated_images` | Number of generated images billed for this request |
+
+> **Sizes have a minimum pixel constraint**: the total pixels of the requested `size` must be at least `3,686,400` (the `1920x1920` tier). Anything smaller is rejected by the upstream with `400` and a message shaped like `image size must be at least 3686400 pixels`. Pick a size that satisfies the constraint while matching your target aspect ratio.
+
+## Billing
+
+Billed **per generated image**, at a unit price that differs per image model; the total is unit price × `usage.generated_images`. Unit prices follow the official announcement.

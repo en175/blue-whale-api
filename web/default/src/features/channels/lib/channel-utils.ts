@@ -107,6 +107,9 @@ export function getChannelTypeIcon(type: number): string {
     61: 'TokenHub', // TokenHub
     62: 'Doubao', // DoubaoAudio
     63: 'OpenAI', // jiekouAI (gpt-image family)
+    64: 'Volcengine', // VolcEngineEnhanced
+    65: 'Volcengine', // MediaKit
+  66: 'Volcengine', // VolcEngine25
 
     // Tools & Platforms
     37: 'Dify', // Dify

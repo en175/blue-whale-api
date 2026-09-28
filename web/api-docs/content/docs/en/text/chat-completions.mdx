@@ -1,0 +1,109 @@
+---
+title: Chat Completions
+description: Call text models with the OpenAI Chat Completions format
+---
+
+**POST** `/v1/chat/completions`
+
+An OpenAI-compatible chat completion endpoint, supporting both streaming and non-streaming, available to every text model in the [model list](../models).
+
+## Request Headers
+
+| Name | Required | Description |
+| --- | --- | --- |
+| `Authorization` | Yes | `Bearer sk-xxx` (API key created in the console, see [Authentication](../authentication)) |
+| `Content-Type` | Yes | `application/json` |
+
+## Request Parameters
+
+| Field | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `model` | string | Yes | — | Model identifier, see the [model list](../models) |
+| `messages` | array | Yes | — | Message array, each item shaped `{role, content}`; `role` is `system` / `user` / `assistant` |
+| `stream` | bool | No | `false` | Whether to return SSE streaming output |
+| `stream_options` | object | No | — | Streaming only; `{"include_usage": true}` returns `usage` in the final chunk |
+| `max_tokens` | int | No | — | Maximum generated tokens (**including reasoning tokens**) |
+| `temperature` | number | No | — | Sampling temperature |
+
+## Example
+
+```bash
+BASE_URL="https://yunjizi.cn"   # Domestic; overseas use https://api.yunjizi.cn
+
+curl "$BASE_URL/v1/chat/completions" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "doubao-seed-2-1-pro-260915",
+    "messages": [
+      {"role": "system", "content": "You are a rigorous technical assistant."},
+      {"role": "user", "content": "Introduce yourself in one sentence"}
+    ],
+    "max_tokens": 512
+  }'
+```
+
+## Response
+
+```json
+{
+  "id": "02178971496553678af8113c224ccdd69578c3b63d1e71a9",
+  "object": "chat.completion",
+  "created": 1789714912,
+  "model": "doubao-seed-2-1-pro-260915",
+  "service_tier": "default",
+  "choices": [
+    {
+      "index": 0,
+      "finish_reason": "stop",
+      "logprobs": null,
+      "message": {
+        "role": "assistant",
+        "content": "I am an AI assistant developed by ByteDance, able to help with information lookup, knowledge questions and copywriting.",
+        "reasoning_content": "The user asked for a one-sentence self-introduction, consistent with the technical assistant persona."
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 47,
+    "completion_tokens": 90,
+    "total_tokens": 137,
+    "prompt_tokens_details": { "cached_tokens": 0 },
+    "completion_tokens_details": { "reasoning_tokens": 64 }
+  }
+}
+```
+
+## Response Fields
+
+| Field | Description |
+| --- | --- |
+| `choices[0].message.content` | The reply text |
+| `choices[0].message.reasoning_content` | Reasoning trace (returned by reasoning models) |
+| `choices[0].finish_reason` | `stop` for a normal finish; `length` when `max_tokens` was reached |
+| `usage.prompt_tokens` | Input token count |
+| `usage.completion_tokens` | Output token count |
+| `usage.prompt_tokens_details.cached_tokens` | Portion of the input that hit the upstream prefix cache |
+| `usage.completion_tokens_details.reasoning_tokens` | Portion of the output spent on reasoning |
+
+> Every text model here is a **reasoning model**: `max_tokens` is consumed by reasoning as well. A value that is too small can produce an empty `content` with `finish_reason: length` — the budget was used up by reasoning before any reply text was written. Keep `max_tokens` at `512` or above.
+
+## Streaming
+
+With `stream: true` the endpoint returns SSE chunks shaped `data: {...}`, terminated by `data: [DONE]`.
+
+```bash
+curl -N "$BASE_URL/v1/chat/completions" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "doubao-seed-2-1-pro-260915",
+    "messages": [{"role": "user", "content": "Introduce yourself in one sentence"}],
+    "stream": true,
+    "stream_options": {"include_usage": true}
+  }'
+```
+
+> In streaming mode `usage` appears **only in the final chunk** (it is `null` in every earlier chunk), and only when `stream_options.include_usage: true` is set explicitly.
+
+Billing is settled from the `usage` object in the response; unit prices follow the official announcement, and cache hits are priced separately — `cached_tokens` is the hit volume.

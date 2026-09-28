@@ -114,6 +114,8 @@ export type SiteSettings = {
   About: string
   HomePageContent: string
   ServerAddress: string
+  /** 公司名配置项（CompanyName），页脚版权行与首页占位符输出 */
+  CompanyName: string
   'legal.user_agreement': string
   'legal.privacy_policy': string
   HeaderNavModules: string

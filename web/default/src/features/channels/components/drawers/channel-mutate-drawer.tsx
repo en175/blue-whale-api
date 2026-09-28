@@ -140,6 +140,8 @@ import {
   ADD_MODE_OPTIONS,
   CHANNEL_STATUS_LABELS,
   CHANNEL_TYPE_OPTIONS,
+  CHANNEL_TYPE_MEDIAKIT,
+  CHANNEL_TYPE_VOLCENGINE_ENHANCED,
   CHANNEL_TYPE_WARNINGS,
   ERROR_MESSAGES,
   FIELD_DESCRIPTIONS,
@@ -288,6 +290,13 @@ const SENSITIVE_FORM_FIELDS = [
   'pass_through_body_enabled',
   'system_prompt',
   'system_prompt_override',
+  'lottery_1080p_to_720p_percent',
+  'lottery_1080p_to_480p_percent',
+  'lottery_720p_to_480p_percent',
+  'mediakit_api_key',
+  'mediakit_base_url',
+  'mediakit_submit_path',
+  'mediakit_default_minutes',
   'allow_service_tier',
   'disable_store',
   'allow_safety_identifier',
@@ -2634,6 +2643,188 @@ export function ChannelMutateDrawer({
                                   )}
                                 />
                               </>
+                            )}
+
+                            {currentType === CHANNEL_TYPE_VOLCENGINE_ENHANCED && (
+                              <>
+                                <FormField
+                                  control={form.control}
+                                  name='lottery_1080p_to_720p_percent'
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>
+                                        {t('1080p to 720p lottery percent')}
+                                      </FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          type='number'
+                                          min={0}
+                                          max={100}
+                                          {...field}
+                                          onChange={(e) =>
+                                            field.onChange(Number(e.target.value))
+                                          }
+                                        />
+                                      </FormControl>
+                                      <FormDescription>
+                                        {t(
+                                          'Chance to generate 1080p requests at 720p, then enhance back. 0 disables this path.'
+                                        )}
+                                      </FormDescription>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                                <FormField
+                                  control={form.control}
+                                  name='lottery_1080p_to_480p_percent'
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>
+                                        {t('1080p to 480p lottery percent')}
+                                      </FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          type='number'
+                                          min={0}
+                                          max={100}
+                                          {...field}
+                                          onChange={(e) =>
+                                            field.onChange(Number(e.target.value))
+                                          }
+                                        />
+                                      </FormControl>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                                <FormField
+                                  control={form.control}
+                                  name='lottery_720p_to_480p_percent'
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>
+                                        {t('720p to 480p lottery percent')}
+                                      </FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          type='number'
+                                          min={0}
+                                          max={100}
+                                          {...field}
+                                          onChange={(e) =>
+                                            field.onChange(Number(e.target.value))
+                                          }
+                                        />
+                                      </FormControl>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                                <FormField
+                                  control={form.control}
+                                  name='mediakit_api_key'
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>
+                                        {t('MediaKit API Key')}
+                                      </FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          type='password'
+                                          autoComplete='off'
+                                          {...field}
+                                        />
+                                      </FormControl>
+                                      <FormDescription>
+                                        {t(
+                                          'Required when any lottery percent is non-zero. Separate from the Ark channel key.'
+                                        )}
+                                      </FormDescription>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                                <FormField
+                                  control={form.control}
+                                  name='mediakit_base_url'
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>
+                                        {t('MediaKit Base URL')}
+                                      </FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          placeholder='https://mediakit.cn-beijing.volces.com'
+                                          {...field}
+                                        />
+                                      </FormControl>
+                                      <FormDescription>
+                                        {t(
+                                          'Optional. Leave empty to use the Beijing MediaKit default.'
+                                        )}
+                                      </FormDescription>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                                <FormField
+                                  control={form.control}
+                                  name='mediakit_submit_path'
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>
+                                        {t('MediaKit Submit Path')}
+                                      </FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          placeholder='/api/v1/tools/enhance-video-generative'
+                                          {...field}
+                                        />
+                                      </FormControl>
+                                      <FormDescription>
+                                        {t(
+                                          'Optional. Leave empty to use /api/v1/tools/enhance-video-generative.'
+                                        )}
+                                      </FormDescription>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                              </>
+                            )}
+
+                            {/* MediaKit (type 65) */}
+                            {currentType === CHANNEL_TYPE_MEDIAKIT && (
+                              <FormField
+                                control={form.control}
+                                name='mediakit_default_minutes'
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>
+                                      {t('MediaKit Default Minutes')}
+                                    </FormLabel>
+                                    <FormControl>
+                                      <Input
+                                        type='number'
+                                        min={0}
+                                        max={60}
+                                        step='0.5'
+                                        {...field}
+                                        onChange={(e) =>
+                                          field.onChange(Number(e.target.value))
+                                        }
+                                      />
+                                    </FormControl>
+                                    <FormDescription>
+                                      {t(
+                                        'Estimated minutes for pre-charging duration-billed tools; their real length is only known on completion. 0 falls back to the model price base.'
+                                      )}
+                                    </FormDescription>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
                             )}
 
                             {/* VolcEngine (type 45) */}

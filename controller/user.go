@@ -136,6 +136,12 @@ func recordLoginAudit(user *model.User, c *gin.Context) {
 
 // setup session & cookies and then return user info
 func setupLogin(user *model.User, c *gin.Context) {
+	// 登录白名单：账号可登录系统需包含来源系统（X-Client-System，缺失/未知=api）。
+	// 这里是所有登录方式（密码/2FA/Passkey/OAuth/Telegram/WeChat）的统一出口。
+	if !user.CanLoginTo(clientSystemFromContext(c)) {
+		common.ApiErrorI18n(c, i18n.MsgUserSystemNotAllowed)
+		return
+	}
 	tokens, tokenErr := model.GetAllUserTokens(user.Id, 0, 1)
 	if constant.GenerateDefaultToken && (tokenErr != nil || len(tokens) == 0) {
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -165,15 +171,16 @@ func setupLogin(user *model.User, c *gin.Context) {
 		"message": "",
 		"success": true,
 		"data": map[string]any{
-			"id":           user.Id,
-			"user_id":      user.Id,
-			"username":     user.Username,
-			"email":        user.Email,
-			"display_name": user.DisplayName,
-			"role":         user.Role,
-			"status":       user.Status,
-			"group":        user.Group,
-			"token":        tokenKey,
+			"id":              user.Id,
+			"user_id":         user.Id,
+			"username":        user.Username,
+			"email":           user.Email,
+			"display_name":    user.DisplayName,
+			"role":            user.Role,
+			"status":          user.Status,
+			"group":           user.Group,
+			"allowed_systems": user.AllowedSystems,
+			"token":           tokenKey,
 		},
 	})
 }
@@ -255,11 +262,12 @@ func Register(c *gin.Context) {
 	affCode := user.AffCode // this code is the inviter's code, not the user's own code
 	inviterId, _ := model.GetUserIdByAffCode(affCode)
 	cleanUser := model.User{
-		Username:    user.Username,
-		Password:    user.Password,
-		DisplayName: user.Username,
-		InviterId:   inviterId,
-		Role:        common.RoleCommonUser, // 明确设置角色为普通用户
+		Username:       user.Username,
+		Password:       user.Password,
+		DisplayName:    user.Username,
+		InviterId:      inviterId,
+		Role:           common.RoleCommonUser,      // 明确设置角色为普通用户
+		AllowedSystems: clientSystemFromContext(c), // 新注册默认跟随来源；缺失/未知 → api
 	}
 	if common.EmailVerificationEnabled {
 		cleanUser.Email = user.Email
@@ -325,11 +333,12 @@ func GetTokenIdentity(c *gin.Context) {
 		"success": true,
 		"message": "",
 		"data": gin.H{
-			"user_id":  user.Id,
-			"username": user.Username,
-			"email":    user.Email,
-			"status":   user.Status,
-			"role":     user.Role,
+			"user_id":         user.Id,
+			"username":        user.Username,
+			"email":           user.Email,
+			"status":          user.Status,
+			"role":            user.Role,
+			"allowed_systems": user.AllowedSystems,
 		},
 	})
 }
@@ -535,6 +544,7 @@ func GetSelf(c *gin.Context) {
 		"aff_history_quota": user.AffHistoryQuota,
 		"inviter_id":        user.InviterId,
 		"linux_do_id":       user.LinuxDOId,
+		"allowed_systems":   user.AllowedSystems,
 		"setting":           user.Setting,
 		"stripe_customer":   user.StripeCustomer,
 		"sidebar_modules":   userSetting.SidebarModules, // 正确提取sidebar_modules字段
@@ -699,6 +709,11 @@ func UpdateUser(c *gin.Context) {
 	}
 	if updatedUser.Password == "" {
 		updatedUser.Password = "$I_LOVE_U" // make Validator happy :)
+	}
+	// 白名单输入前置校验：非空时每个段必须是已知系统，避免垃圾值被 Normalize 静默成全放行。
+	if !model.ValidateAllowedSystemsInput(updatedUser.AllowedSystems) {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
 	}
 	if err := common.Validate.Struct(&updatedUser); err != nil {
 		common.ApiErrorI18n(c, i18n.MsgUserInputInvalid, map[string]any{"Error": err.Error()})
@@ -1020,6 +1035,11 @@ func CreateUser(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 		return
 	}
+	// 白名单输入前置校验：非空时每个段必须是已知系统，避免垃圾值被 Normalize 静默成全放行。
+	if !model.ValidateAllowedSystemsInput(user.AllowedSystems) {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
 	if err := common.Validate.Struct(&user); err != nil {
 		common.ApiErrorI18n(c, i18n.MsgUserInputInvalid, map[string]any{"Error": err.Error()})
 		return
@@ -1034,10 +1054,11 @@ func CreateUser(c *gin.Context) {
 	}
 	// Even for admin users, we cannot fully trust them!
 	cleanUser := model.User{
-		Username:    user.Username,
-		Password:    user.Password,
-		DisplayName: user.DisplayName,
-		Role:        user.Role, // 保持管理员设置的角色
+		Username:       user.Username,
+		Password:       user.Password,
+		DisplayName:    user.DisplayName,
+		Role:           user.Role,                                          // 保持管理员设置的角色
+		AllowedSystems: model.NormalizeAllowedSystems(user.AllowedSystems), // 管理员显式选择；缺省空串=全放行
 	}
 	defaultToken, tokenErr := newInitialUserToken(cleanUser.Username)
 	if tokenErr != nil {

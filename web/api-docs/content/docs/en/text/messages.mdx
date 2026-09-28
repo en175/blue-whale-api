@@ -1,0 +1,105 @@
+---
+title: Anthropic Messages
+description: Call text models with the Anthropic Messages format
+---
+
+**POST** `/v1/messages`
+
+An Anthropic Messages compatible endpoint, supporting both streaming and non-streaming, available to every text model in the [model list](../models). Existing Anthropic-format clients can switch over by changing only `base_url` and `model`.
+
+## Request Headers
+
+| Name | Required | Description |
+| --- | --- | --- |
+| `x-api-key` | Yes | API key created in the console (see [Authentication](../authentication)); `Authorization: Bearer sk-xxx` is also accepted |
+| `anthropic-version` | Yes | Fixed value `2023-06-01` |
+| `Content-Type` | Yes | `application/json` |
+
+## Request Parameters
+
+| Field | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `model` | string | Yes | — | Model identifier, see the [model list](../models) |
+| `messages` | array | Yes | — | Message array, each item shaped `{role, content}`; `role` is `user` / `assistant` |
+| `max_tokens` | int | Yes | — | Maximum generated tokens (**including reasoning tokens**); required in the Anthropic format |
+| `system` | string \| array | No | — | System prompt |
+| `stream` | bool | No | `false` | Whether to return SSE streaming output |
+| `temperature` | number | No | — | Sampling temperature |
+
+## Example
+
+```bash
+BASE_URL="https://yunjizi.cn"   # Domestic; overseas use https://api.yunjizi.cn
+
+curl "$BASE_URL/v1/messages" \
+  -H "x-api-key: sk-YOUR-KEY" \
+  -H "anthropic-version: 2023-06-01" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "doubao-seed-2-1-pro-260915",
+    "max_tokens": 512,
+    "messages": [
+      {"role": "user", "content": "Introduce yourself in one sentence"}
+    ]
+  }'
+```
+
+## Response
+
+```json
+{
+  "id": "021789714793570846a816464a9af9c0791e0f68a2ce03cbcd322",
+  "type": "message",
+  "role": "assistant",
+  "model": "doubao-seed-2-1-pro-260915",
+  "content": [
+    {
+      "type": "text",
+      "text": "I am Doubao, an AI assistant developed by ByteDance, here to help with knowledge, questions, creative writing and conversation."
+    }
+  ],
+  "stop_reason": "end_turn",
+  "usage": {
+    "input_tokens": 51,
+    "output_tokens": 552,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0
+  }
+}
+```
+
+## Response Fields
+
+| Field | Description |
+| --- | --- |
+| `content` | Array of content blocks, each shaped `{type: "text", text}` |
+| `stop_reason` | `end_turn` for a normal finish; `max_tokens` when `max_tokens` was reached |
+| `usage.input_tokens` | Input token count |
+| `usage.output_tokens` | Output token count |
+| `usage.cache_read_input_tokens` | Portion of the input that hit the upstream prefix cache |
+| `usage.cache_creation_input_tokens` | Portion that explicitly created cache (currently always `0`, see the note below) |
+
+> Caching is **implicit upstream prefix caching**: read `cache_read_input_tokens` for the hit volume. A `cache_control` field in the request is passed through to the upstream as-is, but the gateway does not use it for billing decisions; `cache_creation_input_tokens` is always `0`.
+
+## Streaming
+
+With `stream: true` the endpoint returns SSE frames, each a pair of `event:` and `data:` lines, in the sequence `message_start` → `content_block_start` → `content_block_delta` → `content_block_stop` → `message_delta` → `message_stop`.
+
+```bash
+curl -N "$BASE_URL/v1/messages" \
+  -H "x-api-key: sk-YOUR-KEY" \
+  -H "anthropic-version: 2023-06-01" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "doubao-seed-2-1-pro-260915",
+    "max_tokens": 512,
+    "stream": true,
+    "messages": [{"role": "user", "content": "Introduce yourself in one sentence"}]
+  }'
+```
+
+Reasoning models open a `thinking` content block before the `text` block; the matching delta types are `thinking_delta` and `text_delta`.
+
+> **Billing data source: in streaming mode you must read `usage` from the `message_delta` event.** The `usage` in `message_start` is an **estimate** (`input_tokens` is noticeably too high and `cache_read_input_tokens` is always `0`); only the `usage` in the closing `message_delta` is accurate. Non-streaming responses have no such discrepancy — read the response body directly.
+
+Billing is settled from the `usage` object in the response; unit prices follow the official announcement.

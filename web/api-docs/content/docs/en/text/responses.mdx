@@ -1,0 +1,116 @@
+---
+title: OpenAI Responses
+description: Call text models with the OpenAI Responses format
+---
+
+**POST** `/v1/responses`
+
+An OpenAI Responses compatible endpoint, supporting both streaming and non-streaming, available to every text model in the [model list](../models).
+
+## Request Headers
+
+| Name | Required | Description |
+| --- | --- | --- |
+| `Authorization` | Yes | `Bearer sk-xxx` (API key created in the console, see [Authentication](../authentication)) |
+| `Content-Type` | Yes | `application/json` |
+
+## Request Parameters
+
+| Field | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `model` | string | Yes | — | Model identifier, see the [model list](../models) |
+| `input` | string \| array | Yes | — | Input content: either a plain string, or a `{role, content}` message array |
+| `max_output_tokens` | int | No | — | Maximum generated tokens (**including reasoning tokens**) |
+| `stream` | bool | No | `false` | Whether to return SSE streaming output |
+| `temperature` | number | No | — | Sampling temperature |
+
+## Example
+
+```bash
+BASE_URL="https://yunjizi.cn"   # Domestic; overseas use https://api.yunjizi.cn
+
+curl "$BASE_URL/v1/responses" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "doubao-seed-2-1-pro-260915",
+    "input": "Introduce yourself in one sentence",
+    "max_output_tokens": 2048
+  }'
+```
+
+## Response
+
+```json
+{
+  "id": "resp_021789714808467846a816464a9af9c0791e0f68a2ce03cfda821",
+  "object": "response",
+  "created_at": 1789714808,
+  "model": "doubao-seed-2-1-pro-260915",
+  "status": "completed",
+  "max_output_tokens": 2048,
+  "service_tier": "default",
+  "output": [
+    {
+      "type": "reasoning",
+      "status": "completed",
+      "summary": [
+        {
+          "type": "summary_text",
+          "text": "The user wants a one-sentence self-introduction; I will describe my identity concisely."
+        }
+      ]
+    },
+    {
+      "type": "message",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "output_text",
+          "text": "I am Doubao, an AI assistant developed by ByteDance, here to help with questions, conversation, content creation and information lookup."
+        }
+      ]
+    }
+  ],
+  "usage": {
+    "input_tokens": 51,
+    "output_tokens": 340,
+    "total_tokens": 391,
+    "input_tokens_details": { "cached_tokens": 0 },
+    "output_tokens_details": { "reasoning_tokens": 308 }
+  }
+}
+```
+
+## Response Fields
+
+| Field | Description |
+| --- | --- |
+| `status` | `completed` for a normal finish; `incomplete` when it did not finish |
+| `incomplete_details.reason` | Why it did not finish; `length` means `max_output_tokens` was reached |
+| `output` | Array of output items: the reply item has `type` `message`, the reasoning item has `type` `reasoning` |
+| `usage.input_tokens` | Input token count |
+| `usage.output_tokens` | Output token count |
+| `usage.input_tokens_details.cached_tokens` | Portion of the input that hit the upstream prefix cache |
+| `usage.output_tokens_details.reasoning_tokens` | Portion of the output spent on reasoning |
+
+> With a small budget, `status` will be `incomplete` with `incomplete_details.reason: length`, and `output` may contain only the reasoning item — reasoning used up the budget before any reply text was written. Keep `max_output_tokens` at `512` or above.
+
+## Streaming
+
+With `stream: true` the endpoint returns SSE frames, each a pair of `event:` and `data:` lines. Event sequence: `response.created` → `response.in_progress` → `response.output_item.added` → delta events (reasoning uses `response.reasoning_summary_text.delta`, reply text uses `response.output_text.delta`) → `response.output_item.done` → `response.completed` (`response.incomplete` when it did not finish).
+
+```bash
+curl -N "$BASE_URL/v1/responses" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "doubao-seed-2-1-pro-260915",
+    "input": "Introduce yourself in one sentence",
+    "stream": true
+  }'
+```
+
+> In streaming mode `usage` lives in `response.usage` of the `response.completed` (or `response.incomplete`) event.
+
+Billing is settled from the `usage` object in the response; unit prices follow the official announcement.

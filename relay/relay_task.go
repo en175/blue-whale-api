@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -30,20 +31,25 @@ type TaskSubmitResult struct {
 	//PerCallPrice   types.PriceData
 }
 
-// ResolveOriginTask 处理基于已有任务的提交（remix / continuation）：
+// ResolveOriginTask 处理基于已有任务的提交（remix / finalize）：
 // 查找原始任务、从中提取模型名称、将渠道锁定到原始任务的渠道
 // （通过 info.LockedChannel，重试时复用同一渠道并轮换 key），
 // 以及提取 OtherRatios（时长、分辨率）。
 // 该函数在控制器的重试循环之前调用一次，其结果通过 info 字段和上下文持久化。
 func ResolveOriginTask(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskError {
-	// 检测 remix action
+	// 检测 remix / finalize action
 	path := c.Request.URL.Path
-	if strings.Contains(path, "/v1/videos/") && strings.HasSuffix(path, "/remix") {
-		info.Action = constant.TaskActionRemix
+	if strings.Contains(path, "/v1/videos/") {
+		switch {
+		case strings.HasSuffix(path, "/remix"):
+			info.Action = constant.TaskActionRemix
+		case strings.HasSuffix(path, "/finalize"):
+			info.Action = constant.TaskActionFinalize
+		}
 	}
 
-	// 提取 remix 任务的 video_id
-	if info.Action == constant.TaskActionRemix {
+	// 提取 remix / finalize 任务的 video_id
+	if info.Action == constant.TaskActionRemix || info.Action == constant.TaskActionFinalize {
 		videoID := c.Param("video_id")
 		if strings.TrimSpace(videoID) == "" {
 			return service.TaskErrorWrapperLocal(fmt.Errorf("video_id is required"), "invalid_request", http.StatusBadRequest)
@@ -54,6 +60,13 @@ func ResolveOriginTask(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskErr
 	if info.OriginTaskID == "" {
 		return nil
 	}
+
+	// 下面要读 info.ChannelId（ChannelMeta 的提升字段）来判断本次请求是否已经落在
+	// 原任务的渠道上。ChannelMeta 由 InitChannelMeta 填充，而它在 ResolveOriginTask
+	// 之后才被 RelayTaskSubmit 调用——不在这里补一次，info.ChannelId 就是解引用空指针。
+	// 锁原任务的路径本来就没有选中渠道，因此这里拿到的是「无渠道」状态，比较结果
+	// 正是「需要切到原任务渠道」，与既有语义一致。
+	info.InitChannelMeta(c)
 
 	// 查找原始任务
 	originTask, exist, err := model.GetByTaskId(info.UserId, info.OriginTaskID)
@@ -103,6 +116,45 @@ func ResolveOriginTask(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskErr
 		info.ChannelId = originTask.ChannelId
 		info.ChannelType = ch.Type
 		info.ApiKey = key
+	}
+
+	// finalize（样片出成片）：只有本人的、已成功的、7 天内的 draft 任务才能作为成片源。
+	// 校验通过后把上游 draft id 与 Step 1 的 hasVideo 维度写入 info——前者是请求体的
+	// 唯一来源（绝不接受客户端传入），后者是 Step 2 的 1080p 档位单价的决定因素。
+	// 这里提前 return，绝不能继承 Step 1 的 OtherRatios：它的 seconds/size 会把
+	// Step 2 的 token 结算放大数倍（对比下面 remix 的整份复制）。
+	if info.Action == constant.TaskActionFinalize {
+		// 模型名为空时上游请求会退化成无价格的 "66_finalizedraft"，导致静默少收
+		if info.OriginModelName == "" {
+			return service.TaskErrorWrapperLocal(errors.New("origin model name is missing"), "origin_model_name_missing", http.StatusBadRequest)
+		}
+		if !originTask.Properties.Draft {
+			return service.TaskErrorWrapperLocal(errors.New("the origin task is not a draft"), "origin_not_draft", http.StatusBadRequest)
+		}
+		if originTask.Status != model.TaskStatusSuccess {
+			return service.TaskErrorWrapperLocal(errors.New("the origin draft task is not finished"), "origin_task_not_finished", http.StatusConflict)
+		}
+		// 上游文档：样片 id 的有效期 7 天，从样片任务的 created_at 起算。这里用网关
+		// 的 SubmitTime（与上游 created_at 只差一次网络往返）。不能用 FinishTime——
+		// 它在样片生成完成之后，窗口比上游允许的更长，会把上游已判过期的样片放行，
+		// 白跑一次预扣费。旧数据缺 SubmitTime 时退回 CreatedAt。
+		draftStartedAt := originTask.SubmitTime
+		if draftStartedAt <= 0 {
+			draftStartedAt = originTask.CreatedAt
+		}
+		if draftStartedAt > 0 && time.Now().Unix()-draftStartedAt > relaycommon.DraftTaskValidSeconds {
+			return service.TaskErrorWrapperLocal(errors.New("the origin draft task has expired"), "origin_draft_expired", http.StatusBadRequest)
+		}
+		// 必须取 PrivateData 里的上游 ID，不能用 GetUpstreamTaskID()——后者在
+		// PrivateData 为空时回退到 task.TaskID，而那是网关的公开 ID（task_xxx）。
+		// 把它当 draft_task.id 发出去，上游必然报错，而预扣费已经发生。
+		upstreamTaskID := originTask.PrivateData.UpstreamTaskID
+		if upstreamTaskID == "" {
+			return service.TaskErrorWrapperLocal(errors.New("the origin task has no upstream task id"), "origin_upstream_id_missing", http.StatusBadRequest)
+		}
+		info.OriginUpstreamTaskID = upstreamTaskID
+		info.OriginHasVideoInput = originTask.PrivateData.HasVideoInput
+		return nil
 	}
 
 	// 提取 remix 参数（时长、分辨率 → OtherRatios）
@@ -168,8 +220,13 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	// 2.5 应用渠道的模型映射（与同步任务对齐）
 	info.OriginModelName = modelName
 	info.UpstreamModelName = modelName
-	if err := helper.ModelMappedHelper(c, info, nil); err != nil {
-		return nil, service.TaskErrorWrapperLocal(err, "model_mapping_failed", http.StatusBadRequest)
+	// MediaKit 例外：模型名（mediakit-<tool>）是协议的一部分，决定打到哪个上游
+	// 端点，不是可按渠道改写的别名——改写后 BuildRequestURL 查注册表必然失败。
+	// 同步侧 MediaKitSyncHelper 出于同一理由刻意不调本函数。
+	if platform != constant.TaskPlatform(strconv.Itoa(constant.ChannelTypeMediaKit)) {
+		if err := helper.ModelMappedHelper(c, info, nil); err != nil {
+			return nil, service.TaskErrorWrapperLocal(err, "model_mapping_failed", http.StatusBadRequest)
+		}
 	}
 
 	// 3. 预生成公开 task ID（仅首次）
@@ -291,6 +348,81 @@ var fetchRespBuilders = map[int]func(c *gin.Context) (respBody []byte, taskResp 
 	relayconstant.RelayModeSunoFetchByID:  sunoFetchByIDRespBodyBuilder,
 	relayconstant.RelayModeSunoFetch:      sunoFetchRespBodyBuilder,
 	relayconstant.RelayModeVideoFetchByID: videoFetchByIDRespBodyBuilder,
+	relayconstant.RelayModeMediaKitFetch:  mediaKitFetchRespBodyBuilder,
+}
+
+// mediaKitTaskStatus 把网关任务状态翻译回 MediaKit 的词汇。客户端的提交响应
+// 是 MediaKit 信封，查询也应当用同一套状态词，否则客户端要写两套判断。
+var mediaKitTaskStatus = map[model.TaskStatus]string{
+	model.TaskStatusNotStart:   "pending",
+	model.TaskStatusSubmitted:  "queued",
+	model.TaskStatusQueued:     "queued",
+	model.TaskStatusInProgress: "processing",
+	model.TaskStatusSuccess:    "completed",
+	model.TaskStatusFailure:    "failed",
+}
+
+// mediaKitFetchRespBodyBuilder 从本库 tasks 表读任务，不代理上游 /api/v1/tasks/。
+// 客户端持有的是网关公开 task_xxx，直连上游会暴露上游 task_id 并允许越权枚举
+// 他人任务。
+func mediaKitFetchRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *dto.TaskError) {
+	taskId := c.Param("task_id")
+	if taskId == "" {
+		taskResp = service.TaskErrorWrapperLocal(errors.New("task_id is required"), "task_id_required", http.StatusBadRequest)
+		return
+	}
+	task, exist, err := model.GetByTaskId(c.GetInt("id"), taskId)
+	if err != nil {
+		taskResp = service.TaskErrorWrapper(err, "get_task_failed", http.StatusInternalServerError)
+		return
+	}
+	if !exist {
+		taskResp = service.TaskErrorWrapperLocal(errors.New("task_not_exist"), "task_not_exist", http.StatusBadRequest)
+		return
+	}
+
+	status := mediaKitTaskStatus[task.Status]
+	if status == "" {
+		status = "processing"
+	}
+	response := gin.H{
+		"success": true,
+		"task_id": task.TaskID,
+		"status":  status,
+		"message": task.FailReason,
+	}
+	// 回传上游原始 result 的结构化内容。网关的下游调用方需要产物本身——可能是
+	// 数组（extract-frames 的 snapshots、drama-recap-vertical 的 video_urls）、
+	// 嵌套字段，或根本没有 URL 的分析结果（asr-subtitles 的字幕、画质评分）。
+	// 只给一个 url 字段表达不了这些形状。
+	result := gin.H{}
+	if len(task.Data) > 0 {
+		var envelope struct {
+			Result map[string]any `json:"result"`
+		}
+		if err := common.Unmarshal(task.Data, &envelope); err == nil && len(envelope.Result) > 0 {
+			result = envelope.Result
+		}
+	}
+	// url 只在任务成功且确实取到上游产物时附加，三条排除理由各自独立：
+	//   - 失败的task.PublicResultURL()会回落到 FailReason（见 model/task.go GetResultURL），
+	//     错误文案不是地址，放进 url 会被调用方当下载链接用。错误已由上面的 message 字段承载。
+	//   - 自引用代理地址来自轮询层「没有产物」时的兜底写入（taskcommon.BuildProxyURL），
+	//     不是产物，回传它会让调用方拿到一个指向网关自身的地址。
+	if task.Status == model.TaskStatusSuccess {
+		if resultURL := task.PublicResultURL(); resultURL != "" && !taskcommon.IsProxyURL(resultURL, task.TaskID) {
+			result["url"] = resultURL
+		}
+	}
+	if len(result) > 0 {
+		response["result"] = result
+	}
+
+	respBody, err = common.Marshal(response)
+	if err != nil {
+		taskResp = service.TaskErrorWrapper(err, "marshal_response_failed", http.StatusInternalServerError)
+	}
+	return
 }
 
 func RelayTaskFetch(c *gin.Context, relayMode int) (taskResp *dto.TaskError) {
@@ -499,7 +631,7 @@ func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool) []byte {
 		"metadata": nil,
 		"status":   mapTaskStatusToSimple(task.Status),
 		"task_id":  task.TaskID,
-		"url":      task.GetResultURL(),
+		"url":      task.PublicResultURL(),
 	}
 	respBody, _ := common.Marshal(dto.TaskResponse[any]{
 		Code: "success",
@@ -561,14 +693,14 @@ func TaskModel2Dto(task *model.Task) *dto.TaskDto {
 		Action:     task.Action,
 		Status:     string(task.Status),
 		FailReason: task.FailReason,
-		ResultURL:  task.GetResultURL(),
+		ResultURL:  task.PublicResultURL(),
 		SubmitTime: task.SubmitTime,
 		StartTime:  task.StartTime,
 		FinishTime: task.FinishTime,
 		Progress:   task.Progress,
 		Properties: task.Properties,
 		Username:   task.Username,
-		Data:       task.Data,
+		Data:       task.PublicData(),
 	}
 	// 真实消耗 token：按平台从 task.Data 提取（可选接口，未实现平台不返回）
 	if adaptor := GetTaskAdaptor(task.Platform); adaptor != nil {

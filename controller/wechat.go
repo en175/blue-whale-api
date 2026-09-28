@@ -95,6 +95,8 @@ func WeChatAuth(c *gin.Context) {
 			user.DisplayName = "WeChat User"
 			user.Role = common.RoleCommonUser
 			user.Status = common.UserStatusEnabled
+			// WeChat 扫码登录发端于控制台浏览器，无 X-Client-System 头 → 新注册默认只允许控制台（api）。
+			user.AllowedSystems = common.AllowedSystemApi
 
 			if err := user.Insert(0); err != nil {
 				c.JSON(http.StatusOK, gin.H{

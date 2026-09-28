@@ -348,6 +348,72 @@ export function UsersMutateDrawer({
                 />
               </SideDrawerSection>
 
+              {/* 可登录系统（登录白名单） */}
+              <SideDrawerSection>
+                <h3 className='text-sm font-medium'>
+                  {t('Allowed Systems')}
+                </h3>
+                <p className='text-muted-foreground text-xs'>
+                  {t('Systems this account can log into')}
+                </p>
+                <FormField
+                  control={form.control}
+                  name='allowed_systems'
+                  render={({ field }) => {
+                    const systems = (field.value || '')
+                      .split(',')
+                      .map((s) => s.trim())
+                      .filter(Boolean)
+                    const has = (s: string) => systems.includes(s)
+                    const isRoot = currentRow?.role === ROLE.SUPER_ADMIN
+                    const toggle = (s: string) => {
+                      const next = has(s)
+                        ? systems.filter((x) => x !== s).join(',')
+                        : [...systems, s].join(',')
+                      field.onChange(next)
+                    }
+                    return (
+                      <FormItem>
+                        <div className='flex flex-col gap-2'>
+                          <label className='flex items-start gap-3'>
+                            <Checkbox
+                              checked={has('bluewhale')}
+                              onCheckedChange={() => toggle('bluewhale')}
+                            />
+                            <span className='flex flex-col gap-1'>
+                              <span className='text-sm font-medium'>
+                                {t('Blue Whale')}
+                              </span>
+                            </span>
+                          </label>
+                          <label className='flex items-start gap-3'>
+                            <Checkbox
+                              checked={has('api')}
+                              onCheckedChange={() => toggle('api')}
+                              disabled={isRoot}
+                            />
+                            <span className='flex flex-col gap-1'>
+                              <span className='text-sm font-medium'>
+                                {t('API Console')}
+                              </span>
+                              {isRoot && (
+                                <span className='text-muted-foreground text-xs'>
+                                  {t('Root always has API Console access')}
+                                </span>
+                              )}
+                            </span>
+                          </label>
+                        </div>
+                        <FormDescription>
+                          {t('Leave empty to allow login to all systems')}
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )
+                  }}
+                />
+              </SideDrawerSection>
+
               {/* Group & Quota Settings (Update only) */}
               {isUpdate && (
                 <SideDrawerSection>

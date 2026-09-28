@@ -18,13 +18,17 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useQueryClient, useIsFetching } from '@tanstack/react-query'
 import { useNavigate, getRouteApi } from '@tanstack/react-router'
-import { type Table } from '@tanstack/react-table'
+import type { Table } from '@tanstack/react-table'
 import { useState, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
+
+import { Checkbox } from '@/components/ui/checkbox'
+import { Label } from '@/components/ui/label'
 
 import { buildSearchParams } from '../lib/filter'
 import { getDefaultTimeRange } from '../lib/utils'
 import type { DrawingLogFilters, LogCategory, TaskLogFilters } from '../types'
+
 import { CompactDateTimeRangePicker } from './compact-date-time-range-picker'
 import {
   LogsFilterField,
@@ -97,6 +101,7 @@ export function TaskLogsFilterBar<TData>(props: TaskLogsFilterBarProps<TData>) {
         : {
             ...baseFilters,
             ...(searchParams.filter ? { taskId: searchParams.filter } : {}),
+            ...(searchParams.enhanced === '1' ? { enhancedOnly: true } : {}),
           }
 
     setFilters(next)
@@ -106,6 +111,7 @@ export function TaskLogsFilterBar<TData>(props: TaskLogsFilterBarProps<TData>) {
     searchParams.endTime,
     searchParams.channel,
     searchParams.filter,
+    searchParams.enhanced,
   ])
 
   const handleChange = useCallback(
@@ -164,7 +170,11 @@ export function TaskLogsFilterBar<TData>(props: TaskLogsFilterBarProps<TData>) {
     props.logCategory === 'drawing'
       ? t('Filter by MjProxy task ID')
       : t('Filter by task ID')
-  const hasAdditionalFilters = !!filterValue || !!filters.channel
+  const enhancedOnly =
+    props.logCategory === 'task' &&
+    !!(filters as TaskLogFilters).enhancedOnly
+  const hasAdditionalFilters =
+    !!filterValue || !!filters.channel || enhancedOnly
   const dateRangeFilter = (
     <LogsFilterField wide>
       <CompactDateTimeRangePicker
@@ -188,6 +198,23 @@ export function TaskLogsFilterBar<TData>(props: TaskLogsFilterBarProps<TData>) {
       />
     </LogsFilterField>
   )
+  const enhancedFilter =
+    isAdmin && props.logCategory === 'task' ? (
+      <LogsFilterField>
+        <Label className='flex h-8 items-center gap-2 text-sm font-normal'>
+          <Checkbox
+            checked={enhancedOnly}
+            onCheckedChange={(checked) =>
+              setFilters((prev) => ({
+                ...prev,
+                enhancedOnly: checked === true,
+              }))
+            }
+          />
+          {t('Enhanced only')}
+        </Label>
+      </LogsFilterField>
+    ) : null
   const channelFilter = isAdmin ? (
     <LogsFilterField>
       <LogsFilterInput
@@ -207,6 +234,7 @@ export function TaskLogsFilterBar<TData>(props: TaskLogsFilterBarProps<TData>) {
           {dateRangeFilter}
           {taskIdFilter}
           {channelFilter}
+          {enhancedFilter}
         </>
       }
       mobilePinnedFilters={dateRangeFilter}
@@ -214,9 +242,12 @@ export function TaskLogsFilterBar<TData>(props: TaskLogsFilterBarProps<TData>) {
         <>
           {taskIdFilter}
           {channelFilter}
+          {enhancedFilter}
         </>
       }
-      mobileFilterCount={[filterValue, filters.channel].filter(Boolean).length}
+      mobileFilterCount={[filterValue, filters.channel, enhancedOnly].filter(
+        Boolean
+      ).length}
       hasActiveFilters={hasAdditionalFilters}
       onSearch={handleApply}
       searchLoading={fetchingLogs > 0}

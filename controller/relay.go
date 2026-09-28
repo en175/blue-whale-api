@@ -49,6 +49,8 @@ func relayHandler(c *gin.Context, info *relaycommon.RelayInfo) *types.NewAPIErro
 		err = relay.EmbeddingHelper(c, info)
 	case relayconstant.RelayModeResponses, relayconstant.RelayModeResponsesCompact:
 		err = relay.ResponsesHelper(c, info)
+	case relayconstant.RelayModeMediaKitSync:
+		err = relay.MediaKitSyncHelper(c, info)
 	default:
 		err = relay.TextHelper(c, info)
 	}
@@ -401,6 +403,12 @@ func processChannelError(c *gin.Context, channelError types.ChannelError, err *t
 
 }
 
+// RelayMediaKitSync 服务 /v1/mediakit/sync/{tool}。走通用 Relay 管道，
+// 免费获得渠道重试、失败退款、日志与渠道自动禁用。
+func RelayMediaKitSync(c *gin.Context) {
+	Relay(c, types.RelayFormatMediaKit)
+}
+
 func RelayMidjourney(c *gin.Context) {
 	relayInfo, err := relaycommon.GenRelayInfo(c, types.RelayFormatMjProxy, nil, nil)
 
@@ -592,6 +600,9 @@ func RelayTask(c *gin.Context) {
 			OriginModelName: relayInfo.OriginModelName,
 			PerCallBilling:  common.StringsContains(constant.TaskPricePatches, relayInfo.OriginModelName) || relayInfo.PriceData.UsePrice,
 		}
+		if relayInfo.TaskRelayInfo != nil && relayInfo.TaskRelayInfo.DurationSettlement {
+			task.PrivateData.BillingContext.DurationSettlement = true
+		}
 		task.Quota = result.Quota
 		task.Data = result.TaskData
 		task.Action = relayInfo.Action
@@ -615,6 +626,12 @@ func respondTaskError(c *gin.Context, taskErr *dto.TaskError) {
 
 func shouldRetryTaskRelay(c *gin.Context, channelId int, taskErr *dto.TaskError, retryTimes int) bool {
 	if taskErr == nil {
+		return false
+	}
+	// finalize 的上游 create 接口不是幂等的，而绑定原任务渠道的提交路径没有
+	// specific_channel_id，下面的守卫拦不住。重试会导致同一份样片被出成两段
+	// 成片、扣两次费。重试次数默认 0 所以今天不会触发，但运维一旦调大就会。
+	if strings.HasSuffix(c.Request.URL.Path, "/finalize") {
 		return false
 	}
 	if service.ShouldSkipRetryAfterChannelAffinityFailure(c) {

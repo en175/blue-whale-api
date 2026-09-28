@@ -22,6 +22,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel/highwayapi"
 	"github.com/QuantumNous/new-api/relay/channel/jimeng"
 	"github.com/QuantumNous/new-api/relay/channel/jina"
+	"github.com/QuantumNous/new-api/relay/channel/mediakit"
 	"github.com/QuantumNous/new-api/relay/channel/minimax"
 	"github.com/QuantumNous/new-api/relay/channel/mistral"
 	"github.com/QuantumNous/new-api/relay/channel/mokaai"
@@ -45,6 +46,8 @@ import (
 	tasktokenhub "github.com/QuantumNous/new-api/relay/channel/task/tokenhub"
 	taskvertex "github.com/QuantumNous/new-api/relay/channel/task/vertex"
 	taskVidu "github.com/QuantumNous/new-api/relay/channel/task/vidu"
+	taskvolc25 "github.com/QuantumNous/new-api/relay/channel/task/volcengine25"
+	taskvolcplus "github.com/QuantumNous/new-api/relay/channel/task/volcengine_plus"
 	taskxfai "github.com/QuantumNous/new-api/relay/channel/task/xfai"
 	"github.com/QuantumNous/new-api/relay/channel/tencent"
 	"github.com/QuantumNous/new-api/relay/channel/vertex"
@@ -132,6 +135,8 @@ func GetAdaptor(apiType int) channel.Adaptor {
 		return &doubaoaudio.Adaptor{}
 	case constant.APITypeHighwayAPI:
 		return &highwayapi.Adaptor{}
+	case constant.APITypeMediaKit:
+		return &mediakit.Adaptor{}
 	}
 	return nil
 }
@@ -165,6 +170,10 @@ func GetTaskAdaptor(platform constant.TaskPlatform) channel.TaskAdaptor {
 			return &taskVidu.TaskAdaptor{}
 		case constant.ChannelTypeDoubaoVideo, constant.ChannelTypeVolcEngine:
 			return &taskdoubao.TaskAdaptor{}
+		case constant.ChannelTypeVolcEngineEnhanced:
+			return &taskvolcplus.TaskAdaptor{}
+		case constant.ChannelTypeVolcEngine25:
+			return &taskvolc25.TaskAdaptor{}
 		case constant.ChannelTypeSora, constant.ChannelTypeOpenAI:
 			return &tasksora.TaskAdaptor{}
 		case constant.ChannelTypeNewAPI:
@@ -177,6 +186,8 @@ func GetTaskAdaptor(platform constant.TaskPlatform) channel.TaskAdaptor {
 			return &taskGemini.TaskAdaptor{}
 		case constant.ChannelTypeMiniMax:
 			return &hailuo.TaskAdaptor{}
+		case constant.ChannelTypeMediaKit:
+			return &mediakit.TaskAdaptor{}
 		}
 	}
 	return nil

@@ -1,19 +1,19 @@
 ---
 title: 文档中心
-description: Seedance 2.0 视频生成 API 开发者文档
+description: 文本 / 图片 / 视频生成 API 开发者文档
 ---
 
-import { Rocket, KeyRound, Clapperboard } from 'lucide-react';
+import { Rocket, KeyRound, MessageSquare, ImageIcon, Clapperboard } from 'lucide-react';
 
 ## BLUE WHALE API 文档
 
-面向开发者的视频生成 API：一套 API Key、一套计费、一个 base_url，异步任务模式交付。当前开放 Doubao-Seedance **2.5 / 2.0 / 2.0-mini / 2.0-fast** 系列视频模型，支持文生视频、图生视频、首尾帧与参考图控制、音频生成（完整模型列表见[模型列表](./models)）。
+面向开发者的多模态生成 API：一套 API Key、一套计费、一个 base_url。当前开放三类能力——**文本模型**（支持 OpenAI Chat Completions、Anthropic Messages、OpenAI Responses 三种调用格式）、**图片模型**（图片生成与图片编辑）、**视频模型**（Doubao-Seedance 2.5 / 2.0 / 2.0-mini / 2.0-fast 系列，异步任务模式交付）。完整模型清单见[模型列表](./models)。
 
 <Cards>
   <Card
     icon={<Rocket />}
     title="快速开始"
-    description="从注册到第一条生成视频，5 分钟跑通全流程。"
+    description="从注册到第一次调用，5 分钟跑通全流程。"
     href="/zh/docs/quickstart"
   />
   <Card
@@ -21,6 +21,18 @@ import { Rocket, KeyRound, Clapperboard } from 'lucide-react';
     title="鉴权"
     description="使用 API Key 完成请求鉴权。"
     href="/zh/docs/authentication"
+  />
+  <Card
+    icon={<MessageSquare />}
+    title="文本模型 API"
+    description="对话补全、Anthropic Messages、OpenAI Responses 三个端点。"
+    href="/zh/docs/text/chat-completions"
+  />
+  <Card
+    icon={<ImageIcon />}
+    title="图片模型 API"
+    description="图片生成与图片编辑两个端点。"
+    href="/zh/docs/image/generations"
   />
   <Card
     icon={<Clapperboard />}
@@ -32,6 +44,11 @@ import { Rocket, KeyRound, Clapperboard } from 'lucide-react';
 
 ## 当前开放的端点
 
+- `POST /v1/chat/completions` — 对话补全（OpenAI Chat Completions 格式）
+- `POST /v1/messages` — 对话补全（Anthropic Messages 格式）
+- `POST /v1/responses` — 对话补全（OpenAI Responses 格式）
+- `POST /v1/images/generations` — 图片生成
+- `POST /v1/images/edits` — 图片编辑
 - `POST /v1/video/generations` — 提交视频生成任务
 - `GET /v1/video/generations/{task_id}` — 查询任务状态
 - `GET /v1/videos/{task_id}/content` — 下载生成的视频

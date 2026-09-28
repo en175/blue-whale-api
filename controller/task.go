@@ -2,6 +2,7 @@ package controller
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -27,12 +28,13 @@ func GetAllTask(c *gin.Context) {
 		StartTimestamp: startTimestamp,
 		EndTimestamp:   endTimestamp,
 		ChannelID:      c.Query("channel_id"),
+		EnhancedOnly:   parseEnhancedOnlyQuery(c.Query("enhanced")),
 	}
 
 	items := model.TaskGetAllTasks(pageInfo.GetStartIdx(), pageInfo.GetPageSize(), queryParams)
 	total := model.TaskCountAllTasks(queryParams)
 	pageInfo.SetTotal(int(total))
-	pageInfo.SetItems(tasksToDto(items, true))
+	pageInfo.SetItems(attachTaskEnhance(tasksToDto(items, true)))
 	common.ApiSuccess(c, pageInfo)
 }
 
@@ -85,4 +87,40 @@ func tasksToDto(tasks []*model.Task, fillUser bool) []*dto.TaskDto {
 		result[i] = relay.TaskModel2Dto(task)
 	}
 	return result
+}
+
+func parseEnhancedOnlyQuery(raw string) bool {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "1", "true", "yes":
+		return true
+	default:
+		return false
+	}
+}
+
+func attachTaskEnhance(items []*dto.TaskDto) []*dto.TaskDto {
+	ids := make([]string, 0, len(items))
+	for _, item := range items {
+		if item != nil && item.TaskID != "" {
+			ids = append(ids, item.TaskID)
+		}
+	}
+	summaries := model.SummarizeEnhanceCostsByTaskIDs(ids)
+	for _, item := range items {
+		if item == nil {
+			continue
+		}
+		sum, ok := summaries[item.TaskID]
+		if !ok {
+			continue
+		}
+		item.Enhance = &dto.TaskEnhanceInfo{
+			Status:              sum.Status,
+			RequestedResolution: sum.RequestedResolution,
+			UpstreamResolution:  sum.UpstreamResolution,
+			AmountFen:           sum.AmountFen,
+			AttemptCount:        sum.AttemptCount,
+		}
+	}
+	return items
 }

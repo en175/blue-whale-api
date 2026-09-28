@@ -1,0 +1,5 @@
+{
+  "title": "Image Model API",
+  "icon": "Image",
+  "pages": ["generations", "edits"]
+}
