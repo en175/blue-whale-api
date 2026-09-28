@@ -156,7 +156,8 @@ var toolRegistry = []ToolSpec{
 	// 分辨率（4K 24 / 2K 12 / 1080P 6 / 720P 3 / 540P 2 / 480P 1.5 / 360P 含纯音频 1）。
 	// 而这里只声明了 BillingDuration（平坦元/分钟），AdjustBillingOnCompleteWithClamp
 	// 用的倍率由提交时的 OtherRatios 与回包时长组成，**没有承载「响应派生倍率」的位置**
-	// ——分辨率只有任务完成后才从 result.resolution 拿得到。详见 docs/channel/mediakit.md §6。
+	// ——分辨率只有任务完成后才从 result.resolution 拿得到。详见 docs/channel/mediakit.md
+	// §6.5，跟进工单 IKITTA。
 	{Name: "mux-audio-video", Mode: BillingDuration, ResultKind: ResultVideo},
 
 	// ── 异步：音频工具 ──────────────────────────────────────────────
