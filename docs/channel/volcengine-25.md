@@ -116,6 +116,16 @@ Seedance 2.5 专用渠道，承载样片模式的两步流程。**没有抽奖�
 
 remix 会整份复制原任务的 `OtherRatios`；成片**不能**——样片的 `seconds` / `size` 会把成片的 token 结算放大 4~8 倍。成片只继承 `has_video_input` 这一个维度。
 
+### 5.5 输出编码
+
+实测：**1080p 成片为 HEVC（H.265），480p 样片为 H.264。** 同一条 prompt 走完两步，两步编码不同。
+
+⚠️ **归因未定，别过度推广。** 现有样本只有一组，分不清是**分辨率**驱动还是**步骤**驱动。不要假定「样片一律 H.264、成片一律 HEVC」。
+
+对下游的影响：实测 1080p 成片 5.07MB，是 480p 样片 1.6MB 的 3.2 倍体积，而像素数是 5 倍。HEVC 的解码支持面更窄——Safari 与现代 Chrome / Edge 可以，Firefox、较老的 Android、部分剪辑工具链受限。**浏览器里能播 480p 样片，不一定能播 1080p 成片。**
+
+上游没有切换编码的口子：`output_format` 管的是**封装容器**（`mp4` / `mov`），不是编码。网关也不转码，只原样透传 Ark 签发的 URL。
+
 ---
 
 ## 6. 计费
@@ -230,5 +240,6 @@ go test ./relay/channel/task/volcengine25/... ./relay/channel/task/taskcommon/..
 - `requestPayload` 补 `omni_reference_task_type` / `output_format`（属 2.5 的视频编辑 / 延长能力，另开工单）。
 - finalize 幂等键。
 - `PublicData()` 对 `data.id` 做脱敏（所有 doubao 任务的既有行为）。
+- 成片转码为 H.264（上游只给 HEVC，见 §5.5）。
 - 把 2.5 的档位单价写进内置价格表。
 - 改 45 / 54 / 64 三个既有渠道的任何行为。
