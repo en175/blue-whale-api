@@ -77,10 +77,6 @@ func KnownRatio(ratio string) bool {
 	return ok
 }
 
-func isSeedance25(modelName string) bool {
-	return strings.Contains(strings.ToLower(modelName), "2.5")
-}
-
 // CanvasPixels returns the billing canvas for a model series, resolution tier, and ratio.
 func CanvasPixels(modelName, resolution, ratio string) (int, int, error) {
 	ratio = NormalizeRatio(ratio)
@@ -91,7 +87,7 @@ func CanvasPixels(modelName, resolution, ratio string) (int, int, error) {
 	var table map[string]canvasSize
 	switch res {
 	case Res480p:
-		if isSeedance25(modelName) {
+		if SeedanceSeriesOf(modelName) == SeriesSeedance25 {
 			table = canvas480p25
 		} else {
 			table = canvas480p20

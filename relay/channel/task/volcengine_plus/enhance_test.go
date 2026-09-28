@@ -151,6 +151,59 @@ func TestEnsureEnhancedSuccessReturnsURL(t *testing.T) {
 	assert.NotContains(t, string(task.Data), "720p")
 }
 
+func TestEnsureEnhancedSubmits4kTarget(t *testing.T) {
+	var gotRes string
+	kit := &recordingKit{onSubmit: func(_, resolution string) {
+		gotRes = resolution
+	}}
+	a := &TaskAdaptor{mediaKit: kit, insertEnhanceCost: func(*model.EnhanceCost) error { return nil }}
+	task := taskWith4kDowngrade()
+	url, done, err := a.EnsureEnhanced(context.Background(), task, task.PrivateData.EnhanceSourceURL)
+	require.NoError(t, err)
+	assert.False(t, done)
+	assert.Empty(t, url)
+	assert.Equal(t, Res4k, gotRes)
+	assert.Equal(t, EnhanceStatusPending, task.PrivateData.EnhanceStatus)
+}
+
+func TestEnsureEnhanced4kSuccessRecordsRateTier4k(t *testing.T) {
+	kit := &fakeMediaKit{jobStatus: "completed", videoURL: "https://mk.example/4k.mp4"}
+	var last *model.EnhanceCost
+	a := &TaskAdaptor{mediaKit: kit, insertEnhanceCost: func(c *model.EnhanceCost) error {
+		last = c
+		return nil
+	}}
+	task := taskWith4kDowngrade()
+	task.Data = []byte(`{"status":"succeeded","resolution":"1080p","content":{"video_url":"https://up.example/1080.mp4"}}`)
+	_, done, err := a.EnsureEnhanced(context.Background(), task, task.PrivateData.EnhanceSourceURL)
+	require.NoError(t, err)
+	require.False(t, done)
+
+	url, done, err := a.EnsureEnhanced(context.Background(), task, task.PrivateData.EnhanceSourceURL)
+	require.NoError(t, err)
+	assert.True(t, done)
+	assert.Equal(t, "https://mk.example/4k.mp4", url)
+	require.NotNil(t, last)
+	assert.Equal(t, EnhanceStatusSucceeded, last.Status)
+	assert.Equal(t, RateTier4k, last.RateTier)
+	assert.Equal(t, Res4k, last.RequestedResolution)
+	assert.Equal(t, Res1080p, last.UpstreamResolution)
+	// 5s / 24fps / 4k → 5/60 × 20 元/分钟 × 100 = 167 分
+	assert.Equal(t, 167, last.AmountFen)
+
+	assert.Contains(t, string(task.Data), "/v1/videos/task_test/content")
+	assert.NotContains(t, string(task.Data), "https://mk.example/4k.mp4")
+	assert.NotContains(t, string(task.Data), Res1080p)
+}
+
+func taskWith4kDowngrade() *model.Task {
+	task := taskWithDowngrade()
+	task.PrivateData.RequestedResolution = Res4k
+	task.PrivateData.UpstreamResolution = Res1080p
+	task.PrivateData.EnhanceSourceURL = "https://up.example/1080.mp4"
+	return task
+}
+
 type recordingKit struct {
 	onSubmit func(videoURL, resolution string)
 	n        int

@@ -15,7 +15,7 @@
 | `upstream_resolution` | 上游档（Seedance 实际生成） |
 | `output_duration_ms` | 输出时长（毫秒） |
 | `fps` | 查价表用的帧率 |
-| `rate_tier` | 价表档：`720p` / `1080p` / `2k` |
+| `rate_tier` | 价表档：`720p` / `1080p` / `2k` / `4k` |
 | `amount_fen` | 整数分；失败行为 0 |
 | `mediakit_job_id` | MediaKit 任务 ID |
 | `status` | `succeeded` / `failed` |
@@ -24,6 +24,7 @@
 
 - 一行一次超分尝试。三次失败 = 三行 `failed`、金额 0。
 - 成功金额：`round(分钟 × 官方元/分钟 × 100)`。例：5 秒、1080p、≤30fps → 42 分。
+- **金额算得 0 的成功行**：回包时长缺失、或档位在价表里无价时金额为 0，适配器会打一条 `LogWarn`（「succeeded but was not priced」）避免静默。对账看到 0 的成功行应先查这条日志，不要直接当成免费。
 - 金额不进 `logs.quota`、不进 `channels.used_quota` / 周期限额 / 硬上限。
 - `tasks.private_data` 只留当前 `EnhanceJobID` 做关联，不存金额。
 - 管理台任务日志：有任意一行即视为超分单（成功或失败都算）；用户任务列表不返回。

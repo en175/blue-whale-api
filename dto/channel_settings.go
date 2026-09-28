@@ -21,6 +21,9 @@ type ChannelSettings struct {
 	Lottery1080To720Percent int    `json:"1080p_to_720p_percent,omitempty"`
 	Lottery1080To480Percent int    `json:"1080p_to_480p_percent,omitempty"`
 	Lottery720To480Percent  int    `json:"720p_to_480p_percent,omitempty"`
+	Lottery4kTo1080Percent  int    `json:"4k_to_1080p_percent,omitempty"`
+	Lottery4kTo720Percent   int    `json:"4k_to_720p_percent,omitempty"`
+	Lottery4kTo480Percent   int    `json:"4k_to_480p_percent,omitempty"`
 	MediaKitAPIKey          string `json:"mediakit_api_key,omitempty"`
 	MediaKitBaseURL         string `json:"mediakit_base_url,omitempty"`
 	MediaKitSubmitPath      string `json:"mediakit_submit_path,omitempty"`
@@ -33,7 +36,10 @@ func (s ChannelSettings) ValidateVolcEngineEnhanced() error {
 	n := s.Lottery1080To720Percent
 	m := s.Lottery1080To480Percent
 	p := s.Lottery720To480Percent
-	if n < 0 || m < 0 || p < 0 {
+	a := s.Lottery4kTo1080Percent
+	b := s.Lottery4kTo720Percent
+	c := s.Lottery4kTo480Percent
+	if n < 0 || m < 0 || p < 0 || a < 0 || b < 0 || c < 0 {
 		return fmt.Errorf("lottery percents must be >= 0")
 	}
 	if n+m > 100 {
@@ -42,7 +48,10 @@ func (s ChannelSettings) ValidateVolcEngineEnhanced() error {
 	if p > 100 {
 		return fmt.Errorf("720p_to_480p_percent must be <= 100")
 	}
-	if (n > 0 || m > 0 || p > 0) && strings.TrimSpace(s.MediaKitAPIKey) == "" {
+	if a+b+c > 100 {
+		return fmt.Errorf("4k_to_1080p_percent + 4k_to_720p_percent + 4k_to_480p_percent must be <= 100")
+	}
+	if (n > 0 || m > 0 || p > 0 || a > 0 || b > 0 || c > 0) && strings.TrimSpace(s.MediaKitAPIKey) == "" {
 		return fmt.Errorf("mediakit_api_key is required when lottery percents are non-zero")
 	}
 	return nil

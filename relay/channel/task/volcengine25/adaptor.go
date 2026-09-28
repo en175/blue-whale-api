@@ -56,7 +56,7 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 
 	// 样片只允许 480p。这里明确拒绝而不是静默改写：静默改写会让客户端以为
 	// 自己拿到了 1080p，而拒绝能在预扣费之前就返回。
-	if isDraftRequest(&req) {
+	if taskcommon.IsDraftRequest(&req) {
 		if resolution := requestedResolution(&req); resolution != "" && resolution != Res480p {
 			return service.TaskErrorWrapperLocal(
 				fmt.Errorf("draft task only supports resolution %s", Res480p), "invalid_resolution", http.StatusBadRequest)

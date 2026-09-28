@@ -198,6 +198,9 @@ export const channelFormSchema = z
     lottery_1080p_to_720p_percent: z.number().optional(),
     lottery_1080p_to_480p_percent: z.number().optional(),
     lottery_720p_to_480p_percent: z.number().optional(),
+    lottery_4k_to_1080p_percent: z.number().optional(),
+    lottery_4k_to_720p_percent: z.number().optional(),
+    lottery_4k_to_480p_percent: z.number().optional(),
     mediakit_api_key: z.string().optional(),
     mediakit_base_url: z.string().optional(),
     mediakit_submit_path: z.string().optional(),
@@ -331,7 +334,24 @@ export const channelFormSchema = z
           '720p lottery percent must be 100 or less'
         )
       }
-      if ((n > 0 || m > 0 || p > 0) && !data.mediakit_api_key?.trim()) {
+      const a = data.lottery_4k_to_1080p_percent || 0
+      const b = data.lottery_4k_to_720p_percent || 0
+      const c = data.lottery_4k_to_480p_percent || 0
+      if (a < 0 || b < 0 || c < 0) {
+        addRequiredIssue(
+          ctx,
+          'lottery_4k_to_1080p_percent',
+          'Lottery percents must be 0 or greater'
+        )
+      }
+      if (a + b + c > 100) {
+        addRequiredIssue(
+          ctx,
+          'lottery_4k_to_480p_percent',
+          '4k lottery percents must add up to 100 or less'
+        )
+      }
+      if ((n > 0 || m > 0 || p > 0 || a > 0 || b > 0 || c > 0) && !data.mediakit_api_key?.trim()) {
         addRequiredIssue(
           ctx,
           'mediakit_api_key',
@@ -394,6 +414,9 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   lottery_1080p_to_720p_percent: 0,
   lottery_1080p_to_480p_percent: 0,
   lottery_720p_to_480p_percent: 0,
+  lottery_4k_to_1080p_percent: 0,
+  lottery_4k_to_720p_percent: 0,
+  lottery_4k_to_480p_percent: 0,
   mediakit_api_key: '',
   mediakit_base_url: '',
   mediakit_submit_path: '',
@@ -443,6 +466,9 @@ export function transformChannelToFormDefaults(
     lottery_1080p_to_720p_percent: 0,
     lottery_1080p_to_480p_percent: 0,
     lottery_720p_to_480p_percent: 0,
+    lottery_4k_to_1080p_percent: 0,
+    lottery_4k_to_720p_percent: 0,
+    lottery_4k_to_480p_percent: 0,
     mediakit_api_key: '',
     mediakit_base_url: '',
     mediakit_submit_path: '',
@@ -462,6 +488,9 @@ export function transformChannelToFormDefaults(
         lottery_1080p_to_720p_percent: Number(parsed['1080p_to_720p_percent']) || 0,
         lottery_1080p_to_480p_percent: Number(parsed['1080p_to_480p_percent']) || 0,
         lottery_720p_to_480p_percent: Number(parsed['720p_to_480p_percent']) || 0,
+        lottery_4k_to_1080p_percent: Number(parsed['4k_to_1080p_percent']) || 0,
+        lottery_4k_to_720p_percent: Number(parsed['4k_to_720p_percent']) || 0,
+        lottery_4k_to_480p_percent: Number(parsed['4k_to_480p_percent']) || 0,
         mediakit_api_key: parsed.mediakit_api_key || '',
         mediakit_base_url: parsed.mediakit_base_url || '',
         mediakit_submit_path: parsed.mediakit_submit_path || '',
@@ -596,6 +625,9 @@ function buildSettingJSON(formData: ChannelFormValues): string {
       formData.lottery_1080p_to_480p_percent || 0
     settingObj['720p_to_480p_percent'] =
       formData.lottery_720p_to_480p_percent || 0
+    settingObj['4k_to_1080p_percent'] = formData.lottery_4k_to_1080p_percent || 0
+    settingObj['4k_to_720p_percent'] = formData.lottery_4k_to_720p_percent || 0
+    settingObj['4k_to_480p_percent'] = formData.lottery_4k_to_480p_percent || 0
     settingObj.mediakit_api_key = formData.mediakit_api_key || ''
     settingObj.mediakit_base_url = formData.mediakit_base_url || ''
     settingObj.mediakit_submit_path = formData.mediakit_submit_path || ''

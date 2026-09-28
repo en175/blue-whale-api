@@ -57,21 +57,6 @@ type finalizePayload struct {
 // BuildRequestBody 读回，而不必重解析请求体。
 const finalizeRequestContextKey = "volcengine25_finalize_request"
 
-// isDraftRequest 判定本次提交是否为样片请求。两条入口都支持：Ark 顶层的
-// draft 参数（req.Draft），以及 new-api 系任务 API 惯用的 metadata.draft。
-func isDraftRequest(req *relaycommon.TaskSubmitReq) bool {
-	if req.Draft != nil && bool(*req.Draft) {
-		return true
-	}
-	switch v := req.Metadata["draft"].(type) {
-	case bool:
-		return v
-	case string:
-		return strings.EqualFold(strings.TrimSpace(v), "true")
-	}
-	return false
-}
-
 // requestedResolution 读取 metadata.resolution 并归一化（小写、去空白）。
 func requestedResolution(req *relaycommon.TaskSubmitReq) string {
 	res, _ := req.Metadata["resolution"].(string)
