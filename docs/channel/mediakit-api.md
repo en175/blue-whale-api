@@ -1,6 +1,6 @@
 # AI MediaKit 工具接口文档
 
-火山引擎 **AI MediaKit** 是视频云的智能多媒体工具集：图像的增强/抠图/擦除/翻译、视频的增强/转码/字幕/抠像/换脸、音频的分离/转码/抽音轨/截取等。本网关共开放 **66 个工具**——官方三大集合下的 64 个，外加集合外的 `extract-audio`（视频抽音轨）与 `trim-audio`（音频截取）。
+火山引擎 **AI MediaKit** 是视频云的智能多媒体工具集：图像的增强/抠图/擦除/翻译、视频的增强/转码/字幕/抠像/换脸、音频的分离/转码/抽音轨/截取/混合/调速等。本网关共开放 **69 个工具**——官方三大集合下的 64 个，外加集合外的 5 个：`extract-audio`（视频抽音轨）、`trim-audio`（音频截取）、`mix-audio`（音频混合）、`mux-audio-video`（音视频合成）、`adjust-audio-speed`（音频调速）。
 
 本网关把它整体接进来，**请求体与上游完全一致、零改写**——你按 MediaKit 原生协议写请求，网关只做三件事：**鉴权、按工具路由、计费**。所以本页的每个示例都可以直接复制运行。
 
@@ -156,7 +156,7 @@ curl -X GET 'https://<网关域名>/v1/mediakit/tasks/task_xxxxxxxxxxxxxxxx' \
 | 计费维度 | 覆盖 | 说明 |
 |---|---|---|
 | **按次** | 17 个（图像 14 + 视频 2 + 音频 1） | 每次调用一个固定价 |
-| **按时长** | 36 个（视频 31 + 音频 5，音频含集合外的 `extract-audio` 与 `trim-audio`） | 按处理时长（元/分钟）计。提交时按预估时长**预扣**，任务完成后用上游回包的真实时长**结算差额**（多退少补） |
+| **按时长** | 39 个（视频 32 + 音频 7，含集合外 5 个的全部） | 按处理时长（元/分钟）计。提交时按预估时长**预扣**，任务完成后用上游回包的真实时长**结算差额**（多退少补） |
 | **按量 GiB** | 13 个（图像基础编辑族） | 按处理量计 |
 
 **3 个元信息获取工具的定价说明**：`probe-image-metadata`、`probe-video-metadata`、`probe-audio-metadata` 只读素材的容器/流信息、不产出文件，网关按上游口径给它们单独定价：
@@ -221,7 +221,7 @@ curl -X GET 'https://<网关域名>/v1/mediakit/tasks/task_xxxxxxxxxxxxxxxx' \
 | 26 | 图像压缩 | `POST /v1/mediakit/sync/compress-image` |
 | 27 | 图像元信息获取 | `POST /v1/mediakit/sync/probe-image-metadata` |
 
-**视频工具（异步，33 个）**
+**视频工具（异步，34 个）**
 
 | # | 工具 | 端点 |
 |---|---|---|
@@ -258,8 +258,9 @@ curl -X GET 'https://<网关域名>/v1/mediakit/tasks/task_xxxxxxxxxxxxxxxx' \
 | 31 | 字幕擦除（标准版） | `POST /v1/mediakit/erase-video-subtitle` |
 | 32 | 剧本还原（重绘场景） | `POST /v1/mediakit/drama-script-vertical` |
 | 33 | 视频元信息获取 | `POST /v1/mediakit/probe-video-metadata` |
+| 34 | 音视频合成（加 BGM / 换配音） | `POST /v1/mediakit/mux-audio-video` |
 
-**音频工具（异步，6 个）**
+**音频工具（异步，8 个）**
 
 | # | 工具 | 端点 |
 |---|---|---|
@@ -269,8 +270,10 @@ curl -X GET 'https://<网关域名>/v1/mediakit/tasks/task_xxxxxxxxxxxxxxxx' \
 | 4 | 音频截取 | `POST /v1/mediakit/trim-audio` |
 | 5 | 语音端点识别 | `POST /v1/mediakit/detect-voice-activity` |
 | 6 | 音频元信息获取 | `POST /v1/mediakit/probe-audio-metadata` |
+| 7 | 音频混合（多轨混音） | `POST /v1/mediakit/mix-audio` |
+| 8 | 音频调速（快放 / 慢放） | `POST /v1/mediakit/adjust-audio-speed` |
 
-> **本页覆盖全部 66 个工具**：官方三个集合下的 64 个与火山登记的数量一一对应（视频 33 / 图像 27 / 音频 4）——没有遗漏；在此之上另开放 2 个集合外的工具——`extract-audio`（第 3 行，详见 [§7.3](#73-视频抽音轨-extract-audio)）与 `trim-audio`（第 4 行，详见 [§7.4](#74-音频截取-trim-audio)），它们不在官方那三个集合里，分别应下游「音频提取」与「音频截取」需求额外接入。
+> **本页覆盖全部 69 个工具**：官方三个集合下的 64 个与火山登记的数量一一对应（视频 33 / 图像 27 / 音频 4）——没有遗漏；在此之上另开放 5 个集合外的工具——视频侧 `mux-audio-video`（第 34 行，详见 [§6.34](#634-音视频合成-mux-audio-video)），音频侧 `extract-audio`（第 3 行，详见 [§7.3](#73-视频抽音轨-extract-audio)）、`trim-audio`（第 4 行，详见 [§7.4](#74-音频截取-trim-audio)）、`mix-audio`（第 7 行，详见 [§7.7](#77-音频混合-mix-audio)）、`adjust-audio-speed`（第 8 行，详见 [§7.8](#78-音频调速-adjust-audio-speed)）。它们不在官方那三个集合里，分别应下游「音视频合成」「音频提取」「音频截取」「音频混合」「音频调速」需求额外接入。
 
 >
 > 另有「剪辑工具 API」（27 个）与「大模型处理工具 API」（3 个）两个集合整体未接入：前者官方未给出逐工具的独立标识，后者依赖火山方舟按 token 计费。详见 [`mediakit.md`](./mediakit.md) 第 1 节。
@@ -1785,7 +1788,7 @@ curl -X POST 'https://<网关域名>/v1/mediakit/sync/probe-image-metadata' \
 
 ---
 
-## 6. 视频工具（异步，33 个）
+## 6. 视频工具（异步，34 个）
 
 全部为异步工具，端点为 `POST /v1/mediakit/{tool}`。提交后拿 `task_id`，轮询 `GET /v1/mediakit/tasks/{task_id}` 取结果，流程见 [2.2](#22-异步调用视频--音频工具)。
 
@@ -3932,14 +3935,84 @@ curl -X POST 'https://<网关域名>/v1/mediakit/probe-video-metadata' \
 
 ---
 
+### 6.34 音视频合成 `mux-audio-video`
+
+**作用：** 给一个已有视频配上新的音轨——可以**混音**（保留视频原声，与新音频同时播放）也可以**替换**（丢掉原声，只用新音频）。适合为无声素材或希望保留现场声的视频加 BGM、为成片换配音整轨、以及把画面与一段独立录制的旁白合到一起等场景。与 [7.7 音频混合](#77-音频混合-mix-audio) 的分工是：那个只处理音频、输出音频；这个的输入必带一路视频，输出是视频。
+
+- **端点：** `POST /v1/mediakit/mux-audio-video`
+- **计费：** 按时长（元/分钟）
+
+**请求参数**
+
+| 参数 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `video_url` | string | 是 | 待处理的视频地址。支持公网 HTTP/HTTPS URL、本地上传 (`mediakit://`)、火山引擎视频点播 (`vod://`)、火山引擎对象存储 (`tos://`) 四种协议；支持 mp4/flv/ts/avi/mov/wmv/mkv 等主流格式，最高 4K |
+| `audio_url` | string | 是 | 要合入的音频地址，协议支持同上；支持 mp3/aac/wav/m4a 等主流格式 |
+| `is_audio_reserve` | boolean | 否 | 是否保留视频原有音轨。`true`（默认）：原声与新音频**混合**；`false`：丢掉原声，**替换**为新音频 |
+| `is_video_audio_sync` | boolean | 否 | 是否启用**时长对齐**，默认 `false`。不启用时输出总时长取两者中较长者：音频更长则视频流结束后**维持末帧画面**到音频结束，视频更长则音频流结束后**保持静音**到视频结束 |
+| `sync_mode` | string | 否 | 启用对齐后以谁为基准：`video`（默认）/ `audio` |
+| `sync_method` | string | 否 | 启用对齐后的处理方式：`trim`（默认，裁剪较长者）/ `speed`（变速使两者等长） |
+
+> 官方**建议优先用 `trim`**：它不改变播放速率与音调，只舍掉多余部分，听感观感最自然。`speed` 只适合音视频时长差异在 **10% 以内**的场景；差异过大时画面会明显卡顿（慢放）或鬼畜（快放），音频还会变调。
+>
+> 单个输入文件建议不超过 10 GB。
+
+**调用示例**
+
+```bash
+curl -X POST 'https://<网关域名>/v1/mediakit/mux-audio-video' \
+  -H 'Authorization: Bearer sk-<你的网关令牌>' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "video_url": "https://example.com/my_vlog.mp4",
+    "audio_url": "https://example.com/bgm.mp3"
+  }'
+```
+
+**响应**
+
+```json
+{
+  "success": true,
+  "task_id": "amk-tool-mux-audio-video-1704500",
+  "message": ""
+}
+```
+
+拿到 `task_id` 后用 `GET /v1/mediakit/tasks/{task_id}` 轮询，直到 `status` 为 `completed` / `failed`：
+
+```json
+{
+  "success": true,
+  "task_id": "amk-tool-mux-audio-video-1704500",
+  "task_type": "mux-audio-video",
+  "status": "completed",
+  "result": {
+    "video_url": "https://example.volcvideo.com/final_video.mp4?auth_key=..."
+  },
+  "expires_at": 1774615474,
+  "finished_at": 1774442675
+}
+```
+
+**产物字段：** `result.video_url`（约 24h 有效的临时下载链接，请及时转存）。默认输出容器为 **MP4**。
+
+> ⚠️ **本工具的 `result` 里没有 `duration`**（上游官方响应示例即如此）。本渠道是按时长计费的——提交时按渠道配的预估分钟预扣，任务完成后用真实时长结算差额；取不到真实时长时网关**保持预扣不变**（不报错、不会按猜测的时长收费，只在后端日志留一行 `result 键：…`）。因此在管理员把真实时长口径确认下来之前，本工具实际是**按预估分钟**收费。**本期对客零价，不影响；开始收费前必须核对这一条。**
+>
+> 另：本工具的上游 slug 与产物键取自官方开发指南，**尚未在真实上游实测**（本仓踩过文档 slug 写错的前例）。验收时以「返回的 400 来自上游并报缺字段」为准——那是 slug 存在的证据。
 
 ---
 
-## 7. 音频工具（异步，6 个）
+
+---
+
+## 7. 音频工具（异步，8 个）
 
 全部为异步工具，端点为 `POST /v1/mediakit/{tool}`。流程同视频工具。除「音频元信息获取」按次计费外，其余均按处理时长计费。
 
-> 其中 `extract-audio`（视频抽音轨）与 `trim-audio`（音频截取）**不在火山官方那三个工具集合内**——它们不属于视频 33 / 图像 27 / 音频 4 的任何一类，是分别应「音频提取」「音频截取」需求额外接入的，上游各有独立 slug 与独立产物。其余 4 个是官方音频集合的完整登记。
+> 其中 `extract-audio`（视频抽音轨）、`trim-audio`（音频截取）、`mix-audio`（音频混合）、`adjust-audio-speed`（音频调速）**不在火山官方那三个工具集合内**——它们不属于视频 33 / 图像 27 / 音频 4 的任何一类，是分别应下游同名需求额外接入的，上游各有独立 slug 与独立产物。其余 4 个是官方音频集合的完整登记。
+>
+> 集合外工具的证据强度分两档，别混：`extract-audio` / `trim-audio` 的上游契约**已实测核对**；`mix-audio` / `adjust-audio-speed` 目前**只来自官方开发指南**（其中 `adjust-audio-speed` 的产物键是推断，见 [§7.8](#78-音频调速-adjust-audio-speed)）。
 
 ### 7.1 人声背景音分离 `separate-voice`
 
@@ -4298,6 +4371,121 @@ curl -X POST 'https://<网关域名>/v1/mediakit/probe-audio-metadata' \
 
 ---
 
+### 7.7 音频混合 `mix-audio`
+
+**作用：** 把多路音频**混成一条新音频**——背景音乐、音效、旁白各自独立成文件，合成时同时播放。适合给播客做带 BGM 与音效的片头、把多段分段录音并成一段完整节目、以及为纯人声素材铺一层背景音乐等场景。与 [6.34 音视频合成](#634-音视频合成-mux-audio-video) 的区别是：那个的输出是视频且输入必带视频，这个只进出音频、不碰画面。
+
+- **端点：** `POST /v1/mediakit/mix-audio`
+- **计费：** 按时长（元/分钟）
+
+**请求参数**
+
+| 参数 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `audio_urls` | string[] | 是 | 待混合的音频地址**数组**，最少 1 个、最多 100 个。每项支持公网 HTTP/HTTPS URL、本地上传 (`mediakit://`)、火山引擎视频点播 (`vod://`)、火山引擎对象存储 (`tos://`) 四种协议；支持 mp3/wav/flac 等主流格式 |
+
+> 单个输入文件建议不超过 10 GB。
+
+**调用示例**
+
+```bash
+curl -X POST 'https://<网关域名>/v1/mediakit/mix-audio' \
+  -H 'Authorization: Bearer sk-<你的网关令牌>' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "audio_urls": [
+      "https://example.com/narration.mp3",
+      "https://example.com/background_music.mp3"
+    ]
+  }'
+```
+
+**响应**
+
+```json
+{
+  "success": true,
+  "task_id": "amk-tool-mix-audio-1501200",
+  "message": ""
+}
+```
+
+拿到 `task_id` 后用 `GET /v1/mediakit/tasks/{task_id}` 轮询，直到 `status` 为 `completed` / `failed`：
+
+```json
+{
+  "success": true,
+  "task_id": "amk-tool-mix-audio-1501200",
+  "task_type": "mix-audio",
+  "status": "completed",
+  "result": {
+    "audio_url": "https://example.volcvideo.com/mixed_output.mp3?auth_key=...",
+    "duration": 185.5
+  }
+}
+```
+
+**产物字段：** `result.audio_url`（约 24h 有效的临时下载链接，请及时转存）、`result.duration`（**秒**）。默认输出容器为 **MP3**。结算按 `result.duration` 走。
+
+> **输出时长由最长的输入决定。** 混一段 30 秒旁白与一段 60 秒 BGM，成品是 60 秒：前 30 秒两条同时播放，后 30 秒只剩 BGM。按多长的素材送进来就按多长计费，先裁短再混能省钱。
+>
+> ⚠️ 上游 slug 与产物键取自官方开发指南，**尚未在真实上游实测**。验收时以「返回的 400 来自上游并报缺字段」为准。
+
+---
+
+### 7.8 音频调速 `adjust-audio-speed`
+
+**作用：** 改变一段音频的播放倍速（快放 / 慢放），并**通过算法保持音调自然**——不是简单重采样导致的「变尖 / 变沉」。适合播客与有声书的倍速版、教学演示与口播的节奏调整、以及把素材时长对齐到目标时长等场景。
+
+- **端点：** `POST /v1/mediakit/adjust-audio-speed`
+- **计费：** 按时长（元/分钟）
+
+**请求参数**
+
+| 参数 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `audio_url` | string | 是 | 待调速音频地址，支持公网 HTTP/HTTPS URL、本地上传 (`mediakit://`)、火山引擎视频点播 (`vod://`)、火山引擎对象存储 (`tos://`) 四种协议 |
+| `speed` | number | 是 | 播放倍速。**大于 `1.0` 快放**（如 `2.0` 表示 2 倍速），**小于 `1.0` 慢放**（如 `0.5` 表示半速）。`1.0` 为原速 |
+
+**调用示例**
+
+```bash
+curl -X POST 'https://<网关域名>/v1/mediakit/adjust-audio-speed' \
+  -H 'Authorization: Bearer sk-<你的网关令牌>' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "audio_url": "https://example.com/your_audio.mp3",
+    "speed": 2.0
+  }'
+```
+
+**响应**
+
+拿到 `task_id` 后用 `GET /v1/mediakit/tasks/{task_id}` 轮询，直到 `status` 为 `completed` / `failed`：
+
+```json
+{
+  "success": true,
+  "task_id": "amk-tool-adjust-audio-speed-123456789",
+  "task_type": "adjust-audio-speed",
+  "status": "completed",
+  "result": {
+    "audio_url": "https://example.volcvideo.com/speed-adjusted-audio.mp3?auth_key=...",
+    "duration": 16.47
+  }
+}
+```
+
+**产物字段：** `result.audio_url`（约 24h 有效的临时下载链接，请及时转存）、`result.duration`（调速**后**的时长，秒）。按它结算。
+
+> **输出时长 ≈ 输入时长 ÷ `speed`。** 一段 32.94 秒的音频按 `2.0` 处理得到约 16.47 秒。注意计费按**输出**时长走，快放会**减少**收费时长。
+>
+> ⚠️ **本节的响应形状是推断的，必须实测核对。** 官方只给出了**视频**调速（`adjust-video-speed`）的完整响应示例——`task_type` 为 `adjust-video-speed`、`result` 含 `video_url` + `resolution` + `duration`；音频调速仅在文末一句说明「流程完全一致，唯一的区别是调用 `adjust-audio-speed` 并把参数名从 `video_url` 换成 `audio_url`」。据此推得 `task_type=adjust-audio-speed` 与产物键 `result.audio_url`，但**官方未给出音频版的响应样例**。若实测键名不同，网关会取到空产物（`result` 里没有约定的 `audio_url` 键），届时需在注册表给该工具显式声明产物路径——**调用方在验收前不要依赖这个字段名**。
+>
+> 另：「视频调速」`adjust-video-speed` 与本工具同族但**网关未登记**（不在本期范围），调用 `POST /v1/mediakit/adjust-video-speed` 会得到 `unknown mediakit tool`。
+
+---
+
 
 ---
 
@@ -4393,18 +4581,19 @@ curl -X POST 'https://<网关域名>/v1/mediakit/probe-audio-metadata' \
    - **API Key 填在渠道的「密钥」字段**，不是你自建的别的字段——MediaKit 用单头 `Authorization: Bearer <apiKey>` 鉴权，天然适配渠道密钥机制
    - 上游域名走渠道的「代理/Base URL」字段，默认 `https://mediakit.cn-beijing.volces.com`，一般不用改
 2. **把要开放的模型勾进渠道的模型列表**
-   - 对客模型名是 `mediakit-<工具名>`，例如 `mediakit-enhance-image`。共 66 个，按需勾选即可分批放量
+   - 对客模型名是 `mediakit-<工具名>`，例如 `mediakit-enhance-image`。共 69 个，按需勾选即可分批放量
    - 少勾一个，对应的工具就无法路由
 3. **配模型定价**
    - **同步工具必须配**，否则会直接 `400`（报 `has no model price configured`）；按次/按量的工具填固定价即可
    - 异步工具也要配——按时长的工具按「元/分钟」填，提交时按预估时长预扣、完成后按真实时长结算差额
    - 3 个元信息工具按 [3.6](#36-计费口径) 的口径填：视频/音频元的 0.0001 元/次、图像元的 0.00024 元/次（脚本会自动带上这三个价）
+   - **本期零价的 4 个工具要显式配 `0`，不是不配**：`mediakit-trim-audio`、`mediakit-mix-audio`、`mediakit-mux-audio-video`、`mediakit-adjust-audio-speed`。网关的硬规则是「未配价格直接 400」，所以「免费」的正确形态是配零价；不配会被当成没定价而拒掉。脚本里它们各自有独立变量（`@price_trim` / `@price_mix_audio` / `@price_mux_audio_video` / `@price_adjust_audio_spd`），**不跟随** `@price_per_call`——它们是时长类工具、单价单位是元/分钟，与按次的通用单价不同量纲
 
 另有两个容易踩的点：
 
 - **令牌的模型白名单**：如果给调用方的令牌限制了可用模型，需要把 `mediakit-<工具名>` 加进白名单，否则会被令牌层拦掉。
 - **`mediakit_default_minutes`**：渠道设置里的一项（0–60），用于时长类工具**提交时拿不到真实时长**的估算预扣。填 0 时预扣退回按 `model_price` 基准额度（约 1 分钟量），真实时长的差额在任务完成时补扣——不是「预扣为 0、先用后付」。
 
-一键配置脚本：`scripts/mediakit-bootstrap.sql`（建渠道 + 写全 66 个模型 + 派生路由表 + 可选写定价，幂等可重复执行）。
+一键配置脚本：`scripts/mediakit-bootstrap.sql`（建渠道 + 写全 69 个模型 + 派生路由表 + 可选写定价，幂等可重复执行）。
 
 > 若目标环境设了 `MEMORY_CACHE_ENABLED=true`，直接改数据库不会立刻生效，需要重启服务或触发一次渠道缓存刷新。

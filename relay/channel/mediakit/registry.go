@@ -146,6 +146,14 @@ var toolRegistry = []ToolSpec{
 	// 元信息探测只回 format_meta / video_stream_meta / audio_stream_meta 三段数据，
 	// 无产物 URL。官方按成功处理次数计费（0.1 元/千次），网关按同一口径定价。
 	{Name: "probe-video-metadata", Mode: BillingPerCall, ResultKind: ResultNone},
+	// 音视频合成（保原声混合 / 换掉原声二选一）。不在官方那三个集合（视频 33 /
+	// 图像 27 / 音频 4）内，属集合外额外接入，供下游「音视频合成」功能使用。
+	// 上游入参 video_url + audio_url（可选 is_audio_reserve / is_video_audio_sync /
+	// sync_mode / sync_method），产物键 result.video_url 取自官方开发指南。
+	// ⚠️ 官方完整响应示例里 result 只有 video_url、没有 duration——若真机确认如此，
+	// 本工具完成时取不到真实时长，会保持预扣额度不变（见 AdjustBillingOnCompleteWithClamp），
+	// 即结算退化成「按预估分钟收费」。本期零价无影响，开始收费前必须核对。
+	{Name: "mux-audio-video", Mode: BillingDuration, ResultKind: ResultVideo},
 
 	// ── 异步：音频工具 ──────────────────────────────────────────────
 	// 人声/伴奏分离同时产出两轨且都在顶层，必须指明取人声轨，否则会随键名字典序漂移。
@@ -162,6 +170,16 @@ var toolRegistry = []ToolSpec{
 	{Name: "detect-voice-activity", Mode: BillingDuration, ResultKind: ResultNone},
 	// 同 probe-video-metadata：只回元数据、无产物，官方按成功次数计费（0.1 元/千次）。
 	{Name: "probe-audio-metadata", Mode: BillingPerCall, ResultKind: ResultNone},
+	// 音频混合（多轨混成一条，1–100 个输入）。集合外额外接入，供下游「音频混合」
+	// 功能使用。上游入参 audio_urls 数组，官方给了完整响应示例：result.audio_url +
+	// duration（秒），两个键都在约定之列，故无需 ResultPath。输出时长由最长输入决定。
+	{Name: "mix-audio", Mode: BillingDuration, ResultKind: ResultAudio},
+	// 音频调速（speed > 1 快放，< 1 慢放）。集合外额外接入，供下游「音频调速」使用。
+	// ⚠️ 官方只给了**视频**调速的完整响应示例（task_type=adjust-video-speed、
+	// result.video_url + resolution + duration），音频调速仅一句「流程完全一致，把
+	// video_url 换成 audio_url」，故 task_type=adjust-audio-speed 与 result.audio_url
+	// 均为推断、未经实测。真机若键名不同，ResultURL 会取到空串，需在此显式补 ResultPath。
+	{Name: "adjust-audio-speed", Mode: BillingDuration, ResultKind: ResultAudio},
 }
 
 // toolIndex 由 toolRegistry 构建，键为上游 slug。在 init 中填充，保证

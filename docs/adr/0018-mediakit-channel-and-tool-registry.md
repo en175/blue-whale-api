@@ -12,12 +12,12 @@ master 上 MediaKit **已经接了一个工具**——「画质增强（大模�
 
 「全部工具」的口径以官方文档的**工具表**为准，共 **64 条**：视频 33、图像 27（14 + 图像基础编辑 13 子工具）、音频 4。计划阶段的「46 个」来自文档三个标题的相加（28 + 14 + 4），标题数与实际表行数不一致，以表为准。注册表**在这三个集合上一一对应，无遗漏**。
 
-> 后续另接入 2 条**集合外**的工具：`extract-audio`（视频抽音轨）与 `trim-audio`（音频截取），故注册表总数为 66。它们不属于上述三个集合，是分别应下游「音频提取」「音频截取」需求额外接入的，见文末「后续」。
+> 后续另接入 5 条**集合外**的工具：`extract-audio`（视频抽音轨）、`trim-audio`（音频截取）、`mix-audio`（音频混合）、`mux-audio-video`（音视频合成）、`adjust-audio-speed`（音频调速），故注册表总数为 69。它们不属于上述三个集合，是分别应下游「音频提取」「音频截取」「音频混合」「音视频合成」「音频调速」需求额外接入的，见文末「后续」。
 
 接入时面临的形态选择：
 
 1. **按模态挂到已有渠道**（视频→火山增强/方舟，图像→方舟/jiekouAI，音频→DoubaoAudio）。被否：MediaKit 是独立协议与独立凭证，挂靠任何一条已有渠道都会让同一渠道绑两套协议，任一方接口变动都牵连另一方。违背 ADR-0003 的渠道边界原则（边界由上游协议与端点决定）。
-2. **一个工具一个渠道类型**。被否：66 个渠道类型会挤爆渠道枚举，且它们的协议、鉴权、计费框架完全相同，只有路径与费率不同——那是注册表的职责，不是渠道的职责。
+2. **一个工具一个渠道类型**。被否：69 个渠道类型会挤爆渠道枚举，且它们的协议、鉴权、计费框架完全相同，只有路径与费率不同——那是注册表的职责，不是渠道的职责。
 
 ## 决策
 
@@ -25,7 +25,7 @@ master 上 MediaKit **已经接了一个工具**——「画质增强（大模�
 
 `relay/relay_adaptor.go` 有两张互不干扰的表：`GetAdaptor(apiType)`（同步）与 `GetTaskAdaptor(platform)`（异步）。同一渠道类型同时挂两张表**有先例**（45、51、24），谁被调用只由路由决定。故**不需要两个渠道类型**：同步工具走普通 `Adaptor`（`controller.Relay` 管道），异步工具走 `TaskAdaptor`（`controller.RelayTask` 管道）。
 
-### 工具：66 条注册表，路径只来自服务端
+### 工具：69 条注册表，路径只来自服务端
 
 `relay/channel/mediakit/registry.go` 是唯一事实来源，每条记录 `{Name, Path, Sync, Mode, ResultKind}`。客户端传的 `:tool` **只用于 `LookupTool` 查表**，查不到一律 400；上游 URL 由表项写死的 `Path` 拼成，绝不接受客户端字符串参与拼接——否则 `base + "/api/v1/tools/" + 客户端输入` 是明显的路径穿越面。
 
@@ -41,11 +41,11 @@ MediaKit 原生请求体里没有 `model` 字段，逐字段映射既引维护�
 
 | 模式 | 覆盖 | 对客口径 |
 |---|---|---|
-| 按时长 | 视频 31 + 音频 5 | 管理员按元/分钟配 `model_price`；提交预扣，完成用上游回包的真实时长结算差额 |
+| 按时长 | 视频 32 + 音频 7 | 管理员按元/分钟配 `model_price`；提交预扣，完成用上游回包的真实时长结算差额 |
 | 按次 | 同步图像工具 14 + 视频抽帧 `extract-frames` + `probe-video-metadata` + `probe-audio-metadata` | 每次固定价 |
 | 按量 GiB | 图像基础编辑 13 个子工具 | 直接按超出档单价 0.025 元/GiB，**不套官方「前 10 TiB 免费 + 自然月阶梯」** |
 
-注册表共 66 条：同步 27（14 按次 + 13 按量，全部是图像工具）、异步 39（33 视频 + 6 音频，音频含集合外的 `extract-audio` 与 `trim-audio`）。
+注册表共 69 条：同步 27（14 按次 + 13 按量，全部是图像工具）、异步 42（34 视频 + 8 音频，音视频两侧共含集合外的 5 条）。
 
 GiB 档不套阶梯是为了让三类计费量**全部逐请求可算**，网关无需维护账号级月度累计表。
 
@@ -65,7 +65,7 @@ GiB 档不套阶梯是为了让三类计费量**全部逐请求可算**，网关
 
 ## 理由
 
-**为什么透传而不是 OpenAI 兼容转换**：66 个工具的入参面宽且几乎不重叠（`video_url` / `image_url` / `audio_url` / 各种档位参数），逐工具写 DTO 是 66 套映射的维护成本，且上游加参数就要发版。透传让上游协议成为客户端契约，网关只负责鉴权、锁模型与计费——与 ADR-0004（DoubaoAudio）、ADR-0005（素材库）、ADR-0008（HighwayAPI）同构。MediaKit 比它们更纯：body 里没有 `model` 字段，一个字都不用改。
+**为什么透传而不是 OpenAI 兼容转换**：69 个工具的入参面宽且几乎不重叠（`video_url` / `image_url` / `audio_url` / 各种档位参数），逐工具写 DTO 是 69 套映射的维护成本，且上游加参数就要发版。透传让上游协议成为客户端契约，网关只负责鉴权、锁模型与计费——与 ADR-0004（DoubaoAudio）、ADR-0005（素材库）、ADR-0008（HighwayAPI）同构。MediaKit 比它们更纯：body 里没有 `model` 字段，一个字都不用改。
 
 **为什么查询走本库而不代理上游**：客户端持有的是网关公开任务 ID（`task_xxx`），直连上游 `/api/v1/tasks/{id}` 既暴露上游任务号，也允许越权枚举他人任务。查询落本库 `tasks` 表（照抄 `videoFetchByIDRespBodyBuilder`），渠道由任务记录决定，不重新选渠道。
 
@@ -90,9 +90,19 @@ GiB 档不套阶梯是为了让三类计费量**全部逐请求可算**，网关
    异步侧**无同类守卫，且确实构成少收面**——本文早期版本断言「异步唯一的按次工具 `extract-frames` 没有帧数/张数入参，产出规模不可由客户端线性放大」，**该断言是错的**。实测异步侧有三个多产物字段：`drama-recap.batch_count`、`drama-recap-vertical.max_count`（范围 [1, 100]，**默认值 3**——不传也会产出多条）。异步走 `controller.RelayTask`、不经过 `GetAndValidateRequest`（该函数全仓只有 `controller/relay.go:111` 一个调用点，在 `Relay()` 内），所以同步侧那道守卫不覆盖异步。上游会按倍数真的产出，网关只按一次计费。待补：在 `TaskAdaptor.ValidateRequestAndSetAction`（`task_adaptor.go:54`）里加 `> 1` 拒绝；未做是因为它会拒掉现有多产物调用，属对客行为变更。
    另有一处**无风险的口径差**：`extract-frames` 官方按**截图总张数**计费（0.1 元/千次），网关按次收固定价——它的入参里确实没有帧数/张数字段，产出规模由视频内容决定，客户端无法放大，所以只是计价维度不同、不构成少收面。
 4. **确认生产 `TaskPricePatches` 是否含 MediaKit 工具名**：命中会强制 `PerCallBilling=true`，把时长类工具拖进不结算分支（`DurationSettlement` 已可放行，但仍应确认）。
-5. **未登记的工具**：三个集合下的工具**已全部登记**，无遗留。集合**之外**另接入了 2 条，它们不属于上述三个集合，上游各有独立 slug 与独立产物，均已实测核对，故按同一适配器接入而非另行开洞：
+5. **未登记的工具**：三个集合下的工具**已全部登记**，无遗留。集合**之外**另接入了 5 条，它们不属于上述三个集合，上游各有独立 slug 与独立产物，故按同一适配器接入而非另行开洞。按证据强度分两档——**这个区分要紧**：本仓已踩过「官方文档写的 slug 是错的」（文档写 `scale-image`，真 slug 是 `resize-image`，只有实测才发现），所以文档来源的条目在实测前不能当已知用。
+
+   **已实测核对**：
 
    - `extract-audio`（视频抽音轨，供下游「音频提取」）：`/api/v1/tools/extract-audio`，产物 `result.audio_url` + `duration`。
    - `trim-audio`（音频截取，供下游「音频截取」）：`/api/v1/tools/trim-audio`，入参 `audio_url` + `start_time` / `end_time`（秒），产物同为 `result.audio_url` + `duration`——注意这里的 `duration` 是**裁剪后片段**的时长，不是源文件时长。
+
+   **取自官方开发指南、尚待实测**（IKIT9I）：
+
+   - `mix-audio`（音频混合，供下游「音频混合」）：`/api/v1/tools/mix-audio`，入参 `audio_urls` 数组（1–100 个），产物 `result.audio_url` + `duration`（秒）。输出时长由**最长输入**决定。
+   - `mux-audio-video`（音视频合成，供下游「音视频合成」）：`/api/v1/tools/mux-audio-video`，入参 `video_url` + `audio_url`（可选 `is_audio_reserve` / `is_video_audio_sync` / `sync_mode` / `sync_method`），产物 `result.video_url`。⚠️ 官方完整响应示例里 **result 只有 `video_url`、没有 `duration`**；若真机确认如此，本工具完成时取不到真实时长，差额结算会退化成「保持预扣」（见 `AdjustBillingOnCompleteWithClamp`），开始收费前必须核对。
+   - `adjust-audio-speed`（音频调速，供下游「音频调速」）：`/api/v1/tools/adjust-audio-speed`，入参 `audio_url` + `speed`（> 1 快放、< 1 慢放）。⚠️ 官方只给了**视频**调速的完整示例，音频调速仅一句「流程完全一致，把 `video_url` 换成 `audio_url`」，故 `task_type=adjust-audio-speed` 与产物键 `result.audio_url` 均为**推断**。真机若键名不同，`ResultURL` 会取到空串，需在注册表显式补 `ResultPath`。
+
+   三者的 slug 是否真实存在也由实测兜底：slug 错时上游回 NotFound，与「缺字段」的 400 可区分（参照 `scale-image` 那次）。
 
    本文早期版本写「`get-audio-meta`（音频元信息获取）刻意未登记——官方也不按处理量计费」，**双重错误**：真实 slug 是 `probe-audio-metadata`（`get-audio-meta` 不存在），且官方**确实计费**——视频/音频元信息按成功处理次数 0.1 元/千次，图像元信息归在「图像基础编辑」计费单元（0.025 元/GiB，自然月 10 TiB 免费额度后累进）。三者现均已登记并按官方口径定价：视频/音频 0.0001 元/次；图像因网关不测体积，按单图 10 MiB 上限折成 0.00024 元/次近似。同类的 `video-understand-router` / `chat` / 大模型高光剪辑 / 剪辑套件（拼接、调速、滤镜等约 19 个）仍未登记：前者依赖方舟按 token 计费（MediaKit 侧只按时长收），后者官方未给出逐工具的独立 slug 表。
