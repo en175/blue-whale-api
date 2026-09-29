@@ -63,6 +63,16 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 		}
 		info.Draft = true
 	}
+	// 该字段此前被静默丢弃，客户端无从得知自己的任务类型意图没有生效。类型
+	// 不对时必须明确拒绝，不能沿用丢弃。取值本身（auto / reference / edit /
+	// extend 及各自的参数约束）由上游权威判定，网关不复制那套会变的规则。
+	if raw, exists := req.Metadata[OmniReferenceTaskTypeKey]; exists {
+		if _, ok := raw.(string); !ok {
+			return service.TaskErrorWrapperLocal(
+				fmt.Errorf("%s must be a string", OmniReferenceTaskTypeKey),
+				"invalid_omni_reference_task_type", http.StatusBadRequest)
+		}
+	}
 	info.HasVideoInput = taskcommon.HasVideoInputInMetadata(req.Metadata)
 	return nil
 }
@@ -87,6 +97,20 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 	if err != nil {
 		return nil, err
 	}
+
+	// omni_reference_task_type 不在 doubao 的共用白名单里，在这里补写。客户端
+	// 没传时不改写 payload——普通提交与样片路径都与改动前逐位一致。
+	req, err := relaycommon.GetTaskRequest(c)
+	if err != nil {
+		return nil, err
+	}
+	if v, ok := req.Metadata[OmniReferenceTaskTypeKey].(string); ok {
+		body, err = rewritePayloadFields(body, map[string]any{OmniReferenceTaskTypeKey: v})
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	if !info.Draft {
 		return body, nil
 	}

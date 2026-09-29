@@ -268,3 +268,78 @@ func TestDraftContentItemKeepsDoubaoPayloadStable(t *testing.T) {
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"type":"text","text":"hello"}`, string(raw))
 }
+
+// TestOmniReferenceTaskTypeIsForwarded 该字段不在 doubao 的共用白名单里（只对
+// 2.5 有意义），必须由本渠道补写到上游 payload；补写不得影响同一请求的其它字段。
+func TestOmniReferenceTaskTypeIsForwarded(t *testing.T) {
+	c := newSubmitContext(t, "/v1/videos",
+		`{"model":"doubao-seedance-2-5-260628","prompt":"a cat","seconds":"12",`+
+			`"metadata":{"resolution":"720p","ratio":"9:16","omni_reference_task_type":"reference"}}`)
+	info := newInfo("")
+
+	adaptor := &TaskAdaptor{}
+	require.Nil(t, adaptor.ValidateRequestAndSetAction(c, info))
+
+	body, err := adaptor.BuildRequestBody(c, info)
+	require.NoError(t, err)
+	payload := readPayload(t, body)
+
+	assert.Equal(t, "reference", payload[OmniReferenceTaskTypeKey])
+	assert.Equal(t, float64(12), payload["duration"], "补写不得损坏 duration")
+	assert.Equal(t, "720p", payload["resolution"])
+	assert.Equal(t, "9:16", payload["ratio"])
+}
+
+// TestOmniReferenceTaskTypeAbsentWhenNotSubmitted 客户端没传时不得凭空构造该键，
+// 否则上游行为与改动前不再一致。
+func TestOmniReferenceTaskTypeAbsentWhenNotSubmitted(t *testing.T) {
+	c := newSubmitContext(t, "/v1/videos",
+		`{"model":"doubao-seedance-2-5-260628","prompt":"a cat","metadata":{"resolution":"720p"}}`)
+	info := newInfo("")
+
+	adaptor := &TaskAdaptor{}
+	require.Nil(t, adaptor.ValidateRequestAndSetAction(c, info))
+
+	body, err := adaptor.BuildRequestBody(c, info)
+	require.NoError(t, err)
+	payload := readPayload(t, body)
+
+	_, exists := payload[OmniReferenceTaskTypeKey]
+	assert.False(t, exists, "未提交时 payload 不得出现 %s", OmniReferenceTaskTypeKey)
+}
+
+// TestOmniReferenceTaskTypeRejectsNonString 该字段曾经被静默丢弃、客户端无从得知
+// 意图没生效；类型不对时必须明确 400，且发生在预扣费之前。
+// 取值本身（auto / reference / edit / extend 及各自约束）交给上游判定。
+func TestOmniReferenceTaskTypeRejectsNonString(t *testing.T) {
+	c := newSubmitContext(t, "/v1/videos",
+		`{"model":"doubao-seedance-2-5-260628","prompt":"a cat",`+
+			`"metadata":{"omni_reference_task_type":123}}`)
+	info := newInfo("")
+
+	taskErr := (&TaskAdaptor{}).ValidateRequestAndSetAction(c, info)
+	require.NotNil(t, taskErr)
+	assert.Equal(t, http.StatusBadRequest, taskErr.StatusCode)
+	assert.Equal(t, "invalid_omni_reference_task_type", taskErr.Code)
+}
+
+// TestOmniReferenceTaskTypeForwardedForDraft 样片提交同样要带上该字段——任务类型
+// 判定对样片与成片两条路径一致，样片也可能被判为编辑 / 延长任务。
+func TestOmniReferenceTaskTypeForwardedForDraft(t *testing.T) {
+	c := newSubmitContext(t, "/v1/videos",
+		`{"model":"doubao-seedance-2-5-260628","prompt":"a cat","draft":true,`+
+			`"metadata":{"omni_reference_task_type":"edit"}}`)
+	info := newInfo("")
+
+	adaptor := &TaskAdaptor{}
+	require.Nil(t, adaptor.ValidateRequestAndSetAction(c, info))
+	require.True(t, info.Draft)
+
+	body, err := adaptor.BuildRequestBody(c, info)
+	require.NoError(t, err)
+	payload := readPayload(t, body)
+
+	assert.Equal(t, "edit", payload[OmniReferenceTaskTypeKey])
+	assert.Equal(t, true, payload["draft"])
+	assert.Equal(t, Res480p, payload["resolution"])
+}

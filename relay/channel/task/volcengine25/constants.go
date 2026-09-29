@@ -11,6 +11,14 @@ const (
 	Res1080p = "1080p"
 )
 
+// OmniReferenceTaskTypeKey 是客户端 metadata 里显式引导任务类型的键，取值
+// auto / reference / edit / extend。全模态参考生视频由模型按素材与提示词判定
+// 子类型，显式指定可把特殊参数限制的校验前置到提交时。
+//
+// 它只对 Seedance 2.5 有意义，因此不进 doubao 的共用 requestPayload 白名单，
+// 由本渠道在 BuildRequestBody 里补写，保证 45 / 54 / 64 的 payload 逐位不变。
+const OmniReferenceTaskTypeKey = "omni_reference_task_type"
+
 // ModelList 是该渠道默认支持的模型。仅 Seedance 2.5——更早的 Seedance 版本
 // 没有样片模式，且它们的降级/超分诉求由 64（VolcEngineEnhanced）承担。
 var ModelList = []string{
