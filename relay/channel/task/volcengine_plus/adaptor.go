@@ -41,6 +41,13 @@ func (a *TaskAdaptor) GetChannelName() string {
 	return ChannelName
 }
 
+func (a *TaskAdaptor) GetModelList() []string {
+	return ModelList
+}
+
+// ValidateRequestAndSetAction 在 doubao 的解析之上补三条本渠道专有守卫。
+// 全部放在这里而不是 BuildRequestBody：这一层跑在预扣费之前，且能自定义错误码；
+// BuildRequestBody 的报错会被 relay_task 一律包成 500，而且在预扣费之后。
 func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskError {
 	if info != nil && info.TaskRelayInfo != nil && info.Action == constant.TaskActionRemix {
 		return service.TaskErrorWrapperLocal(fmt.Errorf("remix is not supported"), "remix_not_supported", http.StatusBadRequest)
@@ -52,9 +59,30 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 	if err != nil {
 		return service.TaskErrorWrapper(err, "get_task_request_failed", http.StatusBadRequest)
 	}
+	// 样片（metadata.draft / 顶层 draft）在 doubao 适配器上零把关透传：上游会出
+	// 480p 样片，但本渠道的对客档位与扣费按请求档写死，剥皮又因未降档而跳过，
+	// 结果是「按 1080p 扣费、回 1080p、交付 480p 样片」。见 ADR 0019 背景 1。
+	if taskcommon.IsDraftRequest(&req) {
+		return service.TaskErrorWrapperLocal(fmt.Errorf("draft task is not supported"), "draft_not_supported", http.StatusBadRequest)
+	}
 	ratio, _ := req.Metadata["ratio"].(string)
 	if !KnownRatio(ratio) {
 		return service.TaskErrorWrapperLocal(fmt.Errorf("unsupported ratio: %s", strings.TrimSpace(ratio)), "invalid_ratio", http.StatusBadRequest)
+	}
+	// 档位超出模型能力时提前拒绝，而不是等上游报错再全额退预扣。
+	modelName := ""
+	if info != nil {
+		modelName = info.OriginModelName
+	}
+	if modelName == "" {
+		modelName = req.Model
+	}
+	resolution, _ := req.Metadata["resolution"].(string)
+	resolution = NormalizeResolution(resolution)
+	if !ResolutionSupported(modelName, resolution) {
+		return service.TaskErrorWrapperLocal(
+			fmt.Errorf("model %s does not support resolution %s", modelName, resolution),
+			"invalid_resolution", http.StatusBadRequest)
 	}
 	return nil
 }

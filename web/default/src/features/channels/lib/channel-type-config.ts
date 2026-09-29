@@ -211,7 +211,7 @@ export const CHANNEL_TYPE_CONFIGS: Record<number, ChannelTypeConfig> = {
       baseUrl: 'Default: https://ark.cn-beijing.volces.com',
       key: 'Ark API Key (Bearer)',
       models:
-        'doubao-seedance-2-0-260128, doubao-seedance-2-0-fast-260128, doubao-seedance-1-5-pro-251215',
+        'doubao-seedance-2-5-260628, doubao-seedance-2-0-260128, doubao-seedance-2-0-fast-260128, doubao-seedance-2-0-mini-260615',
       other:
         'Same Seedance protocol as Doubao Video. Lottery percents and MediaKit key go in channel setting JSON.',
     },

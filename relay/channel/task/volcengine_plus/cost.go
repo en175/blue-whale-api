@@ -8,10 +8,14 @@ const (
 	RateTier720p  = "720p"
 	RateTier1080p = "1080p"
 	RateTier2k    = "2k"
+	RateTier4k    = "4k"
 
 	defaultEnhanceFPS = 24
 )
 
+// yuanPerMinute 是官方「输出分辨率档 × 帧率档 → 换算后单价（元/分钟）」价表。
+// 原表给的是换算系数（1 系 = 2.5 元/分钟），这里直接存系数 × 2.5 后的单价。
+// 2K 档本渠道不出，代码带着备用；未知档位返回 0。
 func yuanPerMinute(rateTier string, fps int) float64 {
 	if fps <= 0 {
 		fps = defaultEnhanceFPS
@@ -44,6 +48,15 @@ func yuanPerMinute(rateTier string, fps int) float64 {
 		case fps <= 120:
 			return 40
 		}
+	case RateTier4k:
+		switch {
+		case fps <= 30:
+			return 20
+		case fps <= 60:
+			return 40
+		case fps <= 120:
+			return 80
+		}
 	}
 	return 0
 }
@@ -54,6 +67,8 @@ func RateTierForRequested(requested string) string {
 		return RateTier720p
 	case Res1080p:
 		return RateTier1080p
+	case Res4k:
+		return RateTier4k
 	default:
 		return ""
 	}

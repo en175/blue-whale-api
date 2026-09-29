@@ -97,6 +97,12 @@ func (a *TaskAdaptor) mediaKitForTask(task *model.Task) (mediaKitAPI, error) {
 }
 
 func (a *TaskAdaptor) recordEnhanceCost(ctx context.Context, task *model.Task, jobID, status string, amountFen int) {
+	rateTier := RateTierForRequested(task.PrivateData.RequestedResolution)
+	if status == EnhanceStatusSucceeded && amountFen == 0 {
+		logger.LogWarn(ctx, fmt.Sprintf(
+			"enhance succeeded but was not priced task %s rate_tier %q output_duration_ms %d fps %d",
+			task.TaskID, rateTier, task.PrivateData.OutputDurationMs, task.PrivateData.SourceFps))
+	}
 	cost := &model.EnhanceCost{
 		TaskId:              task.TaskID,
 		ChannelId:           task.ChannelId,
@@ -104,7 +110,7 @@ func (a *TaskAdaptor) recordEnhanceCost(ctx context.Context, task *model.Task, j
 		UpstreamResolution:  task.PrivateData.UpstreamResolution,
 		OutputDurationMs:    task.PrivateData.OutputDurationMs,
 		Fps:                 task.PrivateData.SourceFps,
-		RateTier:            RateTierForRequested(task.PrivateData.RequestedResolution),
+		RateTier:            rateTier,
 		AmountFen:           amountFen,
 		MediaKitJobId:       jobID,
 		Status:              status,
@@ -120,8 +126,8 @@ func (a *TaskAdaptor) recordEnhanceCost(ctx context.Context, task *model.Task, j
 
 func (a *TaskAdaptor) submitEnhance(ctx context.Context, task *model.Task, client mediaKitAPI) error {
 	resolution := NormalizeResolution(task.PrivateData.RequestedResolution)
-	if resolution != Res720p && resolution != Res1080p {
-		return fmt.Errorf("mediakit resolution must be 720p or 1080p")
+	if resolution != Res720p && resolution != Res1080p && resolution != Res4k {
+		return fmt.Errorf("mediakit resolution must be 720p, 1080p or 4k")
 	}
 	sourceURL := task.PrivateData.EnhanceSourceURL
 	if sourceURL == "" {

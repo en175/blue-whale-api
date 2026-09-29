@@ -293,6 +293,9 @@ const SENSITIVE_FORM_FIELDS = [
   'lottery_1080p_to_720p_percent',
   'lottery_1080p_to_480p_percent',
   'lottery_720p_to_480p_percent',
+  'lottery_4k_to_1080p_percent',
+  'lottery_4k_to_720p_percent',
+  'lottery_4k_to_480p_percent',
   'mediakit_api_key',
   'mediakit_base_url',
   'mediakit_submit_path',
@@ -2705,6 +2708,75 @@ export function ChannelMutateDrawer({
                                     <FormItem>
                                       <FormLabel>
                                         {t('720p to 480p lottery percent')}
+                                      </FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          type='number'
+                                          min={0}
+                                          max={100}
+                                          {...field}
+                                          onChange={(e) =>
+                                            field.onChange(Number(e.target.value))
+                                          }
+                                        />
+                                      </FormControl>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                                <FormField
+                                  control={form.control}
+                                  name='lottery_4k_to_1080p_percent'
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>
+                                        {t('4k to 1080p lottery percent')}
+                                      </FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          type='number'
+                                          min={0}
+                                          max={100}
+                                          {...field}
+                                          onChange={(e) =>
+                                            field.onChange(Number(e.target.value))
+                                          }
+                                        />
+                                      </FormControl>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                                <FormField
+                                  control={form.control}
+                                  name='lottery_4k_to_720p_percent'
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>
+                                        {t('4k to 720p lottery percent')}
+                                      </FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          type='number'
+                                          min={0}
+                                          max={100}
+                                          {...field}
+                                          onChange={(e) =>
+                                            field.onChange(Number(e.target.value))
+                                          }
+                                        />
+                                      </FormControl>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                                <FormField
+                                  control={form.control}
+                                  name='lottery_4k_to_480p_percent'
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>
+                                        {t('4k to 480p lottery percent')}
                                       </FormLabel>
                                       <FormControl>
                                         <Input
