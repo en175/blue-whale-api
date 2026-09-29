@@ -66,6 +66,8 @@ Seedance 2.5 专用渠道，承载样片模式的两步流程。**没有抽奖�
 | `extend` | 视频延长 | `content` 至少 1 个 `reference_video`；`ratio` 必须 `adaptive` |
 
 - 显式传 `reference` / `edit` / `extend` → 上游**提交时同步校验**，不符合立即报错、任务不创建；不传或传 `auto` → 任务启动后异步报错。
+
+> **时长怎么传（对客口径）**：`edit` 要求上游 `duration=-1`，但顶层 `seconds` / `duration` 都要过 `validateTaskDurationBounds`（1~3600），传 `-1` 会直接 400 `invalid_seconds`。对客唯一入口是 **`metadata.duration: -1`**——它绕过顶层校验，经 `UnmarshalMetadata` 进入 `requestPayload.Duration`。注意顶层 `seconds` 解析为正数时会覆盖 `metadata.duration`（`doubao` 的 `convertToRequestPayload` 先灌 metadata、后写 seconds），编辑场景不要同时传。
 - 该字段只对 2.5 有意义，**不在 `doubao` 包的共用 `requestPayload` 白名单里**，由本渠道在 `BuildRequestBody` 补写，45 / 54 / 64 的 payload 不受影响。客户端没传时不改写。
 - 非字符串值 → 400 `invalid_omni_reference_task_type`。此前该字段被静默丢弃，客户端无从得知自己的任务类型意图没有生效（见 §12）。取值本身不校验，交给上游判定，避免把会变的上游规则复制进网关。
 - ⚠️ **显式指定不等于一定按该类型生成**：上游仍会结合提示词判类型，指定与实际意图不一致会异步报 `InvalidParameter.TaskTypeMismatch`。面向用户的文档不要承诺「传 `reference` 就按参考生成」。

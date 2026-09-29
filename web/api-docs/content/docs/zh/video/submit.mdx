@@ -19,7 +19,7 @@ description: 提交视频生成任务，获取 task_id
 接口参数分两类:
 
 - **顶层参数**(外部参数):由网关统一解析,所有通道共用,字段名固定。
-- **`metadata` 参数**:一个透传对象,承载上游/模型特有的扩展能力(分辨率、画面比例、多模态参考素材、水印等)。网关不解析其内部结构,**下表列出的 `metadata` 字段会透传给上游**——因此官网(火山方舟 Seedance)的 `content` / `ratio` / `generate_audio` / `watermark` 等参数,在本接口中统一放进 `metadata`(时长除外:`duration` 对应顶层 `seconds`)。
+- **`metadata` 参数**:一个透传对象,承载上游/模型特有的扩展能力(分辨率、画面比例、多模态参考素材、水印等)。网关不解析其内部结构,**下表列出的 `metadata` 字段会透传给上游**——因此官网(火山方舟 Seedance)的 `content` / `ratio` / `generate_audio` / `watermark` 等参数,在本接口中统一放进 `metadata`(时长例外:正数时长优先用顶层 `seconds`,特殊值 `-1` 只能用 `metadata.duration`,见「时长怎么传」)。
 
 ### 顶层参数
 
@@ -28,12 +28,13 @@ description: 提交视频生成任务，获取 task_id
 | `prompt` | string | 是 | — | 提示词（视频内容描述） |
 | `model` | string | 是 | — | 模型标识，可选值见[模型列表](../models) |
 | `images` | string[] | 否 | — | 图生视频：首帧 URL 数组（公网可访问；参考图请用 `metadata.content` + `role:"reference_image"`） |
-| `seconds` | string | 否 | `5` | 视频时长（秒），对应官网 `duration` |
+| `seconds` | string | 否 | `5` | 视频时长（秒），对应官网 `duration`。**只接受正整数**；`-1`（跟随输入视频）必须改用 `metadata.duration`，见「时长怎么传」 |
 
 ### metadata 参数
 
 | 字段 | 类型 | 必填 | 默认 | 说明 |
 | --- | --- | --- | --- | --- |
+| `duration` | int | 否 | — | 视频时长（秒）。正数时长请优先用顶层 `seconds`；**`-1`（跟随输入视频）只能在这里传**——顶层 `seconds` 传不了负数。见「时长怎么传」 |
 | `resolution` | string | 否 | `720p` | 分辨率：`480p` / `720p` / `1080p` / `4k` |
 | `ratio` | string | 否 | `16:9` | 画面比例：`16:9` / `4:3` / `1:1` / `3:4` / `9:16` / `21:9` / `adaptive` |
 | `generate_audio` | bool | 否 | `true` | 是否生成音频（使用参考音频/背景音乐时需为 `true`） |
@@ -56,24 +57,52 @@ description: 提交视频生成任务，获取 task_id
 - **扩展能力**：`resolution` / `ratio` / `generate_audio` / `content` / `watermark` 等 → 放 **`metadata`**
 - **首帧/首尾帧**：顶层 `images`（单首帧，最简）或 `metadata.content` 里 `role:"first_frame"` / `"last_frame"`
 - **参考素材**（参考图 / 参考视频 / 参考音频）：统一走 `metadata.content` + `role:"reference_*"`；不要与顶层 `images` 混用（混用时 `metadata.content` 会覆盖 `images`）
-- **时长**：统一用顶层 `seconds`（字符串），勿用顶层 `duration`
+- **时长**：见下方「时长怎么传」——正数放顶层 `seconds`，`-1` 只能用 `metadata.duration`
+
+### 时长怎么传
+
+`seconds` 与 `duration` 分属不同层级，在 Seedance 2.5 渠道上行为**不对称**，传错会静默失效或被 400 拒绝：
+
+| 写法 | 是否生效 | 说明 |
+| --- | --- | --- |
+| 顶层 `seconds: "5"` | ✅ | 常规写法。**只接受正整数**（1~3600），网关转成上游 `duration` 下发 |
+| 顶层 `duration: 5` | ❌ | 会被校验，但**不转发**给上游（静默丢弃），勿用 |
+| `metadata.duration: 5` | ✅ | 直接进上游请求体 |
+
+**优先级**：顶层 `seconds` 解析为正数时，覆盖 `metadata.duration`；为 `0` / 空 / 非数字时不覆盖。
+
+**`-1`（跟随输入视频）只能走 `metadata.duration`**：顶层 `seconds` 与顶层 `duration` 都要过 1~3600 校验，传 `-1` 会直接返回 400 `invalid_seconds`。
+
+```json
+{
+  "model": "doubao-seedance-2-5-260628",
+  "prompt": "把画面里的奶油换成红色",
+  "metadata": {
+    "duration": -1,
+    "ratio": "adaptive",
+    "content": [{"type": "video_url", "video_url": {"url": "https://your-host/clip.mp4"}, "role": "reference_video"}]
+  }
+}
+```
+
+> 视频编辑任务的 `duration` 必须为 `-1`，所以编辑场景**不要**传顶层 `seconds`——它会覆盖 `metadata.duration`。详见下方「V2V 任务类型与参数规范」。
 
 ## V2V 任务类型与参数规范（重要说明）
 
-> **⚠️ 2.5 视频编辑类 prompt 必须 `seconds=-1`**，否则任务 `FAILURE`。
+> **⚠️ 2.5 视频编辑类 prompt 的时长必须为 `-1`，且只能通过 `metadata.duration` 传**（顶层 `seconds` 无法表达负数，网关会直接 400），否则任务 `FAILURE`。
 
 Seedance 2.5（`doubao-seedance-2-5-260628`）会根据 prompt 语义**智能识别任务类型**：当 prompt 是对**视频内容的修改指令**（如"奶油换成红色"）时，被识别为**视频编辑任务**，而非参考视频生成。视频编辑任务的输出是"基于模型选定的输入视频"改造而来，**输出时长与比例必须跟随输入视频，不能由用户指定**。
 
-- **`seconds` 必须传 `-1`**（表示跟随输入视频）；输入视频时长需在 **4~30s** 内。
-- 若传具体时长（如 `5`），违反该约束 → 参数校验失败 → 任务 `FAILURE`。
+- **时长必须为 `-1`**（表示跟随输入视频），只能写成 `metadata.duration: -1`；输入视频时长需在 **4~30s** 内。
+- 若指定了具体时长（顶层 `seconds: "5"`，或 `metadata.duration: 5`），违反该约束 → 上游参数校验失败 → 任务 `FAILURE`。
 - **2.0 / fast / mini 不受此限制**：始终按视频生成处理，接受具体 `seconds`（如 `5` / `10`）。
 
-| 场景 | 任务类型 | `seconds` | `ratio` | 输入视频 | 适用模型 |
+| 场景 | 任务类型 | 时长 | `ratio` | 输入视频 | 适用模型 |
 | --- | --- | --- | --- | --- | --- |
-| 参考视频引导生成 | 视频生成 | 具体值（`5`/`10`） | 具体值（`16:9` 等） | 可选 | 2.0 / fast / mini |
-| 修改视频内容 | 视频编辑 | `-1`（跟随输入） | 跟随输入视频 | 必填，4~30s | 2.5（智能识别） |
+| 参考视频引导生成 | 视频生成 | 顶层 `seconds`（`"5"` / `"10"`） | 具体值（`16:9` 等） | 可选 | 2.0 / fast / mini |
+| 修改视频内容 | 视频编辑 | `metadata.duration: -1` | 跟随输入视频 | 必填，4~30s | 2.5（智能识别） |
 
-测试实证（prompt「奶油换成红色」）：2.5 + `seconds=5` → ❌ `FAILURE`；2.5 + `seconds=-1` → ✅ `SUCCESS`；2.0 / fast / mini + `seconds=5` → ✅ `SUCCESS`。
+依据火山方舟文档：2.5 编辑任务的 `duration` 只支持 `-1`；2.0 / fast / mini 不受限，始终按视频生成处理，接受具体时长（如 `5` / `10`）。
 
 ### 显式引导任务类型（仅 2.5）
 
@@ -82,8 +111,8 @@ Seedance 2.5（`doubao-seedance-2-5-260628`）会根据 prompt 语义**智能识
 | 取值 | 任务类型 | 附加约束 |
 | --- | --- | --- |
 | `auto` | 模型自动判定（默认，等同不传） | — |
-| `reference` | 参考生视频 | `seconds` / `ratio` 无特殊限制 |
-| `edit` | 视频编辑 | `ratio` 须 `adaptive`、`seconds` 须 `-1`；参考视频 4~30s |
+| `reference` | 参考生视频 | 时长（`seconds` 或 `metadata.duration`）/ `ratio` 无特殊限制 |
+| `edit` | 视频编辑 | `ratio` 须 `adaptive`、时长须 `metadata.duration: -1`；参考视频 4~30s |
 | `extend` | 视频延长 | `ratio` 须 `adaptive`；`content` 须含参考视频 |
 
 **⚠️ 显式指定不保证按该类型生成**：上游仍会结合 prompt 语义判定，二者不一致时任务仍会异步失败。请按上表对应的提示词写法组织 prompt。非字符串取值会被网关拒绝（400 `invalid_omni_reference_task_type`）。

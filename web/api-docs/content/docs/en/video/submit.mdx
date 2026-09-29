@@ -19,7 +19,7 @@ Submit a video generation task. The endpoint returns a `task_id` immediately; ge
 Parameters fall into two groups:
 
 - **Top-level (external) parameters**: parsed by the gateway, shared across all channels, with fixed field names.
-- **`metadata` parameters**: a pass-through object carrying upstream/model-specific capabilities (resolution, aspect ratio, multi-modal reference inputs, watermark, etc.). The gateway does not inspect its internals and **forwards the documented metadata fields listed below to the upstream** — so official Volcengine Seedance params such as `content`, `ratio`, `generate_audio`, and `watermark` go inside `metadata` (duration is the exception: the official `duration` maps to the top-level `seconds` field).
+- **`metadata` parameters**: a pass-through object carrying upstream/model-specific capabilities (resolution, aspect ratio, multi-modal reference inputs, watermark, etc.). The gateway does not inspect its internals and **forwards the documented metadata fields listed below to the upstream** — so official Volcengine Seedance params such as `content`, `ratio`, `generate_audio`, and `watermark` go inside `metadata` (duration is the exception: a positive duration goes in the top-level `seconds`, while the special value `-1` can only be passed as `metadata.duration` — see "How to Pass Duration").
 
 ### Top-level Parameters
 
@@ -27,13 +27,14 @@ Parameters fall into two groups:
 | --- | --- | --- | --- | --- |
 | `prompt` | string | Yes | — | Description of the video content |
 | `model` | string | Yes | — | Model identifier; see [Models](../models) for available options |
-| `seconds` | string | No | `5` | Video duration in seconds (string), maps to the official `duration` |
+| `seconds` | string | No | `5` | Video duration in seconds, maps to the official `duration`. **Positive integers only**; for `-1` (follow the input video) use `metadata.duration` instead — see "How to Pass Duration" |
 | `images` | string[] | No | — | Image-to-video: first-frame image URLs (publicly accessible; reference images use `metadata.content` + `role:"reference_image"`) |
 
 ### metadata Parameters
 
 | Field | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
+| `duration` | int | No | — | Video duration in seconds. Prefer the top-level `seconds` for positive values; **`-1` (follow the input video) can only be passed here** — the top-level `seconds` cannot express a negative. See "How to Pass Duration" |
 | `resolution` | string | No | `720p` | Resolution: `480p` / `720p` / `1080p` / `4k` |
 | `ratio` | string | No | `16:9` | Aspect ratio: `16:9` / `4:3` / `1:1` / `3:4` / `9:16` / `21:9` / `adaptive` |
 | `generate_audio` | bool | No | `true` | Whether to generate audio (keep `true` when using a reference audio / background music) |
@@ -56,24 +57,52 @@ For per-model supported metadata options, see [Models](../models).
 - **Extended capabilities**: `resolution` / `ratio` / `generate_audio` / `content` / `watermark`, etc. → put in **`metadata`**
 - **First / first+last frame**: top-level `images` (single first frame, simplest) or `metadata.content` with `role:"first_frame"` / `"last_frame"`
 - **Reference materials** (reference image / video / audio): always use `metadata.content` with `role:"reference_*"`; do not mix with top-level `images` (when both are present, `metadata.content` overrides `images`)
-- **Duration**: always use top-level `seconds` (string); do not use top-level `duration`
+- **Duration**: see "How to Pass Duration" below — positive values go in the top-level `seconds`, `-1` only as `metadata.duration`
+
+### How to Pass Duration
+
+`seconds` and `duration` live on different levels and behave **asymmetrically** on the Seedance 2.5 channel — passing the wrong one either fails silently or returns a 400:
+
+| Form | Takes effect | Notes |
+| --- | --- | --- |
+| Top-level `seconds: "5"` | ✅ | The normal form. **Positive integers only** (1–3600); the gateway maps it to the upstream `duration` |
+| Top-level `duration: 5` | ❌ | Validated, but **never forwarded** upstream (silently dropped) — do not use |
+| `metadata.duration: 5` | ✅ | Goes straight into the upstream request body |
+
+**Precedence**: a top-level `seconds` that parses to a positive number overrides `metadata.duration`; `0`, empty, or non-numeric does not override.
+
+**`-1` (follow the input video) can only go through `metadata.duration`**: both top-level `seconds` and top-level `duration` are range-checked against 1–3600, so passing `-1` returns 400 `invalid_seconds`.
+
+```json
+{
+  "model": "doubao-seedance-2-5-260628",
+  "prompt": "turn the cream in the frame red",
+  "metadata": {
+    "duration": -1,
+    "ratio": "adaptive",
+    "content": [{"type": "video_url", "video_url": {"url": "https://your-host/clip.mp4"}, "role": "reference_video"}]
+  }
+}
+```
+
+> Video-edit tasks require `duration` to be `-1`, so in edit scenarios **do not** pass a top-level `seconds` — it would override `metadata.duration`. See "V2V Task Type and Parameter Rules" below.
 
 ## V2V Task Type and Parameter Rules (Important)
 
-> **⚠️ On 2.5, edit-style prompts must use `seconds=-1`** — otherwise the task ends in `FAILURE`.
+> **⚠️ On 2.5, edit-style prompts must set the duration to `-1`, and it can only be passed as `metadata.duration`** (the top-level `seconds` cannot express a negative — the gateway returns 400) — otherwise the task ends in `FAILURE`.
 
 Seedance 2.5 (`doubao-seedance-2-5-260628`) **auto-detects the task type** from the prompt semantics: when the prompt is an instruction to **modify video content** (e.g. "turn the cream red"), the task is treated as a **video-edit** task rather than reference-video generation. The output of a video-edit task is a rework of a model-selected input video, so **its duration and aspect ratio must follow that input video and cannot be specified by you**.
 
-- **`seconds` must be `-1`** (meaning "follow the input video"); the input video must be **4–30s** long.
-- Passing a concrete duration (e.g. `5`) violates this constraint → parameter validation fails → the task ends in `FAILURE`.
+- **The duration must be `-1`** (meaning "follow the input video"), written as `metadata.duration: -1`; the input video must be **4–30s** long.
+- Specifying a concrete duration (top-level `seconds: "5"`, or `metadata.duration: 5`) violates this constraint → upstream parameter validation fails → the task ends in `FAILURE`.
 - **2.0 / fast / mini are unaffected**: they always process as video generation and accept a concrete `seconds` (e.g. `5` / `10`).
 
-| Scenario | Task type | `seconds` | `ratio` | Input video | Models |
+| Scenario | Task type | Duration | `ratio` | Input video | Models |
 | --- | --- | --- | --- | --- | --- |
-| Reference-video-guided generation | Video generation | concrete value (`5`/`10`) | concrete value (`16:9` etc.) | optional | 2.0 / fast / mini |
-| Modifying video content | Video edit | `-1` (follow input) | follows input video | required, 4–30s | 2.5 (auto-detected) |
+| Reference-video-guided generation | Video generation | top-level `seconds` (`"5"` / `"10"`) | concrete value (`16:9` etc.) | optional | 2.0 / fast / mini |
+| Modifying video content | Video edit | `metadata.duration: -1` | follows input video | required, 4–30s | 2.5 (auto-detected) |
 
-Verified with prompt "turn the cream red": 2.5 + `seconds=5` → ❌ `FAILURE`; 2.5 + `seconds=-1` → ✅ `SUCCESS`; 2.0 / fast / mini + `seconds=5` → ✅ `SUCCESS`.
+Per the Volcengine docs: on 2.5 an edit task only accepts `duration: -1`; 2.0 / fast / mini are unrestricted and always process as video generation, accepting a concrete duration (e.g. `5` / `10`).
 
 ### Explicitly hinting the task type (2.5 only)
 
@@ -82,8 +111,8 @@ Instead of relying on auto-detection, set `metadata.omni_reference_task_type` to
 | Value | Task type | Extra constraints |
 | --- | --- | --- |
 | `auto` | Model decides (default, same as omitting) | — |
-| `reference` | Reference-to-video | No special `seconds` / `ratio` limits |
-| `edit` | Video edit | `ratio` must be `adaptive`, `seconds` must be `-1`; reference video 4–30s |
+| `reference` | Reference-to-video | No special duration (`seconds` or `metadata.duration`) / `ratio` limits |
+| `edit` | Video edit | `ratio` must be `adaptive`, duration must be `metadata.duration: -1`; reference video 4–30s |
 | `extend` | Video extension | `ratio` must be `adaptive`; `content` must include a reference video |
 
 **⚠️ Hinting does not guarantee that task type**: the upstream still judges from the prompt semantics, and a mismatch still fails the task asynchronously. Write the prompt to match the task type you hint. Non-string values are rejected by the gateway (400 `invalid_omni_reference_task_type`).
