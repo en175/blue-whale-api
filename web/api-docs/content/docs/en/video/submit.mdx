@@ -39,6 +39,7 @@ Parameters fall into two groups:
 | `generate_audio` | bool | No | `true` | Whether to generate audio (keep `true` when using a reference audio / background music) |
 | `content` | array | No | — | Multi-modal reference inputs (reference image / video / audio). Array items: `{type, image_url\|video_url\|audio_url, role}`; reference video uses `type:"video_url"` + `role:"reference_video"` (public URL, up to 3 clips, 2–15s each) |
 | `content[].audio_url` | object | No | — | Reference audio (background music / sound effects): `{type:"audio_url", audio_url:{url}, role:"reference_audio"}`; public URL, up to 3 clips; **cannot be used alone** — pair with at least 1 reference image or 1 reference video |
+| `omni_reference_task_type` | string | No | `auto` | Task-type hint (**Seedance 2.5 only**): `auto` / `reference` / `edit` / `extend`. Specifying it moves parameter-constraint validation **forward to submission time** (otherwise the task fails asynchronously after starting). See "V2V Task Type and Parameter Rules" below |
 | `frames` | int | No | — | Number of frames |
 | `seed` | int | No | — | Random seed (deterministic result) |
 | `camera_fixed` | bool | No | `false` | Fixed camera position |
@@ -73,6 +74,19 @@ Seedance 2.5 (`doubao-seedance-2-5-260628`) **auto-detects the task type** from 
 | Modifying video content | Video edit | `-1` (follow input) | follows input video | required, 4–30s | 2.5 (auto-detected) |
 
 Verified with prompt "turn the cream red": 2.5 + `seconds=5` → ❌ `FAILURE`; 2.5 + `seconds=-1` → ✅ `SUCCESS`; 2.0 / fast / mini + `seconds=5` → ✅ `SUCCESS`.
+
+### Explicitly hinting the task type (2.5 only)
+
+Instead of relying on auto-detection, set `metadata.omni_reference_task_type` to validate the parameter constraints **at submission time** — a mismatch returns 400 immediately rather than creating a task that fails asynchronously:
+
+| Value | Task type | Extra constraints |
+| --- | --- | --- |
+| `auto` | Model decides (default, same as omitting) | — |
+| `reference` | Reference-to-video | No special `seconds` / `ratio` limits |
+| `edit` | Video edit | `ratio` must be `adaptive`, `seconds` must be `-1`; reference video 4–30s |
+| `extend` | Video extension | `ratio` must be `adaptive`; `content` must include a reference video |
+
+**⚠️ Hinting does not guarantee that task type**: the upstream still judges from the prompt semantics, and a mismatch still fails the task asynchronously. Write the prompt to match the task type you hint. Non-string values are rejected by the gateway (400 `invalid_omni_reference_task_type`).
 
 ## Examples
 

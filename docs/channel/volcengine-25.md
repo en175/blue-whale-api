@@ -54,6 +54,22 @@ Seedance 2.5 专用渠道，承载样片模式的两步流程。**没有抽奖�
           └─ 轮询到 SUCCESS → 1080p 成片
 ```
 
+### 3.1 任务类型引导（`omni_reference_task_type`）
+
+全模态参考生视频由模型按输入素材与提示词判定子类型。客户端可在 `metadata.omni_reference_task_type` 显式引导，把特殊参数限制的校验**前置到提交时**：
+
+| 取值 | 语义 | 特殊限制 |
+|---|---|---|
+| `auto` | 模型自动判定（不传时的行为） | 无 |
+| `reference` | 参考生视频 | `ratio` / `duration` 无特殊限制 |
+| `edit` | 视频编辑 | `content` 至少 1 个 `reference_video` 且时长 4–30s；`ratio` 必须 `adaptive`、`duration` 必须 `-1` |
+| `extend` | 视频延长 | `content` 至少 1 个 `reference_video`；`ratio` 必须 `adaptive` |
+
+- 显式传 `reference` / `edit` / `extend` → 上游**提交时同步校验**，不符合立即报错、任务不创建；不传或传 `auto` → 任务启动后异步报错。
+- 该字段只对 2.5 有意义，**不在 `doubao` 包的共用 `requestPayload` 白名单里**，由本渠道在 `BuildRequestBody` 补写，45 / 54 / 64 的 payload 不受影响。客户端没传时不改写。
+- 非字符串值 → 400 `invalid_omni_reference_task_type`。此前该字段被静默丢弃，客户端无从得知自己的任务类型意图没有生效（见 §12）。取值本身不校验，交给上游判定，避免把会变的上游规则复制进网关。
+- ⚠️ **显式指定不等于一定按该类型生成**：上游仍会结合提示词判类型，指定与实际意图不一致会异步报 `InvalidParameter.TaskTypeMismatch`。面向用户的文档不要承诺「传 `reference` 就按参考生成」。
+
 ---
 
 ## 4. 样片（第一步）
@@ -226,6 +242,7 @@ type TaskAdaptor struct {
 8. **样片源校验**：非 draft → `origin_not_draft`；状态非 SUCCESS → `origin_task_not_finished`；超 7 天 → `origin_draft_expired`；上游 ID 缺失 → `origin_upstream_id_missing`；他人任务 → `task_not_exist`；窗口内少 1 秒仍可用。
 9. **不继承 OtherRatios**：finalize 的 `PriceData.OtherRatios()` 为空。
 10. **档位继承**：`EstimateVideoTierBillingForTier` 在 `("1080p", true)` 与 `("1080p", false)` 下倍率必须不同；未知模型 / 倍率 1 → nil；原 `EstimateVideoTierBilling` 行为不变。
+11. **任务类型引导**：`metadata.omni_reference_task_type` 出现在上游 payload 且取值原样（普通提交与样片两条路径）；未提交时 payload 不得出现该键；非字符串 → 400 `invalid_omni_reference_task_type`；补写不得损坏同请求的其它字段。
 
 ```bash
 go test ./relay/channel/task/volcengine25/... ./relay/channel/task/taskcommon/... ./relay/ -run 'Volcengine25|Draft|Finalize|VideoTier|ResolveOriginTask'
@@ -237,7 +254,7 @@ go test ./relay/channel/task/volcengine25/... ./relay/channel/task/taskcommon/..
 
 - 抽签降档、MediaKit 超分、token 剥离（2.5 不需要补偿；这些能力留在 64 渠道）。
 - Remix。
-- `requestPayload` 补 `omni_reference_task_type` / `output_format`（属 2.5 的视频编辑 / 延长能力，另开工单）。
+- `requestPayload` 补 `output_format`（普通提交路径的封装容器选择，`mp4` / `mov`；成片路径已支持）。`omni_reference_task_type` 已支持，见 §3.1。
 - finalize 幂等键。
 - `PublicData()` 对 `data.id` 做脱敏（所有 doubao 任务的既有行为）。
 - 成片转码为 H.264（上游只给 HEVC，见 §5.5）。

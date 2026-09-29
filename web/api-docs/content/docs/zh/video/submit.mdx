@@ -39,6 +39,7 @@ description: 提交视频生成任务，获取 task_id
 | `generate_audio` | bool | 否 | `true` | 是否生成音频（使用参考音频/背景音乐时需为 `true`） |
 | `content` | array | 否 | — | 多模态参考素材数组（参考图 / 参考视频 / 参考音频），元素形如 `{type, image_url\|video_url\|audio_url, role}`；参考视频：`type:"video_url"` + `role:"reference_video"`（公网 URL，最多 3 段、单段 2–15s） |
 | `content[].audio_url` | object | 否 | — | 参考音频（背景音乐/音效）：`{type:"audio_url", audio_url:{url}, role:"reference_audio"}`；公网 URL，最多 3 段；**不能单独作为参考**——须至少搭配 1 张参考图或 1 段参考视频 |
+| `omni_reference_task_type` | string | 否 | `auto` | 任务类型引导（**仅 Seedance 2.5**）：`auto` / `reference`（参考生视频）/ `edit`（视频编辑）/ `extend`（视频延长）。显式指定可把参数约束校验**前置到提交时**（否则任务启动后异步报错）。详见下方「V2V 任务类型与参数规范」 |
 | `frames` | int | 否 | — | 帧数 |
 | `seed` | int | 否 | — | 随机种子（固定结果） |
 | `camera_fixed` | bool | 否 | `false` | 固定机位 |
@@ -73,6 +74,19 @@ Seedance 2.5（`doubao-seedance-2-5-260628`）会根据 prompt 语义**智能识
 | 修改视频内容 | 视频编辑 | `-1`（跟随输入） | 跟随输入视频 | 必填，4~30s | 2.5（智能识别） |
 
 测试实证（prompt「奶油换成红色」）：2.5 + `seconds=5` → ❌ `FAILURE`；2.5 + `seconds=-1` → ✅ `SUCCESS`；2.0 / fast / mini + `seconds=5` → ✅ `SUCCESS`。
+
+### 显式引导任务类型（仅 2.5）
+
+不想依赖智能识别时，用 `metadata.omni_reference_task_type` 显式声明，可把参数约束校验**前置到提交时**——不符合立即返回 400，不会先建任务再异步失败：
+
+| 取值 | 任务类型 | 附加约束 |
+| --- | --- | --- |
+| `auto` | 模型自动判定（默认，等同不传） | — |
+| `reference` | 参考生视频 | `seconds` / `ratio` 无特殊限制 |
+| `edit` | 视频编辑 | `ratio` 须 `adaptive`、`seconds` 须 `-1`；参考视频 4~30s |
+| `extend` | 视频延长 | `ratio` 须 `adaptive`；`content` 须含参考视频 |
+
+**⚠️ 显式指定不保证按该类型生成**：上游仍会结合 prompt 语义判定，二者不一致时任务仍会异步失败。请按上表对应的提示词写法组织 prompt。非字符串取值会被网关拒绝（400 `invalid_omni_reference_task_type`）。
 
 ## 示例
 
