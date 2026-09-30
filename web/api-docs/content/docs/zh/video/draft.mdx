@@ -1,0 +1,140 @@
+---
+title: 样片模式（Seedance 2.5）
+description: 先出 480p 样片验证镜头与节奏，确认后再出 1080p 成片
+---
+
+Seedance 2.5（`doubao-seedance-2-5-260628`）支持**样片模式**：先低价生成一段 **480p 预览**验证镜头与节奏，确认后再基于它出 **1080p 成片**。
+
+两步是**两个独立任务**，各自计费、各自查询、各自有独立的 `task_id`：
+
+| 步骤 | 请求 | 产出 |
+| --- | --- | --- |
+| 1. 提交样片 | `POST /v1/video/generations`，带 `metadata.draft: true` | 480p 样片任务 |
+| 2. 轮询 | `GET /v1/video/generations/{task_id}` | 样片结果 |
+| 3. 出成片 | `POST /v1/videos/{task_id}/finalize` | 1080p 成片任务（**新的 `task_id`**） |
+
+> ⚠️ **成片接口只挂在 `/v1/videos/{task_id}/finalize` 上**。提交样片时 `/v1/video/generations` 与 `/v1/videos` 两条路径都可以用，但第三步必须用 `/v1/videos/`。
+
+---
+
+## 第一步：提交样片
+
+在[提交任务](./submit)的基础上加 **`metadata.draft: true`**。
+
+| 写法 | 是否生效 |
+| --- | --- |
+| `metadata.draft: true` | ✅ 推荐 |
+| 顶层 `draft: true` | ✅ 等价 |
+| `"true"` 字符串 | ✅ 等价（大小写不敏感，两侧空白会被修剪） |
+
+**分辨率由网关强制为 `480p`，不要自己传 `resolution`**：
+
+| `resolution` 取值 | 结果 |
+| --- | --- |
+| 不传 | ✅ 上游收到 `480p` |
+| `480p` | ✅ 上游收到 `480p` |
+| `720p` / `1080p` / `4k` | ❌ 400 `invalid_resolution` |
+
+传非 480p 是**明确拒绝**，不会静默改写成 480p——那样你会以为拿到的是高清预览。拒绝发生在预扣费之前，不产生费用。
+
+其余参数（`prompt` / `seconds` / `ratio` / `content` 等）与普通提交完全一致，[时长怎么传](./submit)同样适用。
+
+```bash
+BASE_URL="https://yunjizi.cn"   # 国外用 https://api.yunjizi.cn
+
+curl "$BASE_URL/v1/video/generations" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "doubao-seedance-2-5-260628",
+    "prompt": "一只橘猫在窗台上伸懒腰，阳光斜射，浅景深",
+    "seconds": "4",
+    "metadata": {
+      "draft": true,
+      "ratio": "16:9"
+    }
+  }'
+```
+
+响应与普通提交一致，记下 `task_id`。
+
+---
+
+## 第二步：轮询样片
+
+```bash
+curl "$BASE_URL/v1/video/generations/$TASK_ID" \
+  -H "Authorization: Bearer sk-YOUR-KEY"
+```
+
+`status` 到达完成态后才能出成片。**样片必须成功**，否则成片接口返回 409 `origin_task_not_finished`。
+
+---
+
+## 第三步：出成片
+
+`task_id` 换成**样片的 `task_id`**：
+
+```bash
+curl -X POST "$BASE_URL/v1/videos/$TASK_ID/finalize" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+- **请求体可以为空**，也可以直接 `-d '{}'`。
+- **不要传 `model`**：渠道与模型锁定到你提交样片时用的那一个。
+- `prompt` / `seconds` / `ratio` / `content` / `seed` 等**不用传，也传不进去**——成片自动沿用样片的提示词、时长与比例。塞进去会被忽略，不会报错。
+
+返回一个**新的 `task_id`**。这是第二个独立任务，按[查询任务](./query)轮询它拿 1080p 成片。
+
+### 成片请求体可接受的字段
+
+全部可选。`resolution` 只能不传或传 `1080p`：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `resolution` | string | 只能不传或传 `1080p`；其它值 400 `invalid_resolution` |
+| `watermark` | bool | 水印 |
+| `return_last_frame` | bool | 返回尾帧 |
+| `output_format` | string | 封装容器（`mp4` / `mov`） |
+| `service_tier` | string | 服务档位 |
+| `execution_expires_after` | int | 执行超时 |
+| `priority` | int | 优先级 |
+| `callback_url` | string | 回调地址 |
+| `safety_identifier` | string | 安全标识 |
+
+---
+
+## 约束
+
+| 约束 | 说明 |
+| --- | --- |
+| 样片只能 480p | 见上表 |
+| 成片固定 1080p | 由网关设定，客户端改不了 |
+| 样片有效期 **7 天** | 从**提交时刻**起算（不是完成时刻）。超期返回 400 `origin_draft_expired` |
+| 必须是本人任务 | 用他人的 `task_id` 返回 400 `task_not_exist` |
+| **finalize 不幂等** | 同一份样片调两次会出**两段成片、扣两次费**。只能调一次 |
+| 仅 Seedance 2.5 | Seedance 2.0 / fast / mini 没有样片模式，渠道不支持 |
+
+---
+
+## 错误码
+
+| code | HTTP | 含义 |
+| --- | --- | --- |
+| `invalid_resolution` | 400 | 样片传了非 480p，或成片传了非 1080p |
+| `task_not_exist` | 400 | `task_id` 不存在或不属于你 |
+| `origin_not_draft` | 400 | 目标任务是普通任务，不是样片，不能出成片 |
+| `origin_task_not_finished` | 409 | 样片还没生成完 |
+| `origin_draft_expired` | 400 | 样片提交已超过 7 天 |
+| `origin_upstream_id_missing` | 400 | 样片缺少上游任务 ID（历史数据） |
+
+---
+
+## 相关文档
+
+- [提交任务](./submit)
+- [查询任务](./query)
+- [下载视频](./download)
+- [错误码](../errors)
