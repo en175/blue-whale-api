@@ -119,27 +119,6 @@ All optional. `resolution` may only be omitted or `1080p`:
 
 ---
 
-## Billing
-
-The draft and the final are **charged separately**, each settled on its own.
-
-The tier is determined by resolution plus whether the request includes video input. Multipliers are relative to the 480p / no-video-input base tier:
-
-| Tier | Volcengine list price (CNY per 1k tokens) | Relative to base |
-| --- | --- | --- |
-| 480P, no video input ← **draft base** | 0.070 | 1.00 |
-| 1080P, no video input ← **final (common case)** | 0.077 | 1.10 |
-| 480P, with video input | 0.042 | 0.60 |
-| 1080P, with video input | 0.046 | 0.66 |
-
-**The final inherits the draft's "has video input" flag**: the finalize body has no `content`, so the gateway reads it from the original draft task. A video-to-video draft therefore finalizes at the *with video input* tier.
-
-Actual charge = upstream tokens x model multiplier x your group multiplier. The token count comes from upstream and scales with output resolution and duration — it **grows with pixel area**. So although the final's unit price is only 10% higher, the same 4-second clip consumes roughly 5x the tokens, and the total cost difference comes mostly from the token count rather than the unit price.
-
-> Measured reference (4 seconds, default group): draft about CNY 2.7, final about CNY 15.1. Verifying framing with a draft first is where the savings are.
-
----
-
 ## Errors
 
 | code | HTTP | Meaning |
