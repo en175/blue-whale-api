@@ -1,0 +1,161 @@
+---
+title: Draft Mode (Seedance 2.5)
+description: Generate a 480p draft to check framing and pacing, then finalize it to 1080p
+---
+
+Seedance 2.5 (`doubao-seedance-2-5-260628`) supports **draft mode**: generate a cheap **480p preview** to check framing and pacing, then finalize it into a **1080p** video once you are happy with it.
+
+The two steps are **two independent tasks**, each billed and queried separately, each with its own `task_id`:
+
+| Step | Request | Result |
+| --- | --- | --- |
+| 1. Submit draft | `POST /v1/video/generations` with `metadata.draft: true` | 480p draft task |
+| 2. Poll | `GET /v1/video/generations/{task_id}` | Draft result |
+| 3. Finalize | `POST /v1/videos/{task_id}/finalize` | 1080p final task (**new `task_id`**) |
+
+> ⚠️ **The finalize endpoint exists only at `/v1/videos/{task_id}/finalize`.** Submitting the draft works on both `/v1/video/generations` and `/v1/videos`, but step 3 must use `/v1/videos/`.
+
+---
+
+## Step 1: Submit a Draft
+
+Add **`metadata.draft: true`** to a normal [submit request](./submit).
+
+| Form | Works |
+| --- | --- |
+| `metadata.draft: true` | ✅ Recommended |
+| Top-level `draft: true` | ✅ Equivalent |
+| The string `"true"` | ✅ Equivalent (case-insensitive, surrounding whitespace trimmed) |
+
+**The gateway forces `resolution` to `480p` — do not send it yourself:**
+
+| `resolution` value | Result |
+| --- | --- |
+| Omitted | ✅ Upstream receives `480p` |
+| `480p` | ✅ Upstream receives `480p` |
+| `720p` / `1080p` / `4k` | ❌ 400 `invalid_resolution` |
+
+A non-480p value is **rejected outright** rather than silently rewritten to 480p — a silent rewrite would leave you believing you had a high-resolution preview. The rejection happens before any pre-charge, so it costs nothing.
+
+All other parameters (`prompt` / `seconds` / `ratio` / `content`, etc.) behave exactly as in a normal submit, including [how to pass duration](./submit).
+
+```bash
+BASE_URL="https://api.yunjizi.cn"   # in China use https://yunjizi.cn
+
+curl "$BASE_URL/v1/video/generations" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "doubao-seedance-2-5-260628",
+    "prompt": "An orange tabby stretching on a windowsill, raking sunlight, shallow depth of field",
+    "seconds": "4",
+    "metadata": {
+      "draft": true,
+      "ratio": "16:9"
+    }
+  }'
+```
+
+The response is identical to a normal submit. Note the `task_id`.
+
+---
+
+## Step 2: Poll the Draft
+
+```bash
+curl "$BASE_URL/v1/video/generations/$TASK_ID" \
+  -H "Authorization: Bearer sk-YOUR-KEY"
+```
+
+The draft must reach a successful status before you can finalize. Otherwise the finalize endpoint returns 409 `origin_task_not_finished`.
+
+---
+
+## Step 3: Finalize
+
+Set `task_id` to the **draft's `task_id`**:
+
+```bash
+curl -X POST "$BASE_URL/v1/videos/$TASK_ID/finalize" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+- **The body may be empty**, or `-d '{}'`.
+- **Do not send `model`**: the channel and model are locked to the ones used for the draft.
+- `prompt` / `seconds` / `ratio` / `content` / `seed` **neither need to be sent nor can be sent** — the final inherits the draft's prompt, duration and aspect ratio. Included values are ignored, not rejected.
+
+The response contains a **new `task_id`**. That is a second, independent task: poll it via [Query a Task](./query) to get the 1080p result.
+
+### Accepted fields in the finalize body
+
+All optional. `resolution` may only be omitted or `1080p`:
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `resolution` | string | Omit or `1080p` only; anything else returns 400 `invalid_resolution` |
+| `watermark` | bool | Watermark |
+| `return_last_frame` | bool | Return the last frame |
+| `output_format` | string | Container (`mp4` / `mov`) |
+| `service_tier` | string | Service tier |
+| `execution_expires_after` | int | Execution timeout |
+| `priority` | int | Priority |
+| `callback_url` | string | Webhook URL |
+| `safety_identifier` | string | Safety identifier |
+
+---
+
+## Constraints
+
+| Constraint | Detail |
+| --- | --- |
+| Draft is 480p only | See the table above |
+| Final is locked to 1080p | Set by the gateway; clients cannot change it |
+| Draft valid for **7 days** | Counted from **submit** time, not completion time. Past that: 400 `origin_draft_expired` |
+| Must be your own task | Someone else's `task_id` returns 400 `task_not_exist` |
+| **Finalize is not idempotent** | Calling it twice on the same draft produces **two finals and two charges**. Call it once |
+| Seedance 2.5 only | Seedance 2.0 / fast / mini have no draft mode and are not supported by this channel |
+
+---
+
+## Billing
+
+The draft and the final are **charged separately**, each settled on its own.
+
+The tier is determined by resolution plus whether the request includes video input. Multipliers are relative to the 480p / no-video-input base tier:
+
+| Tier | Volcengine list price (CNY per 1k tokens) | Relative to base |
+| --- | --- | --- |
+| 480P, no video input ← **draft base** | 0.070 | 1.00 |
+| 1080P, no video input ← **final (common case)** | 0.077 | 1.10 |
+| 480P, with video input | 0.042 | 0.60 |
+| 1080P, with video input | 0.046 | 0.66 |
+
+**The final inherits the draft's "has video input" flag**: the finalize body has no `content`, so the gateway reads it from the original draft task. A video-to-video draft therefore finalizes at the *with video input* tier.
+
+Actual charge = upstream tokens x model multiplier x your group multiplier. The token count comes from upstream and scales with output resolution and duration — it **grows with pixel area**. So although the final's unit price is only 10% higher, the same 4-second clip consumes roughly 5x the tokens, and the total cost difference comes mostly from the token count rather than the unit price.
+
+> Measured reference (4 seconds, default group): draft about CNY 2.7, final about CNY 15.1. Verifying framing with a draft first is where the savings are.
+
+---
+
+## Errors
+
+| code | HTTP | Meaning |
+| --- | --- | --- |
+| `invalid_resolution` | 400 | Draft sent a non-480p resolution, or finalize sent a non-1080p one |
+| `task_not_exist` | 400 | `task_id` does not exist or is not yours |
+| `origin_not_draft` | 400 | The target task is a normal task, not a draft, so it cannot be finalized |
+| `origin_task_not_finished` | 409 | The draft has not finished generating |
+| `origin_draft_expired` | 400 | The draft was submitted more than 7 days ago |
+| `origin_upstream_id_missing` | 400 | The draft is missing its upstream task ID (legacy data) |
+
+---
+
+## Related
+
+- [Submit a Task](./submit)
+- [Query a Task](./query)
+- [Download a Video](./download)
+- [Errors](../errors)

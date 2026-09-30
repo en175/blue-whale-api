@@ -41,6 +41,7 @@ Parameters fall into two groups:
 | `content` | array | No | — | Multi-modal reference inputs (reference image / video / audio). Array items: `{type, image_url\|video_url\|audio_url, role}`; reference video uses `type:"video_url"` + `role:"reference_video"` (public URL, up to 3 clips, 2–15s each) |
 | `content[].audio_url` | object | No | — | Reference audio (background music / sound effects): `{type:"audio_url", audio_url:{url}, role:"reference_audio"}`; public URL, up to 3 clips; **cannot be used alone** — pair with at least 1 reference image or 1 reference video |
 | `omni_reference_task_type` | string | No | `auto` | Task-type hint (**Seedance 2.5 only**): `auto` / `reference` / `edit` / `extend`. Specifying it moves parameter-constraint validation **forward to submission time** (otherwise the task fails asynchronously after starting). See "V2V Task Type and Parameter Rules" below |
+| `draft` | bool | No | `false` | **Draft mode switch (Seedance 2.5 only)**: `true` generates a 480p draft only; once you are happy with it, call `POST /v1/videos/{task_id}/finalize` for the 1080p final. While enabled, `resolution` may only be `480p` (forced to 480p when omitted). See [Draft Mode](./draft) |
 | `frames` | int | No | — | Number of frames |
 | `seed` | int | No | — | Random seed (deterministic result) |
 | `camera_fixed` | bool | No | `false` | Fixed camera position |
@@ -256,4 +257,5 @@ Note down `id` (i.e. `task_id`) — it is used to query progress and download th
 
 - [Query a Task](./query)
 - [Download the Video](./download)
+- [Draft Mode](./draft)
 - [Error Codes](../errors)

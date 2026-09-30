@@ -41,6 +41,7 @@ description: 提交视频生成任务，获取 task_id
 | `content` | array | 否 | — | 多模态参考素材数组（参考图 / 参考视频 / 参考音频），元素形如 `{type, image_url\|video_url\|audio_url, role}`；参考视频：`type:"video_url"` + `role:"reference_video"`（公网 URL，最多 3 段、单段 2–15s） |
 | `content[].audio_url` | object | 否 | — | 参考音频（背景音乐/音效）：`{type:"audio_url", audio_url:{url}, role:"reference_audio"}`；公网 URL，最多 3 段；**不能单独作为参考**——须至少搭配 1 张参考图或 1 段参考视频 |
 | `omni_reference_task_type` | string | 否 | `auto` | 任务类型引导（**仅 Seedance 2.5**）：`auto` / `reference`（参考生视频）/ `edit`（视频编辑）/ `extend`（视频延长）。显式指定可把参数约束校验**前置到提交时**（否则任务启动后异步报错）。详见下方「V2V 任务类型与参数规范」 |
+| `draft` | bool | 否 | `false` | **样片模式开关（仅 Seedance 2.5）**：`true` 则只生成 480p 样片，确认后再调 `POST /v1/videos/{task_id}/finalize` 出 1080p 成片。开启时 `resolution` 只能是 `480p`（不传则强制 480p）。详见[样片模式](./draft) |
 | `frames` | int | 否 | — | 帧数 |
 | `seed` | int | 否 | — | 随机种子（固定结果） |
 | `camera_fixed` | bool | 否 | `false` | 固定机位 |
@@ -256,4 +257,5 @@ curl "$BASE_URL/v1/video/generations" \
 
 - [查询任务](./query)
 - [下载视频](./download)
+- [样片模式](./draft)
 - [错误码](../errors)
