@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"math"
 	"net/http"
 	"os"
@@ -574,6 +575,89 @@ func TestRecalculateTaskQuotaByTokens_CrossGroupAppliesSpecialRatio(t *testing.T
 			require.NotNil(t, log)
 			require.Equal(t, model.LogTypeRefund, log.Type)
 			require.Equal(t, preConsumed-wantQuota, log.Quota)
+		})
+	}
+}
+
+// TestRecalculateTaskQuotaByTokens_GroupModelDiscountApplies 保护分组模型折扣在差额结算阶段生效，
+// 且必须压过同组用户特价——包括折扣恰好配成 1 的情况，那种情况下若按"取更小的那个"实现就会
+// 悄悄按用户特价 0.5 结算。
+func TestRecalculateTaskQuotaByTokens_GroupModelDiscountApplies(t *testing.T) {
+	const totalTokens = 50638
+	const preConsumed = 2_875_000
+	const initQuota = 10_000_000
+	const modelRatio = 23 // 50638 × 23 = 1164674
+
+	cases := []struct {
+		name            string
+		groupModelRatio string
+		// snapshotRatio 是提交请求时 controller/relay.go 快照进 BillingContext 的值，
+		// 结算日志的 model_group_ratio 直接取自它
+		snapshotRatio float64
+		wantQuota     int
+	}{
+		{
+			name:            "模型折扣 0.25 压过用户特价 0.5",
+			groupModelRatio: `{"default":{"test-model":0.25}}`,
+			snapshotRatio:   0.25,
+			wantQuota:       291168, // 1164674 × 0.25
+		},
+		{
+			name:            "模型折扣配成 1 时不退回用户特价",
+			groupModelRatio: `{"default":{"test-model":1}}`,
+			snapshotRatio:   1,
+			wantQuota:       1164674, // 1164674 × 1
+		},
+	}
+
+	for i, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			truncate(t)
+			ctx := context.Background()
+
+			userID, tokenID, channelID := 30+i, 30+i, 30+i
+
+			savedGroupGroup := ratio_setting.GroupGroupRatio2JSONString()
+			savedGroupModel := ratio_setting.GroupModelRatio2JSONString()
+			savedModelRatio := ratio_setting.ModelRatio2JSONString()
+			t.Cleanup(func() {
+				require.NoError(t, ratio_setting.UpdateGroupGroupRatioByJSONString(savedGroupGroup))
+				require.NoError(t, ratio_setting.UpdateGroupModelRatioByJSONString(savedGroupModel))
+				require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(savedModelRatio))
+			})
+
+			user := &model.User{
+				Id:       userID,
+				Username: "group_model_discount_user",
+				Group:    "vip",
+				Quota:    initQuota,
+				Status:   common.UserStatusEnabled,
+			}
+			require.NoError(t, model.DB.Create(user).Error)
+			seedToken(t, tokenID, userID, "sk-group-model", initQuota)
+			seedChannel(t, channelID)
+
+			// 用户特价 0.5 与模型折扣同时配置，用来验证优先级而不是凑巧相等
+			require.NoError(t, ratio_setting.UpdateGroupGroupRatioByJSONString(`{"vip":{"default":0.5}}`))
+			require.NoError(t, ratio_setting.UpdateGroupModelRatioByJSONString(tc.groupModelRatio))
+			require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(
+				fmt.Sprintf(`{"test-model":%d}`, modelRatio)))
+
+			task := makeTask(userID, channelID, preConsumed, tokenID, BillingSourceWallet, 0)
+			task.TaskID = fmt.Sprintf("task_group_model_discount_%d", i)
+			task.Group = "default" // 使用组，与用户组 vip 不一致
+			task.PrivateData.BillingContext.GroupModelRatio = tc.snapshotRatio
+			require.NoError(t, model.DB.Create(task).Error)
+
+			RecalculateTaskQuotaByTokens(ctx, task, totalTokens)
+
+			require.Equal(t, tc.wantQuota, task.Quota)
+			require.Equal(t, initQuota+(preConsumed-tc.wantQuota), getUserQuota(t, userID))
+
+			log := getLastLog(t)
+			require.NotNil(t, log)
+			require.Contains(t, log.Other,
+				fmt.Sprintf(`"model_group_ratio":%v`, tc.snapshotRatio))
 		})
 	}
 }

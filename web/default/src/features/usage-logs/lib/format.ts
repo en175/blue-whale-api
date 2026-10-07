@@ -92,6 +92,54 @@ export function isViolationFeeLog(other: LogOtherData | null): boolean {
   )
 }
 
+/** 实际计费倍率来自哪一层分组配置 */
+export type LogGroupRatioSource = 'model' | 'user' | 'group'
+
+const LOG_GROUP_RATIO_LABEL_KEYS: Record<LogGroupRatioSource, string> = {
+  model: 'Model Group Ratio',
+  user: 'User Exclusive Ratio',
+  group: 'Group Ratio',
+}
+
+export function getLogGroupRatioLabel(
+  source: LogGroupRatioSource,
+  t: (key: string) => string
+): string {
+  return t(LOG_GROUP_RATIO_LABEL_KEYS[source])
+}
+
+/**
+ * 解析这条日志实际生效的分组倍率，优先级与后端 ResolveGroupRatio 一致：
+ * 分组模型折扣 → 用户组特价 → 分组倍率。
+ *
+ * 必须按优先级短路，不能"谁不为空用谁"：模型级折扣配成 1 而用户组特价是 0.5 时，
+ * 实际按 1 收费，展示成 0.5 就是错的。未命中层返回的 -1 也要当成未配置。
+ */
+export function resolveLogGroupRatio(other: LogOtherData | null): {
+  ratio: number | null
+  source: LogGroupRatioSource
+} {
+  const modelGroupRatio = other?.model_group_ratio
+  if (
+    modelGroupRatio != null &&
+    Number.isFinite(modelGroupRatio) &&
+    modelGroupRatio !== -1
+  ) {
+    return { ratio: modelGroupRatio, source: 'model' }
+  }
+
+  const userGroupRatio = other?.user_group_ratio
+  if (
+    userGroupRatio != null &&
+    Number.isFinite(userGroupRatio) &&
+    userGroupRatio !== -1
+  ) {
+    return { ratio: userGroupRatio, source: 'user' }
+  }
+
+  return { ratio: other?.group_ratio ?? null, source: 'group' }
+}
+
 /**
  * Parse the 'other' field from JSON string to object
  */

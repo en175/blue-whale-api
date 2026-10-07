@@ -49,6 +49,8 @@ import {
   parseLogOther,
   isViolationFeeLog,
   renderAuditContent,
+  resolveLogGroupRatio,
+  getLogGroupRatioLabel,
 } from '../../lib/format'
 import {
   isDisplayableLogType,
@@ -76,21 +78,9 @@ function formatRatioCompact(ratio: number | undefined): string {
 }
 
 function getGroupRatio(other: LogOtherData | null): number | null {
-  const userGroupRatio = other?.user_group_ratio
-  if (
-    userGroupRatio != null &&
-    userGroupRatio !== -1 &&
-    Number.isFinite(userGroupRatio)
-  ) {
-    return userGroupRatio
-  }
-
-  const groupRatio = other?.group_ratio
-  if (groupRatio != null && groupRatio !== 1 && Number.isFinite(groupRatio)) {
-    return groupRatio
-  }
-
-  return null
+  const { ratio } = resolveLogGroupRatio(other)
+  if (ratio == null || !Number.isFinite(ratio) || ratio === 1) return null
+  return ratio
 }
 
 function splitQuotaDisplay(value: string): { prefix: string; amount: string } {
@@ -259,20 +249,11 @@ function buildTypeDetailSegments(
         }
       }
     } else {
-      const userGroupRatio = other.user_group_ratio
-      const groupRatio = other.group_ratio
-      const isUserGroup =
-        userGroupRatio != null &&
-        Number.isFinite(userGroupRatio) &&
-        userGroupRatio !== -1
-      const effectiveRatio = isUserGroup ? userGroupRatio : groupRatio
-      const ratioLabel = isUserGroup
-        ? t('User Exclusive Ratio')
-        : t('Group Ratio')
+      const { ratio: effectiveRatio, source } = resolveLogGroupRatio(other)
 
       if (effectiveRatio != null && Number.isFinite(effectiveRatio)) {
         segments.push({
-          text: `${ratioLabel} ${formatRatioCompact(effectiveRatio)}x`,
+          text: `${getLogGroupRatioLabel(source, t)} ${formatRatioCompact(effectiveRatio)}x`,
         })
       }
     }
