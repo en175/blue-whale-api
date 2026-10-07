@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/setting/config"
@@ -144,13 +145,23 @@ func GroupModelRatio2JSONString() string {
 	return groupModelRatioMap.MarshalJSONString()
 }
 
+// UpdateGroupModelRatioByJSONString 写入折扣表。空串按「清空」处理：管理员在设置页把
+// 原始 JSON 清空时前端会发 value=""，而 encoding/json 对空输入报错，不归一化会让配置
+// 既改不掉也留不下来。
 func UpdateGroupModelRatioByJSONString(jsonStr string) error {
+	if strings.TrimSpace(jsonStr) == "" {
+		jsonStr = "{}"
+	}
 	return types.LoadFromJsonString(groupModelRatioMap, jsonStr)
 }
 
 // CheckGroupModelRatio 校验「使用组 × 模型」折扣表。允许 0（该模型在该组下免费），
 // 但拒绝负数与非有限值：它们会成为计费乘数，必须在入口挡住。
+// 空串与 UpdateGroupModelRatioByJSONString 一样表示「清空配置」。
 func CheckGroupModelRatio(jsonStr string) error {
+	if strings.TrimSpace(jsonStr) == "" {
+		return nil
+	}
 	checkGroupModelRatio := make(map[string]map[string]float64)
 	if err := common.Unmarshal([]byte(jsonStr), &checkGroupModelRatio); err != nil {
 		return err

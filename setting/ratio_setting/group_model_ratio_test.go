@@ -48,6 +48,8 @@ func TestCheckGroupModelRatio(t *testing.T) {
 		{"0 合法，该模型在该组下免费", `{"vip":{"seedance-2.0":0}}`, false},
 		{"负数被拒", `{"vip":{"seedance-2.0":-1}}`, true},
 		{"非法 JSON 被拒", `not-json`, true},
+		{"空串表示清空配置，不算错误", ``, false},
+		{"纯空白同样表示清空配置", `   `, false},
 	}
 
 	for _, tt := range tests {
@@ -60,4 +62,24 @@ func TestCheckGroupModelRatio(t *testing.T) {
 			require.NoError(t, err)
 		})
 	}
+}
+
+// 空串是前端清空原始 JSON 框时发出的值。只让校验放行还不够——写入侧也必须归一化，
+// 否则 CheckGroupModelRatio 通过之后 UpdateGroupModelRatioByJSONString 仍会报
+// unexpected end of JSON input，管理员依然改不掉配置。
+func TestUpdateGroupModelRatioByJSONStringEmptyClears(t *testing.T) {
+	origin := GroupModelRatio2JSONString()
+	t.Cleanup(func() {
+		require.NoError(t, UpdateGroupModelRatioByJSONString(origin))
+	})
+
+	require.NoError(t, UpdateGroupModelRatioByJSONString(`{"vip":{"seedance-2.0":0.4}}`))
+	_, ok := GetGroupModelRatio("vip", "seedance-2.0")
+	require.True(t, ok)
+
+	require.NoError(t, UpdateGroupModelRatioByJSONString(""))
+
+	_, ok = GetGroupModelRatio("vip", "seedance-2.0")
+	require.False(t, ok, "空串应当清空折扣表")
+	require.Equal(t, `{}`, GroupModelRatio2JSONString())
 }

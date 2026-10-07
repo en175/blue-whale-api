@@ -23,7 +23,8 @@ func TestResolveGroupRatioPriority(t *testing.T) {
 
 	require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(`{"default":1,"vip":0.8}`))
 	require.NoError(t, ratio_setting.UpdateGroupGroupRatioByJSONString(`{"vip":{"default":0.5}}`))
-	require.NoError(t, ratio_setting.UpdateGroupModelRatioByJSONString(`{"default":{"seedance-2.0":0.3}}`))
+	require.NoError(t, ratio_setting.UpdateGroupModelRatioByJSONString(
+		`{"default":{"seedance-2.0":0.3,"seedance-2.0-free":0}}`))
 
 	tests := []struct {
 		name       string
@@ -72,6 +73,16 @@ func TestResolveGroupRatioPriority(t *testing.T) {
 			modelName:  "seedance-2.0",
 			wantRatio:  0.8,
 			wantSource: types.GroupRatioSourceGroup,
+		},
+		{
+			// 0 必须作为命中结果原样返回。若解析层把 0 当成「未配置」
+			// （例如写成 ratio > 0），这里会回落到用户组特价 0.5 —— 免费模型变收费。
+			name:       "折扣配 0 时按 0 计费，不回落到用户组特价",
+			userGroup:  "vip",
+			usingGroup: "default",
+			modelName:  "seedance-2.0-free",
+			wantRatio:  0,
+			wantSource: types.GroupRatioSourceGroupModel,
 		},
 	}
 
