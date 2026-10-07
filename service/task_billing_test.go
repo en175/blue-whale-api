@@ -589,24 +589,59 @@ func TestRecalculateTaskQuotaByTokens_GroupModelDiscountApplies(t *testing.T) {
 	const modelRatio = 23 // 50638 × 23 = 1164674
 
 	cases := []struct {
-		name            string
+		name string
+		// groupModelRatio 是结算时读到的实时折扣表（结算走 ResolveGroupRatio，
+		// 不看快照），snapshotRatio / snapshotHit 则是提交请求时 controller/relay.go
+		// 快照进 BillingContext 的两个字段——结算日志的 model_group_ratio 取自快照。
 		groupModelRatio string
-		// snapshotRatio 是提交请求时 controller/relay.go 快照进 BillingContext 的值，
-		// 结算日志的 model_group_ratio 直接取自它
-		snapshotRatio float64
-		wantQuota     int
+		snapshotRatio   float64
+		snapshotHit     bool
+		// preConsumed 是提交时按快照折扣算出的预扣额，也是 task.Quota 的初值。
+		// 折扣为 0 时预扣就是 0，不能沿用别的用例的 2_875_000。
+		preConsumed  int
+		wantQuota    int
+		wantLogField bool
 	}{
 		{
 			name:            "模型折扣 0.25 压过用户特价 0.5",
 			groupModelRatio: `{"default":{"test-model":0.25}}`,
 			snapshotRatio:   0.25,
+			snapshotHit:     true,
+			preConsumed:     preConsumed,
 			wantQuota:       291168, // 1164674 × 0.25
+			wantLogField:    true,
 		},
 		{
 			name:            "模型折扣配成 1 时不退回用户特价",
 			groupModelRatio: `{"default":{"test-model":1}}`,
 			snapshotRatio:   1,
+			snapshotHit:     true,
+			preConsumed:     preConsumed,
 			wantQuota:       1164674, // 1164674 × 1
+			wantLogField:    true,
+		},
+		{
+			// 0 同样是命中。这里模拟提交时该模型在该组免费（预扣 0），结算前管理员把折扣
+			// 改成 0.25：金额按实时的 0.25 补扣，日志里的 model_group_ratio 取快照的 0。
+			// 若判定写成 >0，金额照样对（结算不看快照），但这个字段会整个消失。
+			name:            "快照折扣为 0 时结算仍写审计字段",
+			groupModelRatio: `{"default":{"test-model":0.25}}`,
+			snapshotRatio:   0,
+			snapshotHit:     true,
+			preConsumed:     0,
+			wantQuota:       291168, // 1164674 × 0.25
+			wantLogField:    true,
+		},
+		{
+			// 反向：模型折扣键在使用组 vip 下，使用组是 default，命不中，
+			// 回落到用户特价 0.5，日志里就不该出现 model_group_ratio。
+			name:            "未命中模型折扣时不写审计字段",
+			groupModelRatio: `{"vip":{"test-model":0.25}}`,
+			snapshotRatio:   0,
+			snapshotHit:     false,
+			preConsumed:     preConsumed,
+			wantQuota:       582337, // 1164674 × 用户特价 0.5
+			wantLogField:    false,
 		},
 	}
 
@@ -643,21 +678,26 @@ func TestRecalculateTaskQuotaByTokens_GroupModelDiscountApplies(t *testing.T) {
 			require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(
 				fmt.Sprintf(`{"test-model":%d}`, modelRatio)))
 
-			task := makeTask(userID, channelID, preConsumed, tokenID, BillingSourceWallet, 0)
+			task := makeTask(userID, channelID, tc.preConsumed, tokenID, BillingSourceWallet, 0)
 			task.TaskID = fmt.Sprintf("task_group_model_discount_%d", i)
 			task.Group = "default" // 使用组，与用户组 vip 不一致
 			task.PrivateData.BillingContext.GroupModelRatio = tc.snapshotRatio
+			task.PrivateData.BillingContext.HasGroupModelRatio = tc.snapshotHit
 			require.NoError(t, model.DB.Create(task).Error)
 
 			RecalculateTaskQuotaByTokens(ctx, task, totalTokens)
 
 			require.Equal(t, tc.wantQuota, task.Quota)
-			require.Equal(t, initQuota+(preConsumed-tc.wantQuota), getUserQuota(t, userID))
+			require.Equal(t, initQuota+(tc.preConsumed-tc.wantQuota), getUserQuota(t, userID))
 
 			log := getLastLog(t)
 			require.NotNil(t, log)
-			require.Contains(t, log.Other,
-				fmt.Sprintf(`"model_group_ratio":%v`, tc.snapshotRatio))
+			if tc.wantLogField {
+				require.Contains(t, log.Other,
+					fmt.Sprintf(`"model_group_ratio":%v`, tc.snapshotRatio))
+				return
+			}
+			require.NotContains(t, log.Other, "model_group_ratio")
 		})
 	}
 }

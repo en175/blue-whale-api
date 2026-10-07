@@ -134,8 +134,9 @@ func taskBillingOther(task *model.Task) map[string]interface{} {
 			other["model_ratio"] = bc.ModelRatio
 		}
 		other["group_ratio"] = bc.GroupRatio
-		// 0 表示未命中分组模型折扣；与紧邻的 model_ratio 一样按 >0 判定
-		if bc.GroupModelRatio > 0 {
+		// 用布尔标记而非 >0 判定：折扣配成 0（该模型在该组免费）同样是命中，
+		// 只看数值分不清它与「未配置」，0 折扣的审计字段会丢。同步链路同样按标记判定。
+		if bc.HasGroupModelRatio {
 			other["model_group_ratio"] = bc.GroupModelRatio
 		}
 		if priceData := taskBillingContextPriceData(bc); priceData != nil {

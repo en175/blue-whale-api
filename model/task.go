@@ -138,13 +138,16 @@ type TaskPrivateData struct {
 
 // TaskBillingContext 记录任务提交时的计费参数，以便轮询阶段可以重新计算额度。
 type TaskBillingContext struct {
-	ModelPrice      float64            `json:"model_price,omitempty"`       // 模型单价
-	GroupRatio      float64            `json:"group_ratio,omitempty"`       // 分组倍率
-	GroupModelRatio float64            `json:"group_model_ratio,omitempty"` // 命中的分组模型折扣；未命中为 0
-	ModelRatio      float64            `json:"model_ratio,omitempty"`       // 模型倍率
-	OtherRatios     map[string]float64 `json:"other_ratios,omitempty"`      // 附加倍率（时长、分辨率等）
-	OriginModelName string             `json:"origin_model_name,omitempty"` // 模型名称，必须为OriginModelName
-	PerCallBilling  bool               `json:"per_call_billing,omitempty"`  // 按次计费：跳过轮询阶段的差额结算
+	ModelPrice      float64 `json:"model_price,omitempty"`       // 模型单价
+	GroupRatio      float64 `json:"group_ratio,omitempty"`       // 分组倍率
+	GroupModelRatio float64 `json:"group_model_ratio,omitempty"` // 命中的分组模型折扣；未命中为 0
+	// HasGroupModelRatio 区分「命中且折扣为 0」（该模型在该组免费）与「未命中」。
+	// 只看 GroupModelRatio 的零值分不清这两者，命中 0 的结算日志会因此丢掉审计字段。
+	HasGroupModelRatio bool               `json:"has_group_model_ratio,omitempty"`
+	ModelRatio         float64            `json:"model_ratio,omitempty"`       // 模型倍率
+	OtherRatios        map[string]float64 `json:"other_ratios,omitempty"`      // 附加倍率（时长、分辨率等）
+	OriginModelName    string             `json:"origin_model_name,omitempty"` // 模型名称，必须为OriginModelName
+	PerCallBilling     bool               `json:"per_call_billing,omitempty"`  // 按次计费：跳过轮询阶段的差额结算
 	// DurationSettlement 显式要求完成时做差额结算。按次计费的判定条件之一是
 	// 「命中 model_price」，而按时长计费的渠道（元/分钟）同样要把价格配在
 	// model_price 上，于是会被误判为按次、整段跳过差额结算。这个标志让这类

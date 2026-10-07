@@ -137,10 +137,6 @@ func GetGroupModelRatio(usingGroup, modelName string) (float64, bool) {
 	return ratio, true
 }
 
-func GetGroupModelRatioCopy() map[string]map[string]float64 {
-	return groupModelRatioMap.ReadAll()
-}
-
 func GroupModelRatio2JSONString() string {
 	return groupModelRatioMap.MarshalJSONString()
 }
@@ -156,8 +152,12 @@ func UpdateGroupModelRatioByJSONString(jsonStr string) error {
 }
 
 // CheckGroupModelRatio 校验「使用组 × 模型」折扣表。允许 0（该模型在该组下免费），
-// 但拒绝负数与非有限值：它们会成为计费乘数，必须在入口挡住。
+// 但拒绝负数：它会成为计费乘数，必须在入口挡住。
 // 空串与 UpdateGroupModelRatioByJSONString 一样表示「清空配置」。
+//
+// IsNaN/IsInf 是纵深防御，不是已验证的防护：当前唯一入口是选项 API 传入的 JSON 字符串，
+// 而 JSON 没有 NaN 字面量、1e400 这类溢出会被 encoding/json 直接拒掉，所以这两个条件
+// 实际走不到。保留是防校验函数将来被非 JSON 来源复用，删掉不划算。
 func CheckGroupModelRatio(jsonStr string) error {
 	if strings.TrimSpace(jsonStr) == "" {
 		return nil
