@@ -12,6 +12,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/QuantumNous/new-api/types"
 	"github.com/glebarez/sqlite"
 	"github.com/shopspring/decimal"
@@ -35,6 +36,7 @@ func TestMain(m *testing.M) {
 	model.LOG_DB = db
 
 	common.SetDatabaseTypes(common.DatabaseTypeSQLite, common.DatabaseTypeSQLite)
+	model.InitCol()
 	common.RedisEnabled = false
 	common.BatchUpdateEnabled = false
 	common.LogConsumeEnabled = true
@@ -498,6 +500,82 @@ func TestRecalculate_ActualQuotaZero(t *testing.T) {
 	// No change (early return)
 	assert.Equal(t, initQuota, getUserQuota(t, userID))
 	assert.Equal(t, int64(0), countLogs(t))
+}
+
+// 回归 IKJUBL：分组特价必须按 (用户组, 使用组) 查。用户组与令牌分组不一致时，
+// 差额结算曾把使用组同时当作两个键去查对角线 [X][X]，用户组特价永远命中不了，
+// 于是按使用组的普通倍率全额结算（本地实测多收一倍）。
+func TestRecalculateTaskQuotaByTokens_CrossGroupAppliesSpecialRatio(t *testing.T) {
+	const totalTokens = 50638
+	const preConsumed = 2_875_000
+	const initQuota = 10_000_000
+	// 50638 × 23 × 0.5 —— 若漏掉用户组特价会算成 1164674
+	const wantQuota = 582337
+
+	cases := []struct {
+		name         string
+		userGroup    string
+		usingGroup   string
+		ratioSetting string
+	}{
+		{
+			name:         "用户组 default 使用组 vip",
+			userGroup:    "default",
+			usingGroup:   "vip",
+			ratioSetting: `{"default":{"vip":0.5}}`,
+		},
+		{
+			name:         "用户组 vip 使用组 default",
+			userGroup:    "vip",
+			usingGroup:   "default",
+			ratioSetting: `{"vip":{"default":0.5}}`,
+		},
+	}
+
+	for i, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			truncate(t)
+			ctx := context.Background()
+
+			userID, tokenID, channelID := 20+i, 20+i, 20+i
+
+			savedGroupGroup := ratio_setting.GroupGroupRatio2JSONString()
+			savedModelRatio := ratio_setting.ModelRatio2JSONString()
+			t.Cleanup(func() {
+				require.NoError(t, ratio_setting.UpdateGroupGroupRatioByJSONString(savedGroupGroup))
+				require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(savedModelRatio))
+			})
+
+			user := &model.User{
+				Id:       userID,
+				Username: "cross_group_user",
+				Group:    tc.userGroup,
+				Quota:    initQuota,
+				Status:   common.UserStatusEnabled,
+			}
+			require.NoError(t, model.DB.Create(user).Error)
+			seedToken(t, tokenID, userID, "sk-cross-group", initQuota)
+			seedChannel(t, channelID)
+
+			require.NoError(t, ratio_setting.UpdateGroupGroupRatioByJSONString(tc.ratioSetting))
+			require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(`{"test-model":23}`))
+
+			task := makeTask(userID, channelID, preConsumed, tokenID, BillingSourceWallet, 0)
+			task.TaskID = "task_cross_group_" + tc.userGroup + "_" + tc.usingGroup
+			task.Group = tc.usingGroup // 提交时的使用组，与用户组不一致
+			require.NoError(t, model.DB.Create(task).Error)
+
+			RecalculateTaskQuotaByTokens(ctx, task, totalTokens)
+
+			require.Equal(t, wantQuota, task.Quota)
+			require.Equal(t, initQuota+(preConsumed-wantQuota), getUserQuota(t, userID))
+
+			log := getLastLog(t)
+			require.NotNil(t, log)
+			require.Equal(t, model.LogTypeRefund, log.Type)
+			require.Equal(t, preConsumed-wantQuota, log.Quota)
+		})
+	}
 }
 
 func TestRecalculate_Subscription_NegativeDelta(t *testing.T) {
