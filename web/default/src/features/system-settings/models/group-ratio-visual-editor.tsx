@@ -67,6 +67,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
+import { usePricingData } from '@/features/pricing/hooks/use-pricing-data'
 
 import { safeJsonParse } from '../utils/json-parser'
 
@@ -75,6 +76,7 @@ type GroupRatioVisualEditorProps = {
   topupGroupRatio: string
   userUsableGroups: string
   groupGroupRatio: string
+  groupModelRatio: string
   autoGroups: string
   groupSpecialUsableGroup: string
   onChange: (field: string, value: string) => void
@@ -256,6 +258,7 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
   topupGroupRatio,
   userUsableGroups,
   groupGroupRatio,
+  groupModelRatio,
   autoGroups,
   groupSpecialUsableGroup,
   onChange,
@@ -336,6 +339,12 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
       <GroupOverrideRules
         registry={registry}
         groupGroupRatio={groupGroupRatio}
+        onChange={onChange}
+      />
+
+      <GroupModelDiscountRules
+        registry={registry}
+        groupModelRatio={groupModelRatio}
         onChange={onChange}
       />
 
@@ -993,6 +1002,338 @@ function GroupOverrideRules({
         groupOptions={registryNames}
         baseRatioByName={baseRatioByName}
       />
+    </Card>
+  )
+}
+
+type GroupModelDiscount = {
+  modelName: string
+  ratio: number
+}
+
+type GroupModelDiscountRulesProps = {
+  registry: RegistryEntry[]
+  groupModelRatio: string
+  onChange: (field: string, value: string) => void
+}
+
+function GroupModelDiscountRules({
+  registry,
+  groupModelRatio,
+  onChange,
+}: GroupModelDiscountRulesProps) {
+  const { t } = useTranslation()
+  const { models } = usePricingData()
+  const [groupInput, setGroupInput] = useState<string | null>(null)
+  const [modelInput, setModelInput] = useState<string | null>(null)
+  const [ratioInput, setRatioInput] = useState('')
+
+  const registryNames = useMemo(
+    () => registry.map((entry) => entry.name),
+    [registry]
+  )
+
+  const baseRatioByName = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const entry of registry) map.set(entry.name, entry.ratio)
+    return map
+  }, [registry])
+
+  // 分组 → 该分组可用的模型列表，用于限定下拉选项并对失配规则给出软警告
+  const modelsByGroup = useMemo(() => {
+    const map = new Map<string, string[]>()
+    for (const model of models) {
+      for (const group of model.enable_groups ?? []) {
+        const list = map.get(group)
+        if (list) {
+          list.push(model.model_name)
+        } else {
+          map.set(group, [model.model_name])
+        }
+      }
+    }
+    for (const list of map.values()) {
+      list.sort((a, b) => a.localeCompare(b))
+    }
+    return map
+  }, [models])
+
+  const catalogLoaded = models.length > 0
+
+  const groupModelRatioList = useMemo(() => {
+    const map = parseNestedRatioMap(groupModelRatio)
+    return Object.entries(map).map(([group, discounts]) => ({
+      group,
+      discounts: Object.entries(discounts).map(([modelName, ratio]) => ({
+        modelName,
+        ratio,
+      })),
+    }))
+  }, [groupModelRatio])
+
+  const modelOptions = useMemo(
+    () => (groupInput ? (modelsByGroup.get(groupInput) ?? []) : []),
+    [groupInput, modelsByGroup]
+  )
+
+  const emitMap = useCallback(
+    (map: Record<string, Record<string, number>>) => {
+      onChange('GroupModelRatio', JSON.stringify(map, null, 2))
+    },
+    [onChange]
+  )
+
+  const handleAdd = useCallback(() => {
+    if (!groupInput || !modelInput) return
+    const parsedRatio = Number.parseFloat(ratioInput)
+    if (Number.isNaN(parsedRatio)) return
+    const map = parseNestedRatioMap(groupModelRatio)
+    if (!map[groupInput]) {
+      map[groupInput] = {}
+    }
+    map[groupInput][modelInput] = parsedRatio
+    emitMap(map)
+    setModelInput(null)
+    setRatioInput('')
+  }, [groupInput, modelInput, ratioInput, groupModelRatio, emitMap])
+
+  const handleDiscountDelete = useCallback(
+    (group: string, modelName: string) => {
+      const map = parseNestedRatioMap(groupModelRatio)
+      if (map[group]) {
+        delete map[group][modelName]
+        if (Object.keys(map[group]).length === 0) {
+          delete map[group]
+        }
+      }
+      emitMap(map)
+    },
+    [groupModelRatio, emitMap]
+  )
+
+  const handleGroupDelete = useCallback(
+    (group: string) => {
+      const map = parseNestedRatioMap(groupModelRatio)
+      delete map[group]
+      emitMap(map)
+    },
+    [groupModelRatio, emitMap]
+  )
+
+  const addDisabled = !groupInput || !modelInput || ratioInput.trim() === ''
+
+  return (
+    <Card className={sectionCardClassName}>
+      <CardHeader className={sectionHeaderClassName}>
+        <CardTitle>{t('Group model discounts')}</CardTitle>
+        <CardDescription>
+          {t(
+            'Give a single model its own ratio inside one billing group. A matching rule wins over both the group base ratio and any special ratio rule.'
+          )}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className='space-y-4'>
+          <div className='flex flex-wrap items-end gap-3'>
+            <div className='space-y-2'>
+              <Label>{t('Billing group')}</Label>
+              <Select
+                value={groupInput}
+                onValueChange={(value) => {
+                  if (typeof value === 'string' && value !== '') {
+                    setGroupInput(value)
+                    setModelInput(null)
+                  }
+                }}
+              >
+                <SelectTrigger className='w-48'>
+                  <SelectValue placeholder={t('Select a group')} />
+                </SelectTrigger>
+                <SelectContent alignItemWithTrigger={false}>
+                  <SelectGroup>
+                    {registryNames.map((name) => (
+                      <SelectItem key={name} value={name}>
+                        {name}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className='space-y-2'>
+              <Label>{t('Model')}</Label>
+              <Select
+                value={modelInput}
+                disabled={modelOptions.length === 0}
+                onValueChange={(value) => {
+                  if (typeof value === 'string' && value !== '') {
+                    setModelInput(value)
+                  }
+                }}
+              >
+                <SelectTrigger className='w-64'>
+                  <SelectValue
+                    placeholder={
+                      groupInput
+                        ? t('Select a model')
+                        : t('Select a group first')
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent alignItemWithTrigger={false}>
+                  <SelectGroup>
+                    {modelOptions.map((modelName) => (
+                      <SelectItem key={modelName} value={modelName}>
+                        {modelName}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className='space-y-2'>
+              <Label>{t('Ratio')}</Label>
+              <Input
+                className='w-28'
+                value={ratioInput}
+                placeholder='0.8'
+                onChange={(e) => {
+                  const value = e.target.value
+                  const parsed = Number.parseFloat(value)
+                  if (value === '' || (!Number.isNaN(parsed) && parsed >= 0)) {
+                    setRatioInput(value)
+                  }
+                }}
+              />
+            </div>
+
+            <Button size='sm' onClick={handleAdd} disabled={addDisabled}>
+              <Plus className='mr-2 h-4 w-4' />
+              {t('Add')}
+            </Button>
+          </div>
+
+          {groupInput && modelOptions.length === 0 && (
+            <p className='text-muted-foreground text-xs'>
+              {catalogLoaded
+                ? t('No model is available in this group.')
+                : t('Loading the model list...')}
+            </p>
+          )}
+
+          {groupModelRatioList.length > 0 && (
+            <div className='space-y-3'>
+              {groupModelRatioList.map((groupData) => (
+                <div key={groupData.group} className='rounded-lg border'>
+                  <div className='flex items-center justify-between p-4'>
+                    <div className='flex items-center gap-2'>
+                      <span className='font-semibold'>{groupData.group}</span>
+                      {!registryNames.includes(groupData.group) && (
+                        <AlertTriangle
+                          className='text-destructive h-4 w-4'
+                          aria-label={t('Not in pricing table')}
+                        />
+                      )}
+                      <span className='text-muted-foreground text-sm'>
+                        {t('{{count}} model', {
+                          count: groupData.discounts.length,
+                        })}
+                      </span>
+                    </div>
+                    <Button
+                      variant='ghost'
+                      size='sm'
+                      onClick={() => handleGroupDelete(groupData.group)}
+                    >
+                      <Trash2 className='h-4 w-4' />
+                    </Button>
+                  </div>
+                  <div className='border-t'>
+                    <StaticDataTable
+                      className='rounded-none border-0'
+                      data={groupData.discounts}
+                      getRowKey={(discount: GroupModelDiscount) =>
+                        discount.modelName
+                      }
+                      columns={[
+                        {
+                          id: 'model',
+                          header: t('Model'),
+                          cellClassName: 'font-medium',
+                          cell: (discount: GroupModelDiscount) => {
+                            const available = modelsByGroup.get(groupData.group)
+                            const missing =
+                              catalogLoaded &&
+                              !(available ?? []).includes(discount.modelName)
+                            return (
+                              <span className='inline-flex items-center gap-1.5'>
+                                {discount.modelName}
+                                {missing && (
+                                  <AlertTriangle
+                                    className='text-destructive h-3.5 w-3.5'
+                                    aria-label={t(
+                                      'Not available in this group'
+                                    )}
+                                  />
+                                )}
+                              </span>
+                            )
+                          },
+                        },
+                        {
+                          id: 'ratio',
+                          header: t('Ratio'),
+                          cell: (discount: GroupModelDiscount) => {
+                            const baseRatio = baseRatioByName.get(
+                              groupData.group
+                            )
+                            return (
+                              <span className='inline-flex items-center gap-1.5'>
+                                {discount.ratio}
+                                {baseRatio !== undefined &&
+                                  baseRatio !== discount.ratio && (
+                                    <span className='text-muted-foreground text-xs'>
+                                      {t('(instead of {{ratio}})', {
+                                        ratio: baseRatio,
+                                      })}
+                                    </span>
+                                  )}
+                              </span>
+                            )
+                          },
+                        },
+                        {
+                          id: 'actions',
+                          header: t('Actions'),
+                          className: 'text-right',
+                          cellClassName: 'text-right',
+                          cell: (discount: GroupModelDiscount) => (
+                            <Button
+                              variant='ghost'
+                              size='sm'
+                              aria-label={t('Delete')}
+                              onClick={() =>
+                                handleDiscountDelete(
+                                  groupData.group,
+                                  discount.modelName
+                                )
+                              }
+                            >
+                              <Trash2 className='h-4 w-4' />
+                            </Button>
+                          ),
+                        },
+                      ]}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </CardContent>
     </Card>
   )
 }
