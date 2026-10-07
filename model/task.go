@@ -140,6 +140,7 @@ type TaskPrivateData struct {
 type TaskBillingContext struct {
 	ModelPrice      float64            `json:"model_price,omitempty"`       // 模型单价
 	GroupRatio      float64            `json:"group_ratio,omitempty"`       // 分组倍率
+	GroupModelRatio float64            `json:"group_model_ratio,omitempty"` // 命中的分组模型折扣；未命中为 0
 	ModelRatio      float64            `json:"model_ratio,omitempty"`       // 模型倍率
 	OtherRatios     map[string]float64 `json:"other_ratios,omitempty"`      // 附加倍率（时长、分辨率等）
 	OriginModelName string             `json:"origin_model_name,omitempty"` // 模型名称，必须为OriginModelName
