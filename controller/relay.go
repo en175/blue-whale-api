@@ -600,6 +600,10 @@ func RelayTask(c *gin.Context) {
 			OriginModelName: relayInfo.OriginModelName,
 			PerCallBilling:  common.StringsContains(constant.TaskPricePatches, relayInfo.OriginModelName) || relayInfo.PriceData.UsePrice,
 		}
+		if relayInfo.PriceData.GroupRatioInfo.HasGroupModelRatio {
+			task.PrivateData.BillingContext.GroupModelRatio = relayInfo.PriceData.GroupRatioInfo.GroupModelRatio
+			task.PrivateData.BillingContext.HasGroupModelRatio = true
+		}
 		if relayInfo.TaskRelayInfo != nil && relayInfo.TaskRelayInfo.DurationSettlement {
 			task.PrivateData.BillingContext.DurationSettlement = true
 		}

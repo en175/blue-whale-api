@@ -173,6 +173,8 @@ export interface LogOtherData {
   model_price?: number
   group_ratio?: number
   user_group_ratio?: number
+  /** 命中的分组模型折扣（GroupModelRatio[使用组][模型]），优先级高于前两者 */
+  model_group_ratio?: number
   cache_ratio?: number
   cache_creation_ratio?: number
   cache_creation_ratio_5m?: number

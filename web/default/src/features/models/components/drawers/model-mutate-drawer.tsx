@@ -210,6 +210,7 @@ export function ModelMutateDrawer({
       GroupRatio: '',
       UserUsableGroups: '',
       GroupGroupRatio: '',
+      GroupModelRatio: '',
       AutoGroups: '',
       DefaultUseAutoGroup: false,
       CreateCacheRatio: '',

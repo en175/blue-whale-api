@@ -47,6 +47,9 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) {
 	if info.PriceData.GroupRatioInfo.HasSpecialRatio {
 		other["user_group_ratio"] = info.PriceData.GroupRatioInfo.GroupSpecialRatio
 	}
+	if info.PriceData.GroupRatioInfo.HasGroupModelRatio {
+		other["model_group_ratio"] = info.PriceData.GroupRatioInfo.GroupModelRatio
+	}
 	if info.IsModelMapped {
 		other["is_model_mapped"] = true
 		other["upstream_model_name"] = info.UpstreamModelName
@@ -131,6 +134,11 @@ func taskBillingOther(task *model.Task) map[string]interface{} {
 			other["model_ratio"] = bc.ModelRatio
 		}
 		other["group_ratio"] = bc.GroupRatio
+		// 用布尔标记而非 >0 判定：折扣配成 0（该模型在该组免费）同样是命中，
+		// 只看数值分不清它与「未配置」，0 折扣的审计字段会丢。同步链路同样按标记判定。
+		if bc.HasGroupModelRatio {
+			other["model_group_ratio"] = bc.GroupModelRatio
+		}
 		if priceData := taskBillingContextPriceData(bc); priceData != nil {
 			for k, v := range priceData.OtherRatios() {
 				other[k] = v
@@ -309,7 +317,7 @@ func RecalculateTaskQuotaByTokens(ctx context.Context, task *model.Task, totalTo
 		return
 	}
 
-	finalGroupRatio := GetUserGroupRatio(userGroup, usingGroup)
+	finalGroupRatio, _ := ResolveGroupRatio(userGroup, usingGroup, modelName)
 
 	// 计算 OtherRatios 乘积（视频折扣、时长等）
 	otherMultiplier := 1.0

@@ -57,6 +57,8 @@ import {
   getFirstResponseTimeColor,
   getResponseTimeColor,
   renderAuditContent,
+  resolveLogGroupRatio,
+  getLogGroupRatioLabel,
 } from '../../lib/format'
 import {
   getLogTypeConfig,
@@ -260,12 +262,11 @@ function BillingBreakdown(props: {
     }
   }
 
-  const userGR = other.user_group_ratio
-  const isUserGR = userGR != null && Number.isFinite(userGR) && userGR !== -1
-  const effectiveGR = isUserGR ? userGR : other.group_ratio
+  const { ratio: effectiveGR, source: groupRatioSource } =
+    resolveLogGroupRatio(other)
   if (effectiveGR != null && Number.isFinite(effectiveGR)) {
     rows.push({
-      label: isUserGR ? t('User Exclusive Ratio') : t('Group Ratio'),
+      label: getLogGroupRatioLabel(groupRatioSource, t),
       value: `${formatRatio(effectiveGR)}x`,
     })
   }

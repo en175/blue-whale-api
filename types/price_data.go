@@ -7,10 +7,46 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+// GroupRatioSource 标识最终收费倍率由哪一层分组规则解析而来。
+// 三层是替换关系，只有一层生效，日志据此决定记哪个字段。
+type GroupRatioSource int
+
+const (
+	// GroupRatioSourceGroup 分组倍率 GroupRatio[使用组]，兜底层。
+	GroupRatioSourceGroup GroupRatioSource = iota
+	// GroupRatioSourceUserGroup 用户组特价 GroupGroupRatio[用户组][使用组]。
+	GroupRatioSourceUserGroup
+	// GroupRatioSourceGroupModel 分组模型折扣 GroupModelRatio[使用组][模型]，优先级最高。
+	GroupRatioSourceGroupModel
+)
+
 type GroupRatioInfo struct {
 	GroupRatio        float64
 	GroupSpecialRatio float64
 	HasSpecialRatio   bool
+	// GroupModelRatio 命中分组模型折扣时的原始倍率；未命中为 -1，与
+	// GroupSpecialRatio 的「-1 表示未设置」约定一致。
+	GroupModelRatio    float64
+	HasGroupModelRatio bool
+}
+
+// NewGroupRatioInfo 由解析出的倍率与来源构造计费信息。只填充真正生效的那一层，
+// 其余保持 -1/ false，这样日志里出现的字段一定是当次实际使用的规则。
+func NewGroupRatioInfo(ratio float64, source GroupRatioSource) GroupRatioInfo {
+	info := GroupRatioInfo{
+		GroupRatio:        ratio,
+		GroupSpecialRatio: -1,
+		GroupModelRatio:   -1,
+	}
+	switch source {
+	case GroupRatioSourceGroupModel:
+		info.GroupModelRatio = ratio
+		info.HasGroupModelRatio = true
+	case GroupRatioSourceUserGroup:
+		info.GroupSpecialRatio = ratio
+		info.HasSpecialRatio = true
+	}
+	return info
 }
 
 type PriceData struct {
