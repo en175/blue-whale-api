@@ -580,7 +580,7 @@ func TestRecalculateTaskQuotaByTokens_CrossGroupAppliesSpecialRatio(t *testing.T
 }
 
 // TestRecalculateTaskQuotaByTokens_GroupModelDiscountApplies 保护分组模型折扣在差额结算阶段生效，
-// 且必须压过同组用户特价——包括折扣恰好配成 1 的情况，那种情况下若按"取更小的那个"实现就会
+// 且必须压过同组用户特价——包括折扣恰好配成 1 的情况，那种情况下若按「取更小的那个」实现就会
 // 悄悄按用户特价 0.5 结算。
 func TestRecalculateTaskQuotaByTokens_GroupModelDiscountApplies(t *testing.T) {
 	const totalTokens = 50638
@@ -590,9 +590,9 @@ func TestRecalculateTaskQuotaByTokens_GroupModelDiscountApplies(t *testing.T) {
 
 	cases := []struct {
 		name string
-		// groupModelRatio 是结算时读到的实时折扣表（结算走 ResolveGroupRatio，
-		// 不看快照），snapshotRatio / snapshotHit 则是提交请求时 controller/relay.go
-		// 快照进 BillingContext 的两个字段——结算日志的 model_group_ratio 取自快照。
+		// groupModelRatio 是结算时读到的实时折扣表（结算走 ResolveGroupRatio，不看快照）；
+		// snapshotRatio / snapshotHit 是提交请求时 controller/relay.go 快照进 BillingContext
+		// 的两个字段——结算日志的 model_group_ratio 取自快照。
 		groupModelRatio string
 		snapshotRatio   float64
 		snapshotHit     bool
@@ -621,9 +621,11 @@ func TestRecalculateTaskQuotaByTokens_GroupModelDiscountApplies(t *testing.T) {
 			wantLogField:    true,
 		},
 		{
-			// 0 同样是命中。这里模拟提交时该模型在该组免费（预扣 0），结算前管理员把折扣
-			// 改成 0.25：金额按实时的 0.25 补扣，日志里的 model_group_ratio 取快照的 0。
-			// 若判定写成 >0，金额照样对（结算不看快照），但这个字段会整个消失。
+			// 合成场景：提交时该模型在该组免费（快照 0、预扣 0），结算前折扣被改成 0.25。
+			// 现实中折扣表不在任务执行期间变更，快照恒等于实时值，这个不一致不会真的发生。
+			// 留着它是为了钉住 taskBillingOther 按标记而非 >0 判定：写成 >0 时金额照样对
+			// （结算走实时值），但这个字段会整个消失。折扣为 0 且快照与实时一致时，结算与
+			// 退款都会撞上早退守卫而不写日志，故此字段在任务链路只能这样构造观测点。
 			name:            "快照折扣为 0 时结算仍写审计字段",
 			groupModelRatio: `{"default":{"test-model":0.25}}`,
 			snapshotRatio:   0,
@@ -633,7 +635,7 @@ func TestRecalculateTaskQuotaByTokens_GroupModelDiscountApplies(t *testing.T) {
 			wantLogField:    true,
 		},
 		{
-			// 反向：模型折扣键在使用组 vip 下，使用组是 default，命不中，
+			// 反向：折扣配在分组 vip 下，而任务的使用组是 default，查不中，
 			// 回落到用户特价 0.5，日志里就不该出现 model_group_ratio。
 			name:            "未命中模型折扣时不写审计字段",
 			groupModelRatio: `{"vip":{"test-model":0.25}}`,
