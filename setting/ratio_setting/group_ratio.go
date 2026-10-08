@@ -162,13 +162,23 @@ func CheckGroupModelRatio(jsonStr string) error {
 	if strings.TrimSpace(jsonStr) == "" {
 		return nil
 	}
-	checkGroupModelRatio := make(map[string]map[string]float64)
+	// 值解到 *float64 而非 float64：encoding/json 把 null 解进非指针标量是 no-op 且不报错，
+	// 键照样建出来、值取零值，而 0 在这里的含义是「该模型在该组免费」——一条 `"m": null`
+	// 就成了静默免费。指针能区分「写了数字」与「写了 null」，后者一律拒。
+	checkGroupModelRatio := make(map[string]map[string]*float64)
 	if err := common.Unmarshal([]byte(jsonStr), &checkGroupModelRatio); err != nil {
 		return err
 	}
 	for group, modelRatios := range checkGroupModelRatio {
+		// `"vip": null` 同样落成 nil map，不会报错也不会命中任何模型，属于垃圾配置
+		if modelRatios == nil {
+			return fmt.Errorf("group model ratio must be an object of models, got null: %s", group)
+		}
 		for modelName, ratio := range modelRatios {
-			if math.IsNaN(ratio) || math.IsInf(ratio, 0) || ratio < 0 {
+			if ratio == nil {
+				return fmt.Errorf("group model ratio must be a number, got null: %s / %s", group, modelName)
+			}
+			if math.IsNaN(*ratio) || math.IsInf(*ratio, 0) || *ratio < 0 {
 				return fmt.Errorf("group model ratio must be a finite number not less than 0: %s / %s", group, modelName)
 			}
 		}

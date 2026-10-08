@@ -1086,7 +1086,9 @@ function GroupModelDiscountRules({
   const handleAdd = useCallback(() => {
     if (!groupInput || !modelInput) return
     const parsedRatio = Number.parseFloat(ratioInput)
-    if (Number.isNaN(parsedRatio)) return
+    // isFinite 而非 isNaN：Infinity 不是 NaN，会一路写进表里，再被 JSON.stringify
+    // 序列化成 null；后端把 null 解成 0，等于把该模型配成免费。
+    if (!Number.isFinite(parsedRatio) || parsedRatio < 0) return
     const map = parseNestedRatioMap(groupModelRatio)
     if (!map[groupInput]) {
       map[groupInput] = {}
@@ -1202,7 +1204,11 @@ function GroupModelDiscountRules({
                 onChange={(e) => {
                   const value = e.target.value
                   const parsed = Number.parseFloat(value)
-                  if (value === '' || (!Number.isNaN(parsed) && parsed >= 0)) {
+                  // isFinite 而非 isNaN：Infinity 能过 isNaN 判定，存下去会变成 null → 0
+                  if (
+                    value === '' ||
+                    (Number.isFinite(parsed) && parsed >= 0)
+                  ) {
                     setRatioInput(value)
                   }
                 }}

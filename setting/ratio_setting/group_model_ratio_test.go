@@ -50,6 +50,11 @@ func TestCheckGroupModelRatio(t *testing.T) {
 		{"非法 JSON 被拒", `not-json`, true},
 		{"空串表示清空配置，不算错误", ``, false},
 		{"纯空白同样表示清空配置", `   `, false},
+		// encoding/json 把 null 解进非指针标量是 no-op 且不报错，键会以零值 0 落表。
+		// 而 0 的含义是「该模型在该组免费」，放行即静默白送。前端的 Infinity 输入
+		// （JSON.stringify(Infinity) -> null）也会走到这里，所以这层必须挡住。
+		{"模型倍率为 null 被拒，不能静默变成 0", `{"vip":{"seedance-2.0":null}}`, true},
+		{"分组表为 null 被拒", `{"vip":null}`, true},
 	}
 
 	for _, tt := range tests {
