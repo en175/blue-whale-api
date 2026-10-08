@@ -216,7 +216,10 @@ func UpdateOption(c *gin.Context) {
 			})
 			return
 		}
-	case "GroupRatio":
+	// 分层键 group_ratio_setting.group_ratio 与平铺键写的是同一份内存配置
+	// （model.handleConfigUpdate 按 "<模块>.<字段>" 分发），两种拼写都要过校验，
+	// 否则换个 key 名就能把负倍率灌进计费乘数。
+	case "GroupRatio", "group_ratio_setting.group_ratio":
 		err = ratio_setting.CheckGroupRatio(option.Value.(string))
 		if err != nil {
 			c.JSON(http.StatusOK, gin.H{
@@ -225,7 +228,7 @@ func UpdateOption(c *gin.Context) {
 			})
 			return
 		}
-	case "GroupModelRatio":
+	case "GroupModelRatio", "group_ratio_setting.group_model_ratio":
 		err = ratio_setting.CheckGroupModelRatio(option.Value.(string))
 		if err != nil {
 			c.JSON(http.StatusOK, gin.H{
