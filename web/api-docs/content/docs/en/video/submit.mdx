@@ -88,6 +88,38 @@ For per-model supported metadata options, see [Models](../models).
 
 > Video-edit tasks require `duration` to be `-1`, so in edit scenarios **do not** pass a top-level `seconds` — it would override `metadata.duration`. See "V2V Task Type and Parameter Rules" below.
 
+## Referencing Material Library Assets
+
+Reference images / videos / audio can be passed as public URLs, or as `asset://<asset-id>` referencing an asset already created in the **Material Library** — the gateway forwards the reference as-is and the upstream resolves it by asset id, so you do not need to download or re-host the file yourself.
+
+Create the asset first via the [Material Library API](../material/index) (or upload it on the console's **Materials** page), then put the returned id in the URL field:
+
+| Use | Where to put it |
+| --- | --- |
+| First frame | Top-level `images`: `"images": ["asset://Asset-xxxxxx"]` |
+| Reference image | `metadata.content[]`: `{"type":"image_url","image_url":{"url":"asset://Asset-xxxxxx"},"role":"reference_image"}` |
+| Reference video | `metadata.content[]`: `{"type":"video_url","video_url":{"url":"asset://Asset-xxxxxx"},"role":"reference_video"}` |
+| Reference audio | `metadata.content[]`: `{"type":"audio_url","audio_url":{"url":"asset://Asset-xxxxxx"},"role":"reference_audio"}` |
+
+The id comes from one of two places: for virtual assets, use the asset id returned by [Material Library API](../material/assets) `CreateAsset` / `ListAssets` and write it as `asset://Asset-xxxxxx`; for real-person assets, use the group id returned by [real-person verification](../material/real-person) and write it as `asset://group-xxxxxx`.
+
+```bash
+curl "$BASE_URL/v1/video/generations" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "doubao-seedance-2-0-260128",
+    "prompt": "Use the product in image 1 as the subject; slow orbiting camera, pure white studio background",
+    "seconds": "5",
+    "metadata": {
+      "resolution": "720p",
+      "content": [
+        {"type": "image_url", "image_url": {"url": "asset://Asset-2026xxxxxx"}, "role": "reference_image"}
+      ]
+    }
+  }'
+```
+
 ## V2V Task Type and Parameter Rules (Important)
 
 > **⚠️ On 2.5, edit-style prompts must set the duration to `-1`, and it can only be passed as `metadata.duration`** (the top-level `seconds` cannot express a negative — the gateway returns 400) — otherwise the task ends in `FAILURE`.

@@ -88,6 +88,38 @@ description: 提交视频生成任务，获取 task_id
 
 > 视频编辑任务的 `duration` 必须为 `-1`，所以编辑场景**不要**传顶层 `seconds`——它会覆盖 `metadata.duration`。详见下方「V2V 任务类型与参数规范」。
 
+## 引用素材中心的素材
+
+参考图 / 参考视频 / 参考音频除了传公网 URL，也可以传 `asset://<素材ID>` 引用**素材中心**里已建好的素材——网关原样透传该引用，由上游按素材 ID 解析，无需自己下载或转存。
+
+素材先经[素材库 API](../material/index) 创建（或在控制台「素材中心」页面上传），拿到 ID 后写进对应的 URL 字段：
+
+| 用途 | 放置位置 |
+| --- | --- |
+| 首帧 | 顶层 `images`：`"images": ["asset://Asset-xxxxxx"]` |
+| 参考图 | `metadata.content[]`：`{"type":"image_url","image_url":{"url":"asset://Asset-xxxxxx"},"role":"reference_image"}` |
+| 参考视频 | `metadata.content[]`：`{"type":"video_url","video_url":{"url":"asset://Asset-xxxxxx"},"role":"reference_video"}` |
+| 参考音频 | `metadata.content[]`：`{"type":"audio_url","audio_url":{"url":"asset://Asset-xxxxxx"},"role":"reference_audio"}` |
+
+ID 有两种来源：虚拟素材用[素材库 API](../material/assets) `CreateAsset` / `ListAssets` 返回的素材 ID，写成 `asset://Asset-xxxxxx`；真人素材用[真人认证](../material/real-person)完成后返回的素材组 ID，写成 `asset://group-xxxxxx`。
+
+```bash
+curl "$BASE_URL/v1/video/generations" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "doubao-seedance-2-0-260128",
+    "prompt": "以图片1中的商品为主体，镜头缓慢环绕，背景为纯白摄影棚",
+    "seconds": "5",
+    "metadata": {
+      "resolution": "720p",
+      "content": [
+        {"type": "image_url", "image_url": {"url": "asset://Asset-2026xxxxxx"}, "role": "reference_image"}
+      ]
+    }
+  }'
+```
+
 ## V2V 任务类型与参数规范（重要说明）
 
 > **⚠️ 2.5 视频编辑类 prompt 的时长必须为 `-1`，且只能通过 `metadata.duration` 传**（顶层 `seconds` 无法表达负数，网关会直接 400），否则任务 `FAILURE`。
