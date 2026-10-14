@@ -85,12 +85,13 @@ export const CHANNEL_TYPES = {
   64: 'VolcEngineEnhanced',
   65: 'MediaKit',
   66: 'VolcEngine25',
+  67: 'TokenHub25',
 } as const
 
 const CHANNEL_TYPE_DISPLAY_ORDER: number[] = [
   1, 14, 33, 24, 43, 3, 41, 48, 58, 59, 42, 34, 20, 4, 40, 27, 25, 17, 26, 15,
   46, 23, 18, 45, 31, 35, 49, 19, 47, 37, 38, 39, 11, 8, 57, 22, 21, 44, 2, 5,
-  36, 50, 51, 52, 53, 54, 64, 65, 66, 55, 56, 60, 61, 62, 63,
+  36, 50, 51, 52, 53, 54, 64, 65, 66, 67, 55, 56, 60, 61, 62, 63,
 ]
 
 export const CHANNEL_TYPE_OPTIONS: { value: number; label: string }[] = (() => {

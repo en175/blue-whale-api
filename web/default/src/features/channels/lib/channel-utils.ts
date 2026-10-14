@@ -110,6 +110,7 @@ export function getChannelTypeIcon(type: number): string {
     64: 'Volcengine', // VolcEngineEnhanced
     65: 'Volcengine', // MediaKit
   66: 'Volcengine', // VolcEngine25
+  67: 'TokenHub', // TokenHub25
 
     // Tools & Platforms
     37: 'Dify', // Dify

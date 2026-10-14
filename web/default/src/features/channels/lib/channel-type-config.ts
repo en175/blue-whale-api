@@ -242,6 +242,19 @@ export const CHANNEL_TYPE_CONFIGS: Record<number, ChannelTypeConfig> = {
         'Seedance 2.5 only. No lottery, no downgrade, no MediaKit super-resolution. Draft mode: submit with metadata.draft=true (or top-level draft) to get a 480p preview, then POST /v1/videos/{task_id}/finalize to render the 1080p final from that draft. Draft accepts 480p only; finalize is always 1080p. Both steps are billed separately. No channel setting needed.',
     },
   },
+  67: {
+    id: 67,
+    name: CHANNEL_TYPES[67],
+    icon: 'tokenhub',
+    defaultBaseUrl: 'https://ai-tokenhub.ai',
+    hints: {
+      baseUrl: 'Default: https://ai-tokenhub.ai',
+      key: 'Upstream API Key (Bearer)',
+      models: 'dreamina-seedance-2-5-260628',
+      other:
+        'Seedance 2.5 on ai-tokenhub (/api/v2), draft-mode capable. Draft mode: submit with metadata.draft=true (or top-level draft) to get a 480p preview, then POST /v1/videos/{task_id}/finalize to render the 1080p final from that draft. Draft accepts 480p only; finalize is always 1080p. Both steps are billed separately. Requires video_tier_pricing.price_table entries for this model (base / video / 1080p / 1080p_video); a missing key silently falls back to the base price. The 2.0 models stay on TokenHub (61). No channel setting needed.',
+    },
+  },
 }
 
 /**
