@@ -42,4 +42,4 @@
 - **任务类型校验不在本次范围。** 需求描述的「按 `content.role` + 提示词关键词判定五种任务类型、并对 `ratio` / `duration` 施加特殊限制」一律不校验。理由是那套判定规则会变；违反时上游自己会报错。`metadata.omni_reference_task_type` 只做**转发**（照 66），不做取值校验。
 - **Remix 不特殊处理**，与 66 一致：静默降级为普通 generate。要改成「响铃拒绝」应开独立工单把 61 / 66 / 67 一起收口。
 - **价格表由管理员配。** `video_tier_pricing.price_table` 里为 `dreamina-seedance-2-5-260628` 配 `base` / `video` / `1080p` / `1080p_video` 四个键；内置价格表不加 2.5 的单价（与 66 口径一致）。漏配 `1080p` / `1080p_video` 会静默按 `base` 结算。
-- **上游契约未经真实调用验证。** 轮询结构、`draft=true` 是否真出 480p、finalize 的 `draft_task` 引用、成片白名单字段，四项都以「照 66 形状 + 文档标注 + 本地验收逐项核对」处置，不加运行时兜底。其中「上游接受但忽略 `draft`」是唯一会**静默少收**的失败形态，生产上线前必须测掉。详见 `docs/channel/tokenhub-25.md` §13。
+- **上游契约已部分实测。** 2026-10-14 用真华鲲 key 走完整链路打了一发样片，四项里前两项确认：① 华鲲 2.5 的轮询响应与 `tokenhub.responseTask` 逐字段吻合（`resultSummary` 信封成立，「嵌 tokenhub 而非 doubao」的决策因此落地）；② `draft=true` + `resolution=480p` **确实出 480p**——上游自报 `resultSummary.resolution = "480p"`，成片 `ffprobe` 实测 854×480。原「唯一会静默少收」的风险已证伪。剩下两项（finalize 的 `draft_task` 引用、成片白名单字段）仍未验证，都只在出成片时触发且失败会响，**上线前必须测掉**。详见 `docs/channel/tokenhub-25.md` §13。

@@ -256,15 +256,52 @@ go test ./relay/channel/task/tokenhub25/... ./relay/channel/task/tokenhub/... ./
 
 ---
 
-## 13. 上游契约未验证
+## 13. 上游契约验证状态
 
-**本节列出的四项全部未经真实调用验证**，实现按 66 的形状照抄，本地验收时必须逐项核对。**生产上线前必须测掉。**
+实现按 66 的形状照抄。四项契约里**两项已用真华鲲 key 实测确认，两项仍未验证**。未验证的两项都是「会响」的失败（上游直接报错），没有静默错。
+
+### 13.1 已实测确认（2026-10-14）
+
+样本：`POST /v1/videos`，`{"model":"dreamina-seedance-2-5-260628","prompt":"a red ball on a table","metadata":{"draft":true}}`，走完整网关链路（渠道 67 → 华鲲 `https://ai-tokenhub.ai/api/v2/contents/generations/tasks`）。
+
+| # | 项 | 结论 | 证据 |
+|---|---|---|---|
+| 1 | 华鲲 2.5 的轮询响应是否同 2.0 的 `resultSummary` 结构 | **是，逐字段吻合** | 回包含 `id` / `upstreamTaskId` / `status` / `model` / `createdAt` / `updatedAt` 与 `resultSummary.{content.video_url, duration, resolution, upstreamStatus, usage.{completion_tokens,total_tokens}}`，与 `tokenhub.responseTask` 结构体一一对应 |
+| 2 | `draft=true` + `resolution=480p` 是否真出 480p | **是，上游确实出 480p** | 两条独立证据：① 上游自报 `resultSummary.resolution = "480p"`；② 下载成片 `ffprobe` 实测 **854×480**、时长 10.04s（与 `resultSummary.duration = "10"` 一致） |
+
+第 2 条是原「唯一会静默少收」的形态，**已证伪**：华鲲不忽略 `draft`。
+
+实测样本的完整回包（终态）：
+
+```json
+{
+  "id": "01a13b04-...",
+  "upstreamTaskId": "cgt-20261014232501-nhq4l",
+  "status": "succeeded",
+  "model": "dreamina-seedance-2-5-260628",
+  "resultSummary": {
+    "content": { "video_url": "https://ark-acg-ap-southeast-1.tos-.../cgt-....mp4?X-Tos-..." },
+    "duration": "10",
+    "resolution": "480p",
+    "upstreamStatus": "succeeded",
+    "usage": { "completion_tokens": 96475, "total_tokens": 96475 }
+  }
+}
+```
+
+计费链路随之核对无误：预扣费 ¥54.75（`ModelRatio/2`），终态按 token 重算 `96475 × 15 = 1,447,125` quota（¥2.89），`OtherRatios` multiplier = 1.0（480p 落 base 槽）——与「样片按 480p 档收」一致。
+
+### 13.2 仍未验证
 
 | # | 未验证项 | 失败形态 |
 |---|---|---|
-| 1 | 华鲲 2.5 的轮询响应是否同 2.0 的 `resultSummary` 结构 | 会响：任务卡 `IN_PROGRESS` 直到 24h 超时扫尾。整个「嵌 tokenhub」的决策压在这条上。**半验证**：`resultSummary` 这套继承自 61，而 61 与华鲲真跑通过；未验证的只是 2.5 是否同形状 |
-| 2 | `draft=true` + `resolution=480p` 是否真出 480p | **会哑**：上游若接受但忽略 `draft`，会回 1080p 而我们按 480p 收钱——不报错。这是唯一会静默少收的一条 |
 | 3 | finalize 的 `content:[{type:"draft_task",draft_task:{id}}]` 华鲲是否认 | 会响：上游报错 |
 | 4 | 成片白名单字段（`return_last_frame` / `output_format` / `watermark` / `service_tier` / `execution_expires_after` / `priority` / `callback_url` / `safety_identifier`）华鲲是否全收 | 会响：上游报错 |
 
-**没有加运行时兜底**（例如「样片回包档位 ≠ 480p 就记 warning」）：回包里到底有没有档位字段还没见过，拿未验证的字段去校验未验证的行为是循环论证。抓到一份真实的 2.5 回包后再决定要不要补。
+两项都只在**出成片**时才会触发，需要一份已完成的样片 + 一次真实 finalize 调用（另一次计费的上游任务）。**上线前必须测掉**——会响，但会让「出成片」整条路不可用。
+
+### 13.3 运行时兜底：字段已确认存在，但尚未加
+
+原先不加「样片回包档位 ≠ 480p 就记 warning」的理由是「回包里到底有没有档位字段还没见过」。**现在已知：有，就是 `resultSummary.resolution`**（见 13.1）。因此这条兜底从「循环论证」变成了可实施项。
+
+本次仍未加，理由是它保护的正是刚刚被证伪的那条风险，当前没有已知的失败形态可捕获；但若日后出现「上游改了 `draft` 语义」或换了上游，这一行 warning 是唯一能在**扣费前**发现档位不符的信号。要加时落点在 `tokenhub25` 的 `ParseTaskResult` 覆写里比对 `resultSummary.resolution` 与 `info.UpstreamResolution`。
