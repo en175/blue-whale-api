@@ -53,7 +53,7 @@ func (a *Adaptor) Init(info *relaycommon.RelayInfo) {
 func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.ImageRequest) (any, error) {
 	if info.RelayMode != relayconstant.RelayModeImagesGenerations &&
 		info.RelayMode != relayconstant.RelayModeImagesEdits {
-		return nil, badRequestError("novitagemini channel only supports image generations")
+		return nil, badRequestError("novitagemini channel only supports image generations and edits")
 	}
 	if request.N != nil && *request.N > 1 {
 		return nil, badRequestError("novitagemini channel only supports n=1")
@@ -64,8 +64,19 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInf
 	if request.ResponseFormat != "" && request.ResponseFormat != "b64_json" {
 		return nil, badRequestError("novitagemini channel only supports b64_json response format")
 	}
+	// Multipart edits are parsed by the framework without populating
+	// dto.ImageRequest.ResponseFormat, so read the field from the form directly.
+	if info.RelayMode == relayconstant.RelayModeImagesEdits && strings.Contains(c.Request.Header.Get("Content-Type"), "multipart/form-data") &&
+		c.Request.MultipartForm != nil {
+		if values := c.Request.MultipartForm.Value["response_format"]; len(values) > 0 && values[0] != "" && values[0] != "b64_json" {
+			return nil, badRequestError("novitagemini channel only supports b64_json response format")
+		}
+	}
 	if strings.TrimSpace(request.Prompt) == "" {
 		return nil, badRequestError("prompt is required")
+	}
+	if len(request.Mask) > 0 && string(request.Mask) != "null" {
+		return nil, badRequestError("novitagemini channel does not support mask")
 	}
 
 	parts := []dto.GeminiPart{{Text: request.Prompt}}
@@ -91,31 +102,31 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInf
 }
 
 func (a *Adaptor) ConvertOpenAIRequest(c *gin.Context, info *relaycommon.RelayInfo, request *dto.GeneralOpenAIRequest) (any, error) {
-	return nil, badRequestError("novitagemini channel only supports image generations")
+	return nil, badRequestError("novitagemini channel only supports image generations and edits")
 }
 
 func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, info *relaycommon.RelayInfo, request *dto.ClaudeRequest) (any, error) {
-	return nil, badRequestError("novitagemini channel only supports image generations")
+	return nil, badRequestError("novitagemini channel only supports image generations and edits")
 }
 
 func (a *Adaptor) ConvertGeminiRequest(c *gin.Context, info *relaycommon.RelayInfo, request *dto.GeminiChatRequest) (any, error) {
-	return nil, badRequestError("novitagemini channel only supports image generations")
+	return nil, badRequestError("novitagemini channel only supports image generations and edits")
 }
 
 func (a *Adaptor) ConvertRerankRequest(c *gin.Context, relayMode int, request dto.RerankRequest) (any, error) {
-	return nil, badRequestError("novitagemini channel only supports image generations")
+	return nil, badRequestError("novitagemini channel only supports image generations and edits")
 }
 
 func (a *Adaptor) ConvertEmbeddingRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.EmbeddingRequest) (any, error) {
-	return nil, badRequestError("novitagemini channel only supports image generations")
+	return nil, badRequestError("novitagemini channel only supports image generations and edits")
 }
 
 func (a *Adaptor) ConvertAudioRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.AudioRequest) (io.Reader, error) {
-	return nil, badRequestError("novitagemini channel only supports image generations")
+	return nil, badRequestError("novitagemini channel only supports image generations and edits")
 }
 
 func (a *Adaptor) ConvertOpenAIResponsesRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.OpenAIResponsesRequest) (any, error) {
-	return nil, badRequestError("novitagemini channel only supports image generations")
+	return nil, badRequestError("novitagemini channel only supports image generations and edits")
 }
 
 func (a *Adaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, requestBody io.Reader) (any, error) {

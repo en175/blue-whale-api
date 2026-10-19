@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
+	"io"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -105,6 +108,7 @@ func TestConvertImageRequestRejections(t *testing.T) {
 		{name: "streaming", request: dto.ImageRequest{Prompt: "a cat", Stream: &stream}},
 		{name: "url response format", request: dto.ImageRequest{Prompt: "a cat", ResponseFormat: "url"}},
 		{name: "empty prompt", request: dto.ImageRequest{Prompt: "   "}},
+		{name: "mask is rejected", request: dto.ImageRequest{Prompt: "a cat", Mask: json.RawMessage(`"data:image/png;base64,QUJD"`)}},
 	}
 
 	for _, tc := range tests {
@@ -238,27 +242,32 @@ func TestBuildImageUsage(t *testing.T) {
 
 func TestParseImageDataURL(t *testing.T) {
 	tests := []struct {
-		name     string
-		value    string
-		mimeType string
-		data     string
-		ok       bool
+		name        string
+		value       string
+		mimeType    string
+		data        string
+		decodedSize int
+		expectError bool
 	}{
-		{name: "png data url", value: "data:image/png;base64,QUJD", mimeType: "image/png", data: "QUJD", ok: true},
-		{name: "remote url", value: "https://example.com/a.png", ok: false},
-		{name: "non base64 data url", value: "data:image/png,QUJD", ok: false},
-		{name: "non image mime", value: "data:text/plain;base64,QUJD", ok: false},
-		{name: "empty payload", value: "data:image/png;base64,", ok: false},
+		{name: "png data url", value: "data:image/png;base64,QUJD", mimeType: "image/png", data: "QUJD", decodedSize: 3},
+		{name: "remote url", value: "https://example.com/a.png", expectError: true},
+		{name: "non base64 data url", value: "data:image/png,QUJD", expectError: true},
+		{name: "non image mime", value: "data:text/plain;base64,QUJD", expectError: true},
+		{name: "empty payload", value: "data:image/png;base64,", expectError: true},
+		{name: "invalid base64 payload", value: "data:image/png;base64,!!!", expectError: true},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			mimeType, data, ok := parseImageDataURL(tc.value)
-			assert.Equal(t, tc.ok, ok)
-			if tc.ok {
-				assert.Equal(t, tc.mimeType, mimeType)
-				assert.Equal(t, tc.data, data)
+			mimeType, data, decodedSize, err := parseImageDataURL(tc.value)
+			if tc.expectError {
+				require.Error(t, err)
+				return
 			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.mimeType, mimeType)
+			assert.Equal(t, tc.data, data)
+			assert.Equal(t, tc.decodedSize, decodedSize)
 		})
 	}
 }
@@ -287,4 +296,169 @@ func TestConvertImageRequestComputedJSON(t *testing.T) {
 		"contents": [{"role": "user", "parts": [{"text": "a cat"}]}],
 		"generationConfig": {"responseModalities": ["IMAGE"]}
 	}`, string(raw))
+}
+
+func TestConvertImageRequestEditRejectsInvalidDataURLPayload(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	adaptor := &Adaptor{}
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/images/edits", nil)
+	c.Request.Header.Set("Content-Type", "application/json")
+	info := &relaycommon.RelayInfo{RelayMode: relayconstant.RelayModeImagesEdits}
+
+	request := dto.ImageRequest{
+		Prompt: "edit",
+		Images: json.RawMessage(`[{"image_url":"data:image/png;base64,!!!"}]`),
+	}
+	_, err := adaptor.ConvertImageRequest(c, info, request)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "base64 payload is invalid")
+}
+
+func TestConvertImageRequestEditFromMixedMultipartFields(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	adaptor := &Adaptor{}
+
+	pngBytes := append([]byte("\x89PNG\r\n\x1a\n"), []byte("fake-image-body")...)
+
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+	require.NoError(t, writer.WriteField("prompt", "combine these"))
+	for _, field := range []string{"image", "image[]", "image[1]", "image[2]"} {
+		part, err := writer.CreateFormFile(field, field+".png")
+		require.NoError(t, err)
+		_, err = part.Write(pngBytes)
+		require.NoError(t, err)
+	}
+	require.NoError(t, writer.Close())
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/images/edits", &buf)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	require.NoError(t, req.ParseMultipartForm(32<<20))
+
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = req
+	info := &relaycommon.RelayInfo{RelayMode: relayconstant.RelayModeImagesEdits}
+
+	converted, err := adaptor.ConvertImageRequest(c, info, dto.ImageRequest{Prompt: "combine these"})
+	require.NoError(t, err)
+
+	body, ok := converted.(dto.GeminiChatRequest)
+	require.True(t, ok)
+	require.Len(t, body.Contents[0].Parts, 5, "prompt plus four image parts")
+	for i, part := range body.Contents[0].Parts[1:] {
+		require.NotNil(t, part.InlineData, "part %d should be an inline image", i)
+		assert.Equal(t, "image/png", part.InlineData.MimeType)
+	}
+}
+
+func TestConvertImageRequestEditRejectsTooManyMultipartImages(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	adaptor := &Adaptor{}
+
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+	require.NoError(t, writer.WriteField("prompt", "too many"))
+	for i := 0; i <= maxInputImages; i++ {
+		part, err := writer.CreateFormFile(fmt.Sprintf("image[%d]", i), "a.png")
+		require.NoError(t, err)
+		_, err = part.Write([]byte("\x89PNG\r\n\x1a\n"))
+		require.NoError(t, err)
+	}
+	require.NoError(t, writer.Close())
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/images/edits", &buf)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	require.NoError(t, req.ParseMultipartForm(32<<20))
+
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = req
+	info := &relaycommon.RelayInfo{RelayMode: relayconstant.RelayModeImagesEdits}
+
+	_, err := adaptor.ConvertImageRequest(c, info, dto.ImageRequest{Prompt: "too many"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "too many input images")
+}
+
+func TestDoRequestRejectsPassthrough(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	adaptor := &Adaptor{}
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	info := &relaycommon.RelayInfo{
+		RelayMode: relayconstant.RelayModeImagesGenerations,
+		ChannelMeta: &relaycommon.ChannelMeta{
+			ChannelSetting: dto.ChannelSettings{PassThroughBodyEnabled: true},
+		},
+	}
+
+	_, err := adaptor.DoRequest(c, info, strings.NewReader(`{"prompt":"a cat"}`))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "does not support request body passthrough")
+	assert.Equal(t, http.StatusBadRequest, types.NewError(err, types.ErrorCodeConvertRequestFailed).StatusCode)
+}
+
+func TestNovitaGeminiImageHandler(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	newResponse := func(body string) *http.Response {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(body)),
+		}
+	}
+	newContext := func() (*gin.Context, *httptest.ResponseRecorder) {
+		writer := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(writer)
+		return c, writer
+	}
+
+	t.Run("collects every inline image and skips empty parts", func(t *testing.T) {
+		c, writer := newContext()
+		body := `{"candidates":[
+			{"content":{"parts":[{"text":"here"},{"inlineData":{"mimeType":"image/png","data":"QUJD"}},{"inlineData":{"mimeType":"image/png","data":""}}]}},
+			{"content":{"parts":[{"inlineData":{"mimeType":"image/png","data":"REVG"}}]}}
+		]}`
+		usage, apiErr := novitaGeminiImageHandler(c, newResponse(body), &relaycommon.RelayInfo{})
+		require.Nil(t, apiErr)
+		require.NotNil(t, usage)
+
+		var imageResponse dto.ImageResponse
+		require.NoError(t, common.Unmarshal(writer.Body.Bytes(), &imageResponse))
+		require.Len(t, imageResponse.Data, 2)
+		assert.Equal(t, "QUJD", imageResponse.Data[0].B64Json)
+		assert.Equal(t, "REVG", imageResponse.Data[1].B64Json)
+	})
+
+	t.Run("content policy finish reason becomes 400 and keeps the reason", func(t *testing.T) {
+		c, _ := newContext()
+		body := `{"candidates":[{"content":{"role":"model","parts":null},"finishReason":"IMAGE_RECITATION","finishMessage":"Unable to show the generated image."}]}`
+		_, apiErr := novitaGeminiImageHandler(c, newResponse(body), &relaycommon.RelayInfo{})
+		require.NotNil(t, apiErr)
+		assert.Equal(t, http.StatusBadRequest, apiErr.StatusCode)
+		assert.Contains(t, apiErr.Error(), "IMAGE_RECITATION")
+		assert.Contains(t, apiErr.Error(), "Unable to show the generated image.")
+	})
+
+	t.Run("prompt feedback block reason becomes 400", func(t *testing.T) {
+		c, _ := newContext()
+		_, apiErr := novitaGeminiImageHandler(c, newResponse(`{"promptFeedback":{"blockReason":"SAFETY"}}`), &relaycommon.RelayInfo{})
+		require.NotNil(t, apiErr)
+		assert.Equal(t, http.StatusBadRequest, apiErr.StatusCode)
+		assert.Contains(t, apiErr.Error(), "SAFETY")
+	})
+
+	t.Run("non-policy finish reason stays 500 with the reason", func(t *testing.T) {
+		c, _ := newContext()
+		_, apiErr := novitaGeminiImageHandler(c, newResponse(`{"candidates":[{"finishReason":"OTHER"}]}`), &relaycommon.RelayInfo{})
+		require.NotNil(t, apiErr)
+		assert.Equal(t, http.StatusInternalServerError, apiErr.StatusCode)
+		assert.Contains(t, apiErr.Error(), "OTHER")
+	})
+
+	t.Run("invalid json is rejected", func(t *testing.T) {
+		c, _ := newContext()
+		_, apiErr := novitaGeminiImageHandler(c, newResponse(`not-json`), &relaycommon.RelayInfo{})
+		require.NotNil(t, apiErr)
+		assert.Equal(t, http.StatusInternalServerError, apiErr.StatusCode)
+	})
 }

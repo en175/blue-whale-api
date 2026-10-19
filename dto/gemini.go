@@ -440,6 +440,7 @@ type MediaResolution string
 type GeminiChatCandidate struct {
 	Content       GeminiChatContent        `json:"content"`
 	FinishReason  *string                  `json:"finishReason"`
+	FinishMessage string                   `json:"finishMessage,omitempty"`
 	Index         int64                    `json:"index"`
 	SafetyRatings []GeminiChatSafetyRating `json:"safetyRatings"`
 }

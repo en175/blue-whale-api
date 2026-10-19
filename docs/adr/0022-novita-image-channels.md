@@ -27,9 +27,10 @@ OpenAI 渠道可以直接承接 `gpt-image-2`：`ConvertImageRequest` 对 genera
 
 - URL：`{base_url}/v1/models/{url.PathEscape(UpstreamModelName)}:generateContent`，版本段固定 `v1`，不读全局 `gemini.version_settings`。
 - 请求转换：`prompt` → `contents[0].parts[0].text`；generations 固定 `responseModalities:["IMAGE"]`，edits 为 `["TEXT","IMAGE"]`。
-- 编辑输入：multipart 的 `image` / `image[]` 文件，或 JSON `images[].image_url` 的 data URL；每个输入图转为一个 `inlineData` part。`http(s)://` 外链显式拒绝（SSRF）。
-- `size` 不映射、不写 `imageConfig`；`n` 只允许 1；不支持流式；`response_format` 只允许 `b64_json`。
-- 响应转换：`candidates[].content.parts[].inlineData.data` → `data[].b64_json`；无图报错；文本 part 丢弃。
+- 编辑输入：multipart 的 `image` / `image[]` / `image[N]` 文件，或 JSON `images[].image_url` 的 data URL；每个输入图转为一个 `inlineData` part。`http(s)://` 外链显式拒绝（SSRF）。单图与总解码体积分别有上限（20MB / 40MB），最多 16 张。
+- `mask` 不支持，显式返回 400（不静默忽略）。
+- `size` 不映射、不写 `imageConfig`；`n` 只允许 1；不支持流式；`response_format` 只允许 `b64_json`（multipart 请求同样校验）。
+- 响应转换：`candidates[].content.parts[].inlineData.data` → `data[].b64_json`；无图报错。上游内容策略拦截（`IMAGE_RECITATION`、`SAFETY`、`PROHIBITED_CONTENT` 等）返回 400 并在错误中保留 `finishReason` / `blockReason`；其他无图情况返回 500，不触发重试。
 - 计费：解析 `usageMetadata`（含 thought tokens）；completion 为 0 但有图时按每张 1400 token 兜底，与既有 Gemini 原生图片路径口径一致。
 - 默认模型：实测通过的 9 个。`gemini-3.1-flash-lite-image` 在对接账号下返回 403，未纳入默认列表。
 
@@ -37,6 +38,7 @@ OpenAI 渠道可以直接承接 `gpt-image-2`：`ConvertImageRequest` 对 genera
 
 - 薄包装 `openai.Adaptor`，只覆盖 `GetModelList` 与 `GetChannelName`。
 - 请求、响应、错误映射全部复用 OpenAI 适配器，零新增转换逻辑。
+- 参数约束由上游决定：与渠道 68 不同，69 不限制 `n=1`、不禁止 `stream`、不强制 `b64_json`；OpenAI 适配器把客户端字段原样转发。运营配置时不要把两个渠道的参数能力写成同一套。
 - 计费沿用 `normalizeOpenAIUsage`，把上游 `input_tokens` / `output_tokens` 映射为 prompt/completion token。
 - 默认模型：`gpt-image-2`、`gpt-image-2.5-flare-oai`、`gpt-image-2.5-sunburst-oai`。
 
@@ -48,7 +50,7 @@ OpenAI 渠道可以直接承接 `gpt-image-2`：`ConvertImageRequest` 对 genera
 
 ## 理由
 
-按 ADR-0003 的渠道边界原则，边界由上游协议与端点决定。把 Gemini 图片支持塞进现有 Gemini 渠道会同时改动三个共享判断点，并引入按模型名全局生效的版本冲突；独立渠道把风险隔离在一个新包里。
+按 ADR-0003-xfai-video-channel 的渠道边界原则，边界由上游协议与端点决定。把 Gemini 图片支持塞进现有 Gemini 渠道会同时改动三个共享判断点，并引入按模型名全局生效的版本冲突；独立渠道把风险隔离在一个新包里。
 
 渠道 69 复用 OpenAI 适配器而不是重写，是因为 Novita 的 `/openai` 与 OpenAI 图片协议完全一致，任何转换都只会增加偏差。
 

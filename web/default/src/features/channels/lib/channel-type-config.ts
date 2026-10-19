@@ -213,7 +213,7 @@ export const CHANNEL_TYPE_CONFIGS: Record<number, ChannelTypeConfig> = {
       models:
         'gemini-nano-banana-2.1, gemini-3.1-flash-image, gemini-3-pro-image, gemini-2.5-flash-image 及对应 -as 版本',
       other:
-        '对客走 OpenAI 图片协议（generations/edits），网关转换为 Gemini generateContent。仅支持 n=1、b64_json、非流式；size 不映射；编辑输入图接受 multipart 文件或 data URL',
+        '对客走 OpenAI 图片协议（generations/edits），网关转换为 Gemini generateContent。仅支持 n=1、b64_json、非流式；size 与 mask 不映射（mask 直接拒绝）；编辑输入图接受 multipart 文件或 data URL，最多 16 张、单张 20MB',
     },
   },
   69: {
@@ -226,7 +226,7 @@ export const CHANNEL_TYPE_CONFIGS: Record<number, ChannelTypeConfig> = {
       key: 'Upstream API Key (Bearer)',
       models: 'gpt-image-2, gpt-image-2.5-flare-oai, gpt-image-2.5-sunburst-oai',
       other:
-        'OpenAI 图片协议原样透传（generations/edits，含 multipart 与 JSON images）；上游新增模型可在渠道模型列表中自行添加',
+        'OpenAI 图片协议原样透传（generations/edits，含 multipart 与 JSON images）；n/stream/response_format 不做额外限制，由上游决定；上游新增模型可在渠道模型列表中自行添加',
     },
   },
   64: {
