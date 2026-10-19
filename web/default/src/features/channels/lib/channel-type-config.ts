@@ -202,6 +202,33 @@ export const CHANNEL_TYPE_CONFIGS: Record<number, ChannelTypeConfig> = {
         '模型名拼接在请求路径上（{base}/{model}）；prompt/n/size/quality/background/moderation/output_format/output_compression 及未知字段透传上游，响应 {images:[...]} 转为 OpenAI 图像格式',
     },
   },
+  68: {
+    id: 68,
+    name: CHANNEL_TYPES[68],
+    icon: 'google',
+    defaultBaseUrl: 'https://api.novita.ai/gemini',
+    hints: {
+      baseUrl: 'Default: https://api.novita.ai/gemini',
+      key: 'Upstream API Key (Bearer)',
+      models:
+        'gemini-nano-banana-2.1, gemini-3.1-flash-image, gemini-3-pro-image, gemini-2.5-flash-image 及对应 -as 版本',
+      other:
+        '对客走 OpenAI 图片协议（generations/edits），网关转换为 Gemini generateContent。仅支持 n=1、b64_json、非流式；size 与 mask 不映射（mask 直接拒绝）；编辑输入图接受 multipart 文件或 data URL，最多 16 张、单张 20MB',
+    },
+  },
+  69: {
+    id: 69,
+    name: CHANNEL_TYPES[69],
+    icon: 'openai',
+    defaultBaseUrl: 'https://api.novita.ai/openai',
+    hints: {
+      baseUrl: 'Default: https://api.novita.ai/openai',
+      key: 'Upstream API Key (Bearer)',
+      models: 'gpt-image-2, gpt-image-2.5-flare-oai, gpt-image-2.5-sunburst-oai',
+      other:
+        'OpenAI 图片协议原样透传（generations/edits，含 multipart 与 JSON images）；n/stream/response_format 不做额外限制，由上游决定；上游新增模型可在渠道模型列表中自行添加',
+    },
+  },
   64: {
     id: 64,
     name: CHANNEL_TYPES[64],

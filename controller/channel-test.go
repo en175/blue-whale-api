@@ -89,6 +89,8 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 		constant.ChannelTypeTokenHub,
 		constant.ChannelTypeDoubaoAudio,
 		constant.ChannelTypeHighwayAPI,
+		constant.ChannelTypeNovitaGemini,
+		constant.ChannelTypeNovitaOpenAI,
 		constant.ChannelTypeVolcEngineEnhanced,
 		constant.ChannelTypeMediaKit,
 		constant.ChannelTypeVolcEngine25,

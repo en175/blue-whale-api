@@ -27,6 +27,8 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel/mistral"
 	"github.com/QuantumNous/new-api/relay/channel/mokaai"
 	"github.com/QuantumNous/new-api/relay/channel/moonshot"
+	"github.com/QuantumNous/new-api/relay/channel/novitagemini"
+	"github.com/QuantumNous/new-api/relay/channel/novitaopenai"
 	"github.com/QuantumNous/new-api/relay/channel/ollama"
 	"github.com/QuantumNous/new-api/relay/channel/openai"
 	"github.com/QuantumNous/new-api/relay/channel/palm"
@@ -138,6 +140,10 @@ func GetAdaptor(apiType int) channel.Adaptor {
 		return &highwayapi.Adaptor{}
 	case constant.APITypeMediaKit:
 		return &mediakit.Adaptor{}
+	case constant.APITypeNovitaGemini:
+		return &novitagemini.Adaptor{}
+	case constant.APITypeNovitaOpenAI:
+		return &novitaopenai.Adaptor{}
 	}
 	return nil
 }
