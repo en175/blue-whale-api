@@ -86,6 +86,8 @@ export const CHANNEL_TYPES = {
   65: 'MediaKit',
   66: 'VolcEngine25',
   67: 'TokenHub25',
+  68: 'NovitaGemini',
+  69: 'NovitaOpenAI',
 } as const
 
 const CHANNEL_TYPE_DISPLAY_ORDER: number[] = [

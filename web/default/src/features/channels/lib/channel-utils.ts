@@ -111,6 +111,8 @@ export function getChannelTypeIcon(type: number): string {
     65: 'Volcengine', // MediaKit
   66: 'Volcengine', // VolcEngine25
   67: 'TokenHub', // TokenHub25
+  68: 'Gemini', // NovitaGemini (Gemini image protocol)
+  69: 'OpenAI', // NovitaOpenAI (gpt-image family)
 
     // Tools & Platforms
     37: 'Dify', // Dify

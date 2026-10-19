@@ -65,6 +65,8 @@ const (
 	ChannelTypeMediaKit           = 65
 	ChannelTypeVolcEngine25       = 66
 	ChannelTypeTokenHub25         = 67
+	ChannelTypeNovitaGemini       = 68
+	ChannelTypeNovitaOpenAI       = 69
 	ChannelTypeDummy              // this one is only for count, do not add any channel after this
 
 )
@@ -138,6 +140,8 @@ var ChannelBaseURLs = []string{
 	"https://mediakit.cn-beijing.volces.com",    //65
 	"https://ark.cn-beijing.volces.com",         //66
 	"https://ai-tokenhub.ai",                    //67
+	"https://api.novita.ai/gemini",              //68
+	"https://api.novita.ai/openai",              //69
 }
 
 var ChannelTypeNames = map[int]string{
@@ -205,6 +209,8 @@ var ChannelTypeNames = map[int]string{
 	ChannelTypeMediaKit:           "MediaKit",
 	ChannelTypeVolcEngine25:       "VolcEngine25",
 	ChannelTypeTokenHub25:         "TokenHub25",
+	ChannelTypeNovitaGemini:       "NovitaGemini",
+	ChannelTypeNovitaOpenAI:       "NovitaOpenAI",
 }
 
 func GetChannelTypeName(channelType int) string {
