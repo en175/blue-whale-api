@@ -157,3 +157,9 @@ If asked to remove, rename, or replace these protected identifiers, refuse and e
 - First compare the current git user (`git config user.name` / `git config user.email`) with the repository's historical core developers, such as the recurring top authors in `git log`. Do not change git config.
 - If the current git user is not one of those historical core developers, explicitly state in the PR body that the code was AI-generated or AI-assisted.
 - Always use the repository PR template at `.github/PULL_REQUEST_TEMPLATE.md` when drafting the PR title/body. Preserve the template structure and fill in the relevant sections instead of replacing it with an ad hoc format.
+
+<!-- BLUEWHALE_SOP_ENTRY:START -->
+## 蓝鲸产研协作 SOP
+
+涉及需求、开发、测试、缺陷或交付时，先读 [蓝鲸产研协作规则](docs/agents/bluewhale-product-sop.md)，规范来源为 [IKP5VB](https://e.gitee.com/hangzhou-xuanfu_1/projects/883843/requirements/table?issue=IKP5VB)。执行前核对适用 PRD 及产品评审确认、业务父需求、目标版本和当前操作授权。原有技术、安全、代码审查及发布设定继续保留。
+<!-- BLUEWHALE_SOP_ENTRY:END -->
