@@ -66,7 +66,8 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInf
 	}
 	// Multipart edits are parsed by the framework without populating
 	// dto.ImageRequest.ResponseFormat, so read the field from the form directly.
-	if info.RelayMode == relayconstant.RelayModeImagesEdits && strings.Contains(c.Request.Header.Get("Content-Type"), "multipart/form-data") &&
+	if info.RelayMode == relayconstant.RelayModeImagesEdits && c.Request != nil &&
+		strings.Contains(c.Request.Header.Get("Content-Type"), "multipart/form-data") &&
 		c.Request.MultipartForm != nil {
 		if values := c.Request.MultipartForm.Value["response_format"]; len(values) > 0 && values[0] != "" && values[0] != "b64_json" {
 			return nil, badRequestError("novitagemini channel only supports b64_json response format")
@@ -76,6 +77,11 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInf
 		return nil, badRequestError("prompt is required")
 	}
 	if len(request.Mask) > 0 && string(request.Mask) != "null" {
+		return nil, badRequestError("novitagemini channel does not support mask")
+	}
+	// Multipart edits carry mask as a file part instead of a JSON field.
+	if c.Request != nil && c.Request.MultipartForm != nil &&
+		(len(c.Request.MultipartForm.File["mask"]) > 0 || len(c.Request.MultipartForm.Value["mask"]) > 0) {
 		return nil, badRequestError("novitagemini channel does not support mask")
 	}
 
