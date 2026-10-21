@@ -20,4 +20,8 @@ const (
 	// RelayFormatMediaKit 覆盖 /v1/mediakit/*：请求体按 MediaKit 原生协议透传，
 	// 网关只做鉴权、锁模型与计费。
 	RelayFormatMediaKit = "mediakit"
+
+	// RelayFormatDeepSeekTools 覆盖 /tools/search 与 /tools/fetch：请求体原样
+	// 透传到 DeepSeek 渠道，按成功调用次数计费。
+	RelayFormatDeepSeekTools = "deepseek_tools"
 )

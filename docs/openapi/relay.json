@@ -68,6 +68,9 @@
     },
     {
       "name": "未实现/Files"
+    },
+    {
+      "name": "DeepSeek 工具"
     }
   ],
   "paths": {
@@ -285,26 +288,26 @@
         ]
       }
     },
-	    "/v1/responses/compact": {
-	      "post": {
-	        "summary": "压缩对话 (OpenAI Responses API)",
-	        "deprecated": false,
-	        "description": "OpenAI Responses API，用于对长对话进行 compaction。",
-	        "operationId": "compactResponse",
+    "/v1/responses/compact": {
+      "post": {
+        "summary": "压缩对话 (OpenAI Responses API)",
+        "deprecated": false,
+        "description": "OpenAI Responses API，用于对长对话进行 compaction。",
+        "operationId": "compactResponse",
         "tags": [
           "OpenAI格式(Responses)"
         ],
         "parameters": [],
-	        "requestBody": {
-	          "content": {
-	            "application/json": {
-	              "schema": {
-	                "$ref": "#/components/schemas/ResponsesCompactionRequest"
-	              }
-	            }
-	          },
-	          "required": true
-	        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResponsesCompactionRequest"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "description": "成功压缩对话",
@@ -2301,6 +2304,175 @@
           }
         ]
       }
+    },
+    "/v1/tools/search": {
+      "post": {
+        "summary": "DeepSeek 搜索",
+        "deprecated": false,
+        "description": "调用 DeepSeek 搜索接口，返回网页搜索结果。同一端点也提供在 `/tools/search`。\n\n按成功调用次数计费：仅当上游返回 HTTP 200 且 `results` 非空时扣费。失败、无结果或超时不计费；`count` 只影响返回条数，不影响价格。\n",
+        "operationId": "deepseekSearch",
+        "tags": [
+          "DeepSeek 工具"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "query"
+                ],
+                "properties": {
+                  "query": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "description": "搜索关键词，支持 DeepSeek 搜索语法"
+                  },
+                  "count": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 50,
+                    "default": 10,
+                    "description": "返回结果条数，不影响单次价格"
+                  },
+                  "ori_question": {
+                    "type": "string",
+                    "description": "用户原始问题，用于重排序"
+                  },
+                  "localization": {
+                    "type": "string",
+                    "description": "本地化参数"
+                  },
+                  "need_content": {
+                    "type": "boolean",
+                    "description": "是否返回网页正文"
+                  }
+                },
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "搜索成功；`results` 为空数组时本次不扣费",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "rerank_score": {
+                            "type": "number"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "url": {
+                            "type": "string"
+                          },
+                          "snippet": {
+                            "type": "string"
+                          },
+                          "summary": {
+                            "type": "string"
+                          },
+                          "content": {
+                            "type": "string"
+                          },
+                          "site_name": {
+                            "type": "string"
+                          },
+                          "site_icon": {
+                            "type": "string"
+                          },
+                          "date": {
+                            "type": "string"
+                          },
+                          "authority": {
+                            "type": "integer"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求参数不合法"
+          },
+          "503": {
+            "description": "没有可用的 DeepSeek 渠道"
+          }
+        }
+      }
+    },
+    "/v1/tools/fetch": {
+      "post": {
+        "summary": "DeepSeek 网页抓取",
+        "deprecated": false,
+        "description": "抓取单个网页并以 Markdown 返回正文。同一端点也提供在 `/tools/fetch`。\n\n按成功调用次数计费：仅当上游返回 HTTP 200 且 `content` 非空时扣费。失败或没有可提取正文时不计费。\n",
+        "operationId": "deepseekFetch",
+        "tags": [
+          "DeepSeek 工具"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "url"
+                ],
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "maxLength": 8192,
+                    "description": "要抓取的网页地址，仅支持 http/https，不允许携带用户名密码"
+                  }
+                },
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "抓取成功；`content` 为空时本次不扣费",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "title": {
+                      "type": "string"
+                    },
+                    "content": {
+                      "type": "string",
+                      "description": "网页正文的 Markdown 文本"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求参数不合法"
+          },
+          "503": {
+            "description": "没有可用的 DeepSeek 渠道"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3166,9 +3338,9 @@
           }
         }
       },
-	      "ResponsesCompactionResponse": {
-	        "type": "object",
-	        "properties": {
+      "ResponsesCompactionResponse": {
+        "type": "object",
+        "properties": {
           "id": {
             "type": "string"
           },
@@ -3193,44 +3365,44 @@
             "type": "object",
             "properties": {}
           }
-	        }
-	      },
-	      "ResponsesCompactionRequest": {
-	        "type": "object",
-	        "required": [
-	          "model"
-	        ],
-	        "properties": {
-	          "model": {
-	            "type": "string"
-	          },
-	          "input": {
-	            "description": "输入内容，可以是字符串或消息数组",
-	            "oneOf": [
-	              {
-	                "type": "string"
-	              },
-	              {
-	                "type": "array",
-	                "items": {
-	                  "type": "object",
-	                  "properties": {}
-	                }
-	              }
-	            ]
-	          },
-	          "instructions": {
-	            "type": "string"
-	          },
-	          "previous_response_id": {
-	            "type": "string"
-	          }
-	        }
-	      },
-	      "ResponsesStreamResponse": {
-	        "type": "object",
-	        "properties": {
-	          "type": {
+        }
+      },
+      "ResponsesCompactionRequest": {
+        "type": "object",
+        "required": [
+          "model"
+        ],
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "input": {
+            "description": "输入内容，可以是字符串或消息数组",
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {}
+                }
+              }
+            ]
+          },
+          "instructions": {
+            "type": "string"
+          },
+          "previous_response_id": {
+            "type": "string"
+          }
+        }
+      },
+      "ResponsesStreamResponse": {
+        "type": "object",
+        "properties": {
+          "type": {
             "type": "string"
           },
           "response": {

@@ -59,12 +59,24 @@ func OaiResponsesHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 	}
 	// 解析 Tools 用量
 	for _, tool := range responsesResponse.Tools {
-		buildToolinfo, ok := info.ResponsesUsageInfo.BuiltInTools[common.Interface2String(tool["type"])]
+		toolType := common.Interface2String(tool["type"])
+		if toolType == dto.BuildInToolWebSearch {
+			// web_search 按实际调用次数计费，次数从 output items 统计
+			continue
+		}
+		buildToolinfo, ok := info.ResponsesUsageInfo.BuiltInTools[toolType]
 		if !ok || buildToolinfo == nil {
 			logger.LogError(c, fmt.Sprintf("BuiltInTools not found for tool type: %v", tool["type"]))
 			continue
 		}
 		buildToolinfo.CallCount++
+	}
+	if webSearchTool, ok := info.ResponsesUsageInfo.BuiltInTools[dto.BuildInToolWebSearch]; ok && webSearchTool != nil {
+		for _, output := range responsesResponse.Output {
+			if output.Type == dto.BuildInCallWebSearchCall {
+				webSearchTool.CallCount++
+			}
+		}
 	}
 	return &usage, nil
 }
@@ -123,7 +135,11 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 				switch streamResponse.Item.Type {
 				case dto.BuildInCallWebSearchCall:
 					if info != nil && info.ResponsesUsageInfo != nil && info.ResponsesUsageInfo.BuiltInTools != nil {
-						if webSearchTool, exists := info.ResponsesUsageInfo.BuiltInTools[dto.BuildInToolWebSearchPreview]; exists && webSearchTool != nil {
+						// DeepSeek 的 Responses 工具类型是 web_search，OpenAI 是
+						// web_search_preview；按声明的类型记一次实际调用。
+						if webSearchTool, exists := info.ResponsesUsageInfo.BuiltInTools[dto.BuildInToolWebSearch]; exists && webSearchTool != nil {
+							webSearchTool.CallCount++
+						} else if webSearchTool, exists := info.ResponsesUsageInfo.BuiltInTools[dto.BuildInToolWebSearchPreview]; exists && webSearchTool != nil {
 							webSearchTool.CallCount++
 						}
 					}
