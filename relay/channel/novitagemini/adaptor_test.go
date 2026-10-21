@@ -380,6 +380,36 @@ func TestConvertImageRequestEditRejectsTooManyMultipartImages(t *testing.T) {
 	assert.Contains(t, err.Error(), "too many input images")
 }
 
+func TestConvertImageRequestEditRejectsMultipartMask(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	adaptor := &Adaptor{}
+
+	pngBytes := append([]byte("\x89PNG\r\n\x1a\n"), []byte("fake-image-body")...)
+
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+	require.NoError(t, writer.WriteField("prompt", "edit"))
+	for _, field := range []string{"image", "mask"} {
+		part, err := writer.CreateFormFile(field, field+".png")
+		require.NoError(t, err)
+		_, err = part.Write(pngBytes)
+		require.NoError(t, err)
+	}
+	require.NoError(t, writer.Close())
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/images/edits", &buf)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	require.NoError(t, req.ParseMultipartForm(32<<20))
+
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = req
+	info := &relaycommon.RelayInfo{RelayMode: relayconstant.RelayModeImagesEdits}
+
+	_, err := adaptor.ConvertImageRequest(c, info, dto.ImageRequest{Prompt: "edit"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "does not support mask")
+}
+
 func TestDoRequestRejectsPassthrough(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	adaptor := &Adaptor{}
