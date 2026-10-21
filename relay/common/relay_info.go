@@ -393,6 +393,16 @@ func GenRelayInfoEmbedding(c *gin.Context, request dto.Request) *RelayInfo {
 	return info
 }
 
+// GenRelayInfoTool builds relay info for model-less tool endpoints
+// (/tools/search, /tools/fetch). Channel meta is initialized by the caller
+// after a channel has been selected.
+func GenRelayInfoTool(c *gin.Context, modelName string) *RelayInfo {
+	info := genBaseRelayInfo(c, nil)
+	info.RelayFormat = types.RelayFormatDeepSeekTools
+	info.OriginModelName = modelName
+	return info
+}
+
 func GenRelayInfoResponses(c *gin.Context, request *dto.OpenAIResponsesRequest) *RelayInfo {
 	info := genBaseRelayInfo(c, request)
 	info.RelayMode = relayconstant.RelayModeResponses

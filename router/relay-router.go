@@ -165,6 +165,16 @@ func SetRelayRouter(router *gin.Engine) {
 		httpRouter.DELETE("/models/:model", controller.RelayNotImplemented)
 	}
 
+	for _, prefix := range []string{"/tools", "/v1/tools"} {
+		toolsRouter := router.Group(prefix)
+		toolsRouter.Use(middleware.RouteTag("relay"))
+		toolsRouter.Use(middleware.SystemPerformanceCheck())
+		toolsRouter.Use(middleware.TokenAuth())
+		toolsRouter.Use(middleware.ModelRequestRateLimit())
+		toolsRouter.POST("/search", controller.DeepSeekToolSearch)
+		toolsRouter.POST("/fetch", controller.DeepSeekToolFetch)
+	}
+
 	relayMjRouter := router.Group("/mj")
 	relayMjRouter.Use(middleware.RouteTag("relay"))
 	relayMjRouter.Use(middleware.SystemPerformanceCheck())

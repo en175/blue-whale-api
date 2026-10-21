@@ -33,6 +33,7 @@ const OPTION_KEY = 'tool_price_setting.prices'
 
 const DEFAULT_PRICES: Record<string, number> = {
   web_search: 10.0,
+  'web_search:deepseek-*': 5.0,
   web_search_preview: 10.0,
   'web_search_preview:gpt-4o*': 25.0,
   'web_search_preview:gpt-4.1*': 25.0,
@@ -40,6 +41,8 @@ const DEFAULT_PRICES: Record<string, number> = {
   'web_search_preview:gpt-4.1-mini*': 25.0,
   file_search: 2.5,
   google_search: 14.0,
+  deepseek_search: 5.0,
+  deepseek_fetch: 5.0,
 }
 
 type ToolPriceRow = {
@@ -78,7 +81,9 @@ function parseInitialPrices(
       !Array.isArray(parsed) &&
       Object.keys(parsed as object).length > 0
     ) {
-      return parsed as Record<string, number>
+      // Merge new defaults into already-saved configs so newly added tools
+      // still show up on deployments that saved prices before this release.
+      return { ...DEFAULT_PRICES, ...(parsed as Record<string, number>) }
     }
   } catch {
     // fall through to defaults

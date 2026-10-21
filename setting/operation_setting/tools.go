@@ -24,6 +24,8 @@ var defaultToolPrices = map[string]float64{
 	"web_search_preview": 10.0, // OpenAI web search preview (default: reasoning models)
 	"file_search":        2.5,  // OpenAI file search (Responses API)
 	"google_search":      14.0, // Gemini Grounding with Google Search
+	"deepseek_search":    5.0,  // DeepSeek /tools/search (per successful call)
+	"deepseek_fetch":     5.0,  // DeepSeek /tools/fetch (per successful call)
 }
 
 var defaultToolPriceOverrides = map[string]float64{
@@ -31,6 +33,7 @@ var defaultToolPriceOverrides = map[string]float64{
 	"web_search_preview:gpt-4.1*":      25.0,
 	"web_search_preview:gpt-4o-mini*":  25.0,
 	"web_search_preview:gpt-4.1-mini*": 25.0,
+	"web_search:deepseek-*":            5.0, // DeepSeek server-side web search
 }
 
 // ToolPriceSetting is managed by config.GlobalConfig.Register.

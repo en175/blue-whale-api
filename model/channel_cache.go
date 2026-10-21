@@ -144,20 +144,110 @@ func GetRandomSatisfiedChannel(group string, model string, retry int, requestPat
 		return nil, nil
 	}
 
-	if len(channels) == 1 {
-		if channel, ok := channelsIDM[channels[0]]; ok {
-			return channel, nil
+	candidates := make([]*Channel, 0, len(channels))
+	for _, channelId := range channels {
+		channel, ok := channelsIDM[channelId]
+		if !ok {
+			return nil, fmt.Errorf("数据库一致性错误，渠道# %d 不存在，请联系管理员修复", channelId)
 		}
-		return nil, fmt.Errorf("数据库一致性错误，渠道# %d 不存在，请联系管理员修复", channels[0])
+		candidates = append(candidates, channel)
+	}
+	return pickChannelByPriorityAndWeight(candidates, retry, fmt.Sprintf("group: %s, model: %s", group, model))
+}
+
+// GetRandomSatisfiedChannelByType selects an enabled channel of the given type
+// that belongs to group. It is used by endpoints that have no model name (tool
+// endpoints), so selection ignores the model dimension entirely.
+// GetRandomSatisfiedChannelByType selects an enabled channel by group and
+// channel type, ignoring the model dimension. Used by model-less endpoints
+// such as DeepSeek tools.
+func GetRandomSatisfiedChannelByType(group string, channelType int, retry int) (*Channel, error) {
+	channels, err := getEnabledChannelsByType(group, channelType)
+	if err != nil {
+		return nil, err
+	}
+	candidates := make([]*Channel, 0, len(channels))
+	for _, channel := range channels {
+		if ChannelIsQuotaExceeded(channel) {
+			continue
+		}
+		candidates = append(candidates, channel)
+	}
+	return pickChannelByPriorityAndWeight(candidates, retry, fmt.Sprintf("group: %s, channel type: %d", group, channelType))
+}
+
+// GetEnabledChannelTypeModels returns the client-facing model names exposed by
+// enabled channels of a given type in a group. Model-less endpoints use it to
+// enforce token model whitelists without a requested model name.
+func GetEnabledChannelTypeModels(group string, channelType int) (map[string]struct{}, error) {
+	channels, err := getEnabledChannelsByType(group, channelType)
+	if err != nil {
+		return nil, err
+	}
+	models := make(map[string]struct{})
+	for _, channel := range channels {
+		for _, model := range strings.Split(channel.Models, ",") {
+			model = strings.TrimSpace(model)
+			if model != "" {
+				models[model] = struct{}{}
+			}
+		}
+	}
+	return models, nil
+}
+
+func getEnabledChannelsByType(group string, channelType int) ([]*Channel, error) {
+	if !common.MemoryCacheEnabled {
+		var channels []*Channel
+		err := DB.Where("status = ? AND type = ?", common.ChannelStatusEnabled, channelType).Find(&channels).Error
+		if err != nil {
+			return nil, err
+		}
+		candidates := make([]*Channel, 0, len(channels))
+		for _, channel := range channels {
+			if channelBelongsToGroup(channel, group) {
+				candidates = append(candidates, channel)
+			}
+		}
+		return candidates, nil
+	}
+
+	channelSyncLock.RLock()
+	defer channelSyncLock.RUnlock()
+
+	seen := make(map[int]struct{})
+	candidates := make([]*Channel, 0)
+	for _, ids := range group2model2channels[group] {
+		for _, id := range ids {
+			if _, ok := seen[id]; ok {
+				continue
+			}
+			seen[id] = struct{}{}
+			channel, ok := channelsIDM[id]
+			if !ok {
+				return nil, fmt.Errorf("数据库一致性错误，渠道# %d 不存在，请联系管理员修复", id)
+			}
+			if channel.Type == channelType {
+				candidates = append(candidates, channel)
+			}
+		}
+	}
+	return candidates, nil
+}
+
+// pickChannelByPriorityAndWeight picks one channel by retry-ranked priority
+// (higher first), then weighted random within the selected priority.
+func pickChannelByPriorityAndWeight(channels []*Channel, retry int, scope string) (*Channel, error) {
+	if len(channels) == 0 {
+		return nil, nil
+	}
+	if len(channels) == 1 {
+		return channels[0], nil
 	}
 
 	uniquePriorities := make(map[int]bool)
-	for _, channelId := range channels {
-		if channel, ok := channelsIDM[channelId]; ok {
-			uniquePriorities[int(channel.GetPriority())] = true
-		} else {
-			return nil, fmt.Errorf("数据库一致性错误，渠道# %d 不存在，请联系管理员修复", channelId)
-		}
+	for _, channel := range channels {
+		uniquePriorities[int(channel.GetPriority())] = true
 	}
 	var sortedUniquePriorities []int
 	for priority := range uniquePriorities {
@@ -173,19 +263,15 @@ func GetRandomSatisfiedChannel(group string, model string, retry int, requestPat
 	// get the priority for the given retry number
 	var sumWeight = 0
 	var targetChannels []*Channel
-	for _, channelId := range channels {
-		if channel, ok := channelsIDM[channelId]; ok {
-			if channel.GetPriority() == targetPriority {
-				sumWeight += channel.GetWeight()
-				targetChannels = append(targetChannels, channel)
-			}
-		} else {
-			return nil, fmt.Errorf("数据库一致性错误，渠道# %d 不存在，请联系管理员修复", channelId)
+	for _, channel := range channels {
+		if channel.GetPriority() == targetPriority {
+			sumWeight += channel.GetWeight()
+			targetChannels = append(targetChannels, channel)
 		}
 	}
 
 	if len(targetChannels) == 0 {
-		return nil, errors.New(fmt.Sprintf("no channel found, group: %s, model: %s, priority: %d", group, model, targetPriority))
+		return nil, errors.New(fmt.Sprintf("no channel found, %s, priority: %d", scope, targetPriority))
 	}
 
 	// smoothing factor and adjustment
@@ -219,6 +305,15 @@ func GetRandomSatisfiedChannel(group string, model string, retry int, requestPat
 	return nil, errors.New("channel not found")
 }
 
+func channelBelongsToGroup(channel *Channel, group string) bool {
+	for _, g := range strings.Split(channel.Group, ",") {
+		if g == group {
+			return true
+		}
+	}
+	return false
+}
+
 // filterChannelsByRequestPathAndModel restricts candidates by request path and
 // model. Only Advanced Custom (type 58) channels are path-checked: they are kept
 // only when one of their configured routes matches requestPath and model. All
@@ -246,7 +341,6 @@ func filterChannelsByRequestPathAndModel(channels []int, requestPath string, mod
 	}
 	return filtered
 }
-
 
 func CacheGetChannel(id int) (*Channel, error) {
 	if !common.MemoryCacheEnabled {
