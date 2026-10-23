@@ -15,6 +15,12 @@ func abortWithOpenAiMessage(c *gin.Context, statusCode int, message string, code
 		codeStr = string(code[0])
 	}
 	userId := c.GetInt("id")
+	// 火山原生协议路径的错误信封必须是官方形状，不能混入 OpenAI 的 error 对象。
+	if IsArkNativePath(c) {
+		WriteArkError(c, statusCode, codeStr, message)
+		logger.LogError(c.Request.Context(), fmt.Sprintf("user %d | %s", userId, message))
+		return
+	}
 	c.JSON(statusCode, gin.H{
 		"error": gin.H{
 			"message": common.MessageWithRequestId(message, c.GetString(common.RequestIdKey)),

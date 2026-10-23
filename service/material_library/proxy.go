@@ -122,8 +122,18 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	case "UpdateAsset":
+		// 名称是纯本地校验且要查上游反查归属，先拒非法名，避免白跑一次上游。
 		if materialNameInvalid(body) {
 			writeMaterialBadRequest(w)
+			return
+		}
+		if !assetOwnedByCurrentUser(r, body) {
+			writeMaterialNotFound(w)
+			return
+		}
+	case "DeleteAsset":
+		if !assetOwnedByCurrentUser(r, body) {
+			writeMaterialNotFound(w)
 			return
 		}
 	case "CreateAssetGroup", "CreateVisualValidateSession":
@@ -583,18 +593,7 @@ func readJSONBodyFields(c *gin.Context, fields ...string) map[string]string {
 		return nil
 	}
 	c.Request.Body = io.NopCloser(bytes.NewReader(body))
-
-	var m map[string]any
-	if err := common.Unmarshal(body, &m); err != nil {
-		return nil
-	}
-	result := make(map[string]string, len(fields))
-	for _, field := range fields {
-		if v, ok := m[field].(string); ok {
-			result[field] = v
-		}
-	}
-	return result
+	return jsonStringFields(body, fields...)
 }
 
 // readJSONBodyField 读取请求体 JSON 的单个字段，body 原样装回。

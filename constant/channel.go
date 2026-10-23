@@ -1,5 +1,7 @@
 package constant
 
+import "strings"
+
 const (
 	ChannelTypeUnknown            = 0
 	ChannelTypeOpenAI             = 1
@@ -67,6 +69,7 @@ const (
 	ChannelTypeTokenHub25         = 67
 	ChannelTypeNovitaGemini       = 68
 	ChannelTypeNovitaOpenAI       = 69
+	ChannelTypeTokenHubVolc       = 70
 	ChannelTypeDummy              // this one is only for count, do not add any channel after this
 
 )
@@ -142,6 +145,7 @@ var ChannelBaseURLs = []string{
 	"https://ai-tokenhub.ai",                    //67
 	"https://api.novita.ai/gemini",              //68
 	"https://api.novita.ai/openai",              //69
+	"https://ai-tokenhub.ai",                    //70
 }
 
 var ChannelTypeNames = map[int]string{
@@ -211,6 +215,21 @@ var ChannelTypeNames = map[int]string{
 	ChannelTypeTokenHub25:         "TokenHub25",
 	ChannelTypeNovitaGemini:       "NovitaGemini",
 	ChannelTypeNovitaOpenAI:       "NovitaOpenAI",
+	ChannelTypeTokenHubVolc:       "TokenHubVolc",
+}
+
+// NativeArkVideoTaskPath 是火山方舟原生视频协议的对客路径前缀。
+//
+// 该路径与 /v1/videos 承载的上游协议不同：请求体是 content[]，任务查询按
+// 火山字段返回。两种形状不能共用一个渠道类型，否则适配器会收到自己解析不了
+// 的内容，因此按路径做渠道隔离。
+const NativeArkVideoTaskPath = "/api/v3/contents/generations/tasks"
+
+// ChannelServesRequestPath 报告某渠道类型能否服务该请求路径。
+// 只有类型 70 服务 NativeArkVideoTaskPath，其余路径一律不路由给它。
+func ChannelServesRequestPath(channelType int, requestPath string) bool {
+	isNativeArkTask := strings.HasPrefix(requestPath, NativeArkVideoTaskPath)
+	return isNativeArkTask == (channelType == ChannelTypeTokenHubVolc)
 }
 
 func GetChannelTypeName(channelType int) string {

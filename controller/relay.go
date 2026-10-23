@@ -479,7 +479,7 @@ func RelayNotFound(c *gin.Context) {
 func RelayTaskFetch(c *gin.Context) {
 	relayInfo, err := relaycommon.GenRelayInfo(c, types.RelayFormatTask, nil, nil)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, &dto.TaskError{
+		respondTaskError(c, &dto.TaskError{
 			Code:       "gen_relay_info_failed",
 			Message:    err.Error(),
 			StatusCode: http.StatusInternalServerError,
@@ -494,7 +494,7 @@ func RelayTaskFetch(c *gin.Context) {
 func RelayTask(c *gin.Context) {
 	relayInfo, err := relaycommon.GenRelayInfo(c, types.RelayFormatTask, nil, nil)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, &dto.TaskError{
+		respondTaskError(c, &dto.TaskError{
 			Code:       "gen_relay_info_failed",
 			Message:    err.Error(),
 			StatusCode: http.StatusInternalServerError,
@@ -625,6 +625,11 @@ func respondTaskError(c *gin.Context, taskErr *dto.TaskError) {
 	if taskErr.StatusCode == http.StatusTooManyRequests {
 		taskErr.Message = "当前分组上游负载已饱和，请稍后再试"
 	}
+	// 火山原生协议的下游只认官方错误信封，与请求/成功响应的形状保持一致。
+	if middleware.IsArkNativePath(c) {
+		middleware.WriteArkError(c, taskErr.StatusCode, taskErr.Code, taskErr.Message)
+		return
+	}
 	c.JSON(taskErr.StatusCode, taskErr)
 }
 
@@ -636,6 +641,11 @@ func shouldRetryTaskRelay(c *gin.Context, channelId int, taskErr *dto.TaskError,
 	// specific_channel_id，下面的守卫拦不住。重试会导致同一份样片被出成两段
 	// 成片、扣两次费。重试次数默认 0 所以今天不会触发，但运维一旦调大就会。
 	if strings.HasSuffix(c.Request.URL.Path, "/finalize") {
+		return false
+	}
+	// 火山原生协议的成片请求同上：路径里没有 finalize 后缀，但一次重试就会把
+	// 同一份样片再出成一版成片、扣两次费。
+	if relay.IsNativeArkFinalizeRequest(c) {
 		return false
 	}
 	if service.ShouldSkipRetryAfterChannelAffinityFailure(c) {
