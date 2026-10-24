@@ -2,12 +2,14 @@ package middleware
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/relay/channel/task/tokenhubvolc"
 
 	"github.com/gin-gonic/gin"
@@ -41,7 +43,14 @@ func ArkNativeRequestConvert() gin.HandlerFunc {
 
 		native, err := tokenhubvolc.ParseNativeRequest(raw)
 		if err != nil {
-			WriteArkError(c, http.StatusBadRequest, "InvalidParameter", "request body must be a JSON object")
+			if errors.Is(err, tokenhubvolc.ErrNativeBodyNotObject) {
+				WriteArkError(c, http.StatusBadRequest, "InvalidParameter", err.Error())
+				return
+			}
+			// 顶层是对象但字段类型不对（如 content 传字符串）：把细节写日志，
+			// 对外给出可行动的提示，避免一律报「请求体不是 JSON 对象」。
+			logger.LogWarn(c.Request.Context(), "ark native request parse failed: "+err.Error())
+			WriteArkError(c, http.StatusBadRequest, "InvalidParameter", "request body field type mismatch")
 			return
 		}
 		if strings.TrimSpace(native.Model) == "" {

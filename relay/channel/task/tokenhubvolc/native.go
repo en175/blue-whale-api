@@ -1,6 +1,7 @@
 package tokenhubvolc
 
 import (
+	"errors"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -99,14 +100,17 @@ func (r *NativeRequest) IsDraft() bool {
 
 // ParseNativeRequest 解析下游按火山文档发来的任务请求，并保留原始 JSON（Raw）
 // 供出站原样透传。字段校验由调用方负责。
+// ErrNativeBodyNotObject 表示请求体顶层不是 JSON 对象（数组、标量、空 body）。
+// 其它解析错误说明顶层是对象但某个字段类型不对，两者对外提示不同。
+var ErrNativeBodyNotObject = errors.New("request body must be a JSON object")
+
 func ParseNativeRequest(raw []byte) (*NativeRequest, error) {
+	var fields map[string]any
+	if err := common.Unmarshal(raw, &fields); err != nil || fields == nil {
+		return nil, ErrNativeBodyNotObject
+	}
 	var req NativeRequest
 	if err := common.Unmarshal(raw, &req); err != nil {
-		return nil, err
-	}
-	var fields map[string]any
-	if err := common.Unmarshal(raw, &fields); err != nil {
-		// 顶层不是对象（数组、标量）时在这里失败
 		return nil, err
 	}
 	req.Raw = fields

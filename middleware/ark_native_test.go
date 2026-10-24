@@ -74,14 +74,18 @@ func TestArkNativeRequestConvert_draftTaskBecomesOriginTask(t *testing.T) {
 
 func TestArkNativeRequestConvert_rejectsBadRequests(t *testing.T) {
 	tests := []struct {
-		name string
-		body string
-		code string
+		name        string
+		body        string
+		code        string
+		wantMessage string
 	}{
 		{name: "缺少 model", body: `{"content":[{"type":"text","text":"x"}]}`, code: "InvalidParameter"},
 		{name: "draft_task 缺 id", body: `{"model":"m","content":[{"type":"draft_task","draft_task":{}}]}`, code: "InvalidParameter"},
-		{name: "非法 JSON", body: `{"model":`, code: "InvalidParameter"},
-		{name: "顶层不是对象", body: `[]`, code: "InvalidParameter"},
+		{name: "非法 JSON", body: `{"model":`, code: "InvalidParameter", wantMessage: "request body must be a JSON object"},
+		{name: "顶层不是对象", body: `[]`, code: "InvalidParameter", wantMessage: "request body must be a JSON object"},
+		// 顶层是对象但字段类型不对：不能报成「不是 JSON 对象」，否则调用方
+		// 会去检查整体格式而不是那个字段。
+		{name: "content 类型错误", body: `{"model":"m","content":"not-an-array"}`, code: "InvalidParameter", wantMessage: "request body field type mismatch"},
 	}
 
 	for _, tt := range tests {
@@ -101,6 +105,9 @@ func TestArkNativeRequestConvert_rejectsBadRequests(t *testing.T) {
 			assert.Equal(t, tt.code, envelope.Error.Code)
 			assert.Equal(t, "BadRequest", envelope.Error.Type)
 			assert.NotEmpty(t, envelope.Error.Message)
+			if tt.wantMessage != "" {
+				assert.Equal(t, tt.wantMessage, envelope.Error.Message)
+			}
 		})
 	}
 }
