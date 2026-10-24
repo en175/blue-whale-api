@@ -112,6 +112,24 @@ func EstimateVideoTierBillingForTier(info *relaycommon.RelayInfo, resolution str
 	return map[string]float64{"video_input": ratio}
 }
 
+// VideoTierPriceConfigured 报告指定 (分辨率档, 是否含视频输入) 在可用价格表中
+// 是否有显式单价。它与倍率语义不同：档位配了价但恰好等于基准价（倍率 1.0）
+// 返回 true，只有真正漏配或整张表不存在才返回 false——用于区分「配置正确但
+// 不打折」与「漏配导致静默按基准价结算」。查找优先级同 ResolveVideoInputRatio。
+func VideoTierPriceConfigured(modelName, resolution string, hasVideo bool) bool {
+	res := strings.ToLower(strings.TrimSpace(resolution))
+	key := VideoPriceKey{Is1080p: res == "1080p", Is4k: res == "4k", HasVideo: hasVideo}
+	if prices, ok := configuredVideoPriceTable(modelName); ok {
+		_, has := prices[key]
+		return has
+	}
+	if prices, ok := builtinVideoPriceTable[modelName]; ok {
+		_, has := prices[key]
+		return has
+	}
+	return false
+}
+
 // configuredVideoPriceTable 把管理员配置的档位价格转换为统一价格表。
 // Base 缺失或非正的配置视为无效（基准价是倍率计算的分母）。
 func configuredVideoPriceTable(modelName string) (map[VideoPriceKey]float64, bool) {

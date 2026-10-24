@@ -10,6 +10,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
+	tokenhubvolc "github.com/QuantumNous/new-api/relay/channel/task/tokenhubvolc"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
@@ -43,6 +44,10 @@ type finalizeFixture struct {
 	// NilChannelMeta 模拟 GenRelayInfo 的真实产出：它不填 ChannelMeta，
 	// 而 ResolveOriginTask 要读 info.ChannelId 才能判断是否已落在原渠道上。
 	NilChannelMeta bool
+	// ChannelType 是原任务所属渠道类型；0 表示默认的 VolcEngine25（66）。
+	ChannelType int
+	// NativeRequest 表示请求来自 /api/v3 并已写入解析后的原生请求体。
+	NativeRequest bool
 }
 
 // seedOriginFixture 建内存库、一条启用渠道与一条原任务，并返回一个指向该原任务的
@@ -62,9 +67,13 @@ func seedOriginFixture(t *testing.T, tc finalizeFixture, suffix string) *gin.Con
 	model.DB = db
 	t.Cleanup(func() { model.DB = previousDB })
 
+	channelType := tc.ChannelType
+	if channelType == 0 {
+		channelType = constant.ChannelTypeVolcEngine25
+	}
 	channel := &model.Channel{
 		Id:     finalizeTestChannelID,
-		Type:   constant.ChannelTypeVolcEngine25,
+		Type:   channelType,
 		Name:   "volcengine-25-test",
 		Status: common.ChannelStatusEnabled,
 		Key:    "sk-test",
@@ -97,8 +106,16 @@ func seedOriginFixture(t *testing.T, tc finalizeFixture, suffix string) *gin.Con
 
 	gin.SetMode(gin.TestMode)
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
-	c.Request = httptest.NewRequest(http.MethodPost, "/v1/videos/"+originID+"/"+suffix, nil)
-	c.Params = gin.Params{{Key: "video_id", Value: originID}}
+	if tc.NativeRequest {
+		c.Request = httptest.NewRequest(http.MethodPost, "/api/v3/contents/generations/tasks", nil)
+		tokenhubvolc.StoreNativeRequest(c, &tokenhubvolc.NativeRequest{
+			Model:   finalizeTestModel,
+			Content: []tokenhubvolc.NativeContentItem{{Type: "draft_task", DraftTask: &tokenhubvolc.DraftTaskRef{ID: originID}}},
+		})
+	} else {
+		c.Request = httptest.NewRequest(http.MethodPost, "/v1/videos/"+originID+"/"+suffix, nil)
+		c.Params = gin.Params{{Key: "video_id", Value: originID}}
+	}
 	c.Set("id", finalizeTestUserID)
 	return c
 }
@@ -263,4 +280,58 @@ func TestResolveOriginTaskFinalizeJustInsideValidity(t *testing.T) {
 
 	require.Empty(t, code)
 	assert.Equal(t, "cgt-1", info.OriginUpstreamTaskID)
+}
+
+// TestResolveOriginTaskFinalizeIgnoresClientModel 验证成片模型以原任务为准：
+// 成片请求仍带 model（协议要求），客户端可以传一个更便宜的模型来压低预扣与
+// 结算，而实际产出是原样片的模型。
+func TestResolveOriginTaskFinalizeIgnoresClientModel(t *testing.T) {
+	now := time.Now().Unix()
+	c := seedOriginFixture(t, finalizeFixture{
+		Draft: true, Status: model.TaskStatusSuccess, SubmitTime: now, FinishTime: now,
+		UpstreamTaskID: "cgt-origin-123",
+	}, "finalize")
+	info := &relaycommon.RelayInfo{
+		UserId:        finalizeTestUserID,
+		TaskRelayInfo: &relaycommon.TaskRelayInfo{},
+		ChannelMeta:   &relaycommon.ChannelMeta{ChannelId: finalizeTestChannelID},
+		// 模拟客户端在成片请求里声明了一个更便宜的模型
+		OriginModelName: "doubao-seedance-2-0-mini-260128",
+	}
+
+	require.Empty(t, taskErrCode(ResolveOriginTask(c, info)))
+	assert.Equal(t, finalizeTestModel, info.OriginModelName, "计费模型必须取原任务记录的模型")
+}
+
+// TestResolveOriginTaskFinalizeRejectsCrossChannel 验证成片不能跨协议通道：
+// /api/v3 只服务类型 70，/v1/videos 不服务类型 70。跨通道会让适配器与响应
+// 形状错位。
+func TestResolveOriginTaskFinalizeRejectsCrossChannel(t *testing.T) {
+	now := time.Now().Unix()
+	base := finalizeFixture{
+		Draft: true, Status: model.TaskStatusSuccess, SubmitTime: now, FinishTime: now,
+		UpstreamTaskID: "cgt-origin-123",
+	}
+	newInfo := func() *relaycommon.RelayInfo {
+		return &relaycommon.RelayInfo{
+			UserId:        finalizeTestUserID,
+			TaskRelayInfo: &relaycommon.TaskRelayInfo{},
+			ChannelMeta:   &relaycommon.ChannelMeta{ChannelId: finalizeTestChannelID},
+		}
+	}
+
+	t.Run("原生请求引用非 70 渠道的样片", func(t *testing.T) {
+		tc := base
+		tc.ChannelType = constant.ChannelTypeVolcEngine25
+		tc.NativeRequest = true
+		c := seedOriginFixture(t, tc, "")
+		assert.Equal(t, "origin_task_not_native", taskErrCode(ResolveOriginTask(c, newInfo())))
+	})
+
+	t.Run("/v1/videos 引用 70 渠道的样片", func(t *testing.T) {
+		tc := base
+		tc.ChannelType = constant.ChannelTypeTokenHubVolc
+		c := seedOriginFixture(t, tc, "finalize")
+		assert.Equal(t, "origin_task_requires_native_path", taskErrCode(ResolveOriginTask(c, newInfo())))
+	})
 }

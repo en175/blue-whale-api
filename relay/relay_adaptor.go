@@ -47,6 +47,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel/task/suno"
 	tasktokenhub "github.com/QuantumNous/new-api/relay/channel/task/tokenhub"
 	tasktokenhub25 "github.com/QuantumNous/new-api/relay/channel/task/tokenhub25"
+	tasktokenhubvolc "github.com/QuantumNous/new-api/relay/channel/task/tokenhubvolc"
 	taskvertex "github.com/QuantumNous/new-api/relay/channel/task/vertex"
 	taskVidu "github.com/QuantumNous/new-api/relay/channel/task/vidu"
 	taskvolc25 "github.com/QuantumNous/new-api/relay/channel/task/volcengine25"
@@ -191,6 +192,8 @@ func GetTaskAdaptor(platform constant.TaskPlatform) channel.TaskAdaptor {
 			return &tasktokenhub.TaskAdaptor{}
 		case constant.ChannelTypeTokenHub25:
 			return &tasktokenhub25.TaskAdaptor{}
+		case constant.ChannelTypeTokenHubVolc:
+			return &tasktokenhubvolc.TaskAdaptor{}
 		case constant.ChannelTypeGemini:
 			return &taskGemini.TaskAdaptor{}
 		case constant.ChannelTypeMiniMax:

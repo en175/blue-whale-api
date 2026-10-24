@@ -83,6 +83,13 @@ type OpenAIVideoConverter interface {
 	ConvertToOpenAIVideo(originTask *model.Task) ([]byte, error)
 }
 
+// NativeArkTaskConverter 把落库任务转换成火山方舟原生视频对象的查询响应。
+// 由 /api/v3/contents/generations/tasks/:id 使用；/v1/videos/:id 走
+// OpenAIVideoConverter，两者形状不同、互不复用。
+type NativeArkTaskConverter interface {
+	ConvertToNativeArkTask(originTask *model.Task) ([]byte, error)
+}
+
 // TaskUsageExtractor 可选接口：从任务存储数据（task.Data）提取真实 token 消耗。
 // 实现该接口的适配器使查询任务响应返回一等 usage 字段；未实现则不返回。
 type TaskUsageExtractor interface {

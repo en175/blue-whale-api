@@ -5232,6 +5232,7 @@
     "VolcEngine25": "VolcEngine 2.5 (Draft)",
     "VolcEngineEnhanced": "VolcEngine (Enhanced)",
     "TokenHub25": "TokenHub 2.5 (Draft)",
+    "TokenHubVolc": "華鯤 · 火山原生協議（2.0/2.5）",
     "NovitaGemini": "Novita Gemini 圖片",
     "NovitaOpenAI": "Novita OpenAI 圖片",
     "vs. previous": "相較上期",
@@ -5380,6 +5381,9 @@
     "Zero retention": "零數據保留",
     "Zhipu": "智譜",
     "Zhipu V4": "智譜 V4",
-    "Zoom": "縮放"
+    "Zoom": "縮放",
+    "Seedance 2.5 finalize is always 1080p: configure both 1080p and 1080p_video tiers, otherwise billing falls back to the base price.": "Seedance 2.5 成片固定 1080p：請同時設定 1080p 與 1080p_video 檔位價，否則會按基準價少收。",
+    "When video generation goes through a TokenHub channel, keep this provider set to tokenhub so asset:// references resolve in the same upstream account.": "影片生成走 TokenHub 渠道時，素材庫 provider 請保持 tokenhub，確保 asset:// 參照在同一個上游帳號內解析。",
+    "An asset group and the video API key must belong to the same upstream account and project.": "素材組與影片 API key 必須屬於同一個上游帳號和同一個專案。"
   }
 }

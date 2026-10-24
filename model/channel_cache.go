@@ -315,9 +315,9 @@ func channelBelongsToGroup(channel *Channel, group string) bool {
 }
 
 // filterChannelsByRequestPathAndModel restricts candidates by request path and
-// model. Only Advanced Custom (type 58) channels are path-checked: they are kept
-// only when one of their configured routes matches requestPath and model. All
-// other channel types always pass. When requestPath is empty, filtering is skipped.
+// model. 火山原生协议路径（/api/v3）只保留类型 70，其它路径一律不路由给类型 70；
+// Advanced Custom (type 58) 再按自己的路由表二次校验，其余渠道类型通过。
+// When requestPath is empty, filtering is skipped.
 // Caller must hold channelSyncLock (read lock). The cached slice is never mutated.
 func filterChannelsByRequestPathAndModel(channels []int, requestPath string, model string) []int {
 	if requestPath == "" || len(channels) == 0 {
@@ -329,6 +329,9 @@ func filterChannelsByRequestPathAndModel(channels []int, requestPath string, mod
 		if !ok {
 			// keep it so the downstream consistency error is raised as before
 			filtered = append(filtered, channelId)
+			continue
+		}
+		if !constant.ChannelServesRequestPath(channel.Type, requestPath) {
 			continue
 		}
 		if channel.Type != constant.ChannelTypeAdvancedCustom {

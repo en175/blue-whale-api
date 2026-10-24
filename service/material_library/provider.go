@@ -69,7 +69,8 @@ func (tokenhubProvider) DoAction(ctx context.Context, action string, query url.V
 	return &Response{StatusCode: resp.StatusCode, Header: resp.Header, Body: data}, nil
 }
 
-// newRequest 构造上游请求：Action/Version 注入 query（客户端 query 保留）、注入 Bearer 凭证。
+// newRequest 构造上游请求：Action 注入 query；Version 缺省时补默认值，下游传值原样透传；
+// 其余客户端 query 全部保留。注入 Bearer 凭证。
 // 抽取出来供单测直接验证地址映射与凭证头。
 func (tokenhubProvider) newRequest(ctx context.Context, action string, query url.Values, body []byte) (*http.Request, error) {
 	cfg := material_setting.GetConfig()
@@ -86,7 +87,10 @@ func (tokenhubProvider) newRequest(ctx context.Context, action string, query url
 		}
 	}
 	q.Set("Action", action)
-	q.Set("Version", arkVersion)
+	// Version 完全透传：下游传什么上游就收到什么；缺省时补默认值，保证火山形状完整。
+	if q.Get("Version") == "" {
+		q.Set("Version", arkVersion)
+	}
 	target.RawQuery = q.Encode()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target.String(), bytes.NewReader(body))
@@ -121,7 +125,7 @@ func (volcengineProvider) DoAction(ctx context.Context, action string, query url
 	return &Response{StatusCode: resp.StatusCode, Header: resp.Header, Body: data}, nil
 }
 
-// newRequest 构造火山管控面请求：Action/Version 注入 query（客户端 query 保留）、
+// newRequest 构造火山管控面请求：Action 注入 query；Version 缺省时补默认、下游传值原样透传；
 // 用账号 AK/SK 签名（volc-sdk-golang base.Credentials.Sign，SigV4，Service=ark）。
 func (volcengineProvider) newRequest(ctx context.Context, action string, query url.Values, body []byte) (*http.Request, error) {
 	cfg := material_setting.GetConfig()
@@ -136,7 +140,10 @@ func (volcengineProvider) newRequest(ctx context.Context, action string, query u
 		}
 	}
 	q.Set("Action", action)
-	q.Set("Version", arkVersion)
+	// Version 完全透传：下游传什么上游就收到什么；缺省时补默认值，保证火山形状完整。
+	if q.Get("Version") == "" {
+		q.Set("Version", arkVersion)
+	}
 	target.RawQuery = q.Encode()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target.String(), bytes.NewReader(body))

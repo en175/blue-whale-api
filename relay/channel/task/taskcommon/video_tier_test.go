@@ -113,6 +113,41 @@ func TestResolveVideoInputRatio_ConfigMissingBase(t *testing.T) {
 	assert.False(t, ok, "无内置表且配置无效时应无价格表")
 }
 
+// TestVideoTierPriceConfigured 区分「档位有显式单价」与「漏配/无价格表」。
+// 告警依据是前者：档位价恰好等于基准价（倍率 1.0）是合法配置，不能报漏配。
+func TestVideoTierPriceConfigured(t *testing.T) {
+	resetVideoTierConfig(t)
+	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
+		"video_tier_pricing.price_table": `{
+			"doubao-seedance-2-5-260628": {"base": 46, "1080p": 46, "1080p_video": 31},
+			"my-custom-seedance": {"base": 46}
+		}`,
+	}))
+
+	const builtinModel = "doubao-seedance-2-0-260128"
+	tests := []struct {
+		name       string
+		model      string
+		resolution string
+		hasVideo   bool
+		want       bool
+	}{
+		{"内置表 1080p 已配", builtinModel, "1080p", false, true},
+		{"内置表 4k 已配", builtinModel, "4K", true, true},
+		{"内置表基准档已配", builtinModel, "720p", false, true},
+		{"内置 fast 无 1080p", "doubao-seedance-2-0-fast-260128", "1080p", false, false},
+		{"配置表 1080p 有价", "doubao-seedance-2-5-260628", "1080p", false, true},
+		{"配置表 1080p 含视频有价", "doubao-seedance-2-5-260628", " 1080P ", true, true},
+		{"配置表仅 base 无 4k", "my-custom-seedance", "4k", false, false},
+		{"无价格表", "no-such-model", "1080p", false, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, VideoTierPriceConfigured(tt.model, tt.resolution, tt.hasVideo))
+		})
+	}
+}
+
 func TestHasVideoInputInMetadata(t *testing.T) {
 	tests := []struct {
 		name     string

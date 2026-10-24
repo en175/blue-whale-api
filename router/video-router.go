@@ -42,6 +42,17 @@ func SetVideoRouter(router *gin.Engine) {
 		klingV1Router.GET("/videos/image2video/:task_id", controller.RelayTaskFetch)
 	}
 
+	// 火山方舟原生视频协议（渠道类型 70）。对客 URL 与官方文档一致：请求体是
+	// content[]，由 ArkNativeRequestConvert 归一成网关内部任务请求；响应由
+	// 适配器转回火山的任务对象。鉴权仍是网关 sk-。
+	arkNativeRouter := router.Group("/api/v3")
+	arkNativeRouter.Use(middleware.RouteTag("relay"))
+	arkNativeRouter.Use(middleware.ArkNativeRequestConvert(), middleware.TokenAuth(), middleware.Distribute())
+	{
+		arkNativeRouter.POST("/contents/generations/tasks", controller.RelayTask)
+		arkNativeRouter.GET("/contents/generations/tasks/:task_id", controller.RelayTaskFetch)
+	}
+
 	// Jimeng official API routes - direct mapping to official API format
 	jimengOfficialGroup := router.Group("jimeng")
 	jimengOfficialGroup.Use(middleware.RouteTag("relay"))
