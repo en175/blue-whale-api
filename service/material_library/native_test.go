@@ -151,7 +151,8 @@ func TestHandleNativeRequest_restoresClientCallback(t *testing.T) {
 		_ = common.Unmarshal(body, &req)
 		gotCallback = req.CallbackURL
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"ResponseMetadata":{},"Result":{"BytedToken":"t1","CallbackURL":"` + req.CallbackURL + `"}}`))
+		// 华鲲会话类接口返回裸字段，无信封
+		_, _ = w.Write([]byte(`{"BytedToken":"t1","CallbackURL":"` + req.CallbackURL + `"}`))
 	})
 
 	w := doNativeRequest(t, router, "/api/ark?Action=CreateVisualValidateSession&Version=2024-01-01",
@@ -161,4 +162,51 @@ func TestHandleNativeRequest_restoresClientCallback(t *testing.T) {
 	assert.Contains(t, gotCallback, "/v1/material/h5-callback", "上游必须收到网关回调")
 	assert.NotContains(t, w.Body.String(), "/v1/material/h5-callback", "客户端必须看到自己的回调")
 	assert.Contains(t, w.Body.String(), "https://client.example.com/done")
+}
+
+// TestHandleNativeRequest_movesResponseErrorIntoMetadata 验证华鲲的顶层
+// ResponseError 被搬迁成火山的 ResponseMetadata.Error，且 Result 原样保留。
+func TestHandleNativeRequest_movesResponseErrorIntoMetadata(t *testing.T) {
+	_, router := newNativeServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"ResponseMetadata":{"RequestId":"up-1","Action":"GetAsset"},` +
+			`"ResponseError":{"Code":"NotFound","Message":"resource not found"}}`))
+	})
+
+	w := doNativeRequest(t, router, "/api/ark?Action=GetAsset&Version=2024-01-01", `{"Id":"asset-1"}`)
+
+	require.Equal(t, http.StatusNotFound, w.Code)
+	assert.JSONEq(t, `{"ResponseMetadata":{"RequestId":"up-1","Action":"GetAsset",`+
+		`"Error":{"Code":"NotFound","Message":"resource not found"}}}`, w.Body.String())
+}
+
+// TestHandleNativeRequest_wrapsBareSessionResponse 验证会话类裸字段被补成火山信封。
+func TestHandleNativeRequest_wrapsBareSessionResponse(t *testing.T) {
+	for _, action := range []string{"CreateVisualValidateSession", "GetVisualValidateResult"} {
+		t.Run(action, func(t *testing.T) {
+			_, router := newNativeServer(t, func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"BytedToken":"t1","GroupId":"group-1"}`))
+			})
+
+			w := doNativeRequest(t, router, "/api/ark?Action="+action+"&Version=2024-01-01", `{}`)
+
+			require.Equal(t, http.StatusOK, w.Code)
+			var envelope struct {
+				ResponseMetadata struct {
+					Action  string `json:"Action"`
+					Version string `json:"Version"`
+					Service string `json:"Service"`
+				} `json:"ResponseMetadata"`
+				Result map[string]any `json:"Result"`
+			}
+			require.NoError(t, common.Unmarshal(w.Body.Bytes(), &envelope))
+			assert.Equal(t, action, envelope.ResponseMetadata.Action)
+			assert.Equal(t, "2024-01-01", envelope.ResponseMetadata.Version)
+			assert.Equal(t, "ark", envelope.ResponseMetadata.Service)
+			assert.Equal(t, "t1", envelope.Result["BytedToken"])
+			assert.Equal(t, "group-1", envelope.Result["GroupId"])
+		})
+	}
 }

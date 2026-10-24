@@ -2,6 +2,7 @@ package material_library
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"strings"
@@ -19,8 +20,8 @@ import (
 //	POST /?Action=CreateAssetGroup&Version=2024-01-01
 //	POST /api/ark?Action=CreateAssetGroup&Version=2024-01-01
 //
-// 与 /api/material/{Action} 的差异（ADR 0024）：Action/Version 走 query、响应原样
-// 保留 ResponseMetadata 信封（会话类也不剥壳）、ListAssetGroups 直接查上游、
+// 与 /api/material/{Action} 的差异（ADR 0024）：Action/Version 走 query、响应
+// 归一成火山官方信封、ListAssetGroups 直接查上游、
 // GetVisualValidateResult 不读本地缓存、名称不做过滤。共用的只有 provider、
 // 凭证与 user_material_groups 归属表。
 //
@@ -75,7 +76,65 @@ func HandleNativeRequest(c *gin.Context) {
 	if customCallback != "" {
 		resp.Body = restoreClientCallback(resp.Body, customCallback)
 	}
+	normalizeNativeBody(resp, action, c)
 	writeNativeResponse(c, resp)
+}
+
+// normalizeNativeBody 把上游响应归一成火山官方形状。对客承诺是与火山一致，但
+// 华鲲兼容面有两处偏差：
+//
+//   - 错误用顶层 ResponseError，火山用 ResponseMetadata.Error；
+//   - 会话类接口不包信封，火山包 ResponseMetadata / Result。
+//
+// volcengine 直连本来就是火山形状，两处判断都不会命中，函数是空操作。
+func normalizeNativeBody(resp *Response, action string, c *gin.Context) {
+	// 逐层保留原始 JSON 片段，避免反序列化再序列化时大整数丢精度。
+	var top map[string]json.RawMessage
+	if err := common.Unmarshal(resp.Body, &top); err != nil || top == nil {
+		return // 非 JSON 对象原样透传，由下游按状态码处理
+	}
+	if rawError, ok := top["ResponseError"]; ok {
+		var meta map[string]json.RawMessage
+		if rawMeta, ok := top["ResponseMetadata"]; ok {
+			_ = common.Unmarshal(rawMeta, &meta)
+		}
+		if meta == nil {
+			meta = map[string]json.RawMessage{}
+		}
+		meta["Error"] = rawError
+		top["ResponseMetadata"], _ = common.Marshal(meta)
+		delete(top, "ResponseError")
+	}
+	// 只在成功响应上补信封：会话类失败时上游仍走通用错误格式。
+	if _, enveloped := top["ResponseMetadata"]; !enveloped &&
+		resp.StatusCode >= 200 && resp.StatusCode < 300 && isBareSessionAction(action) {
+		top["Result"] = json.RawMessage(resp.Body)
+		top["ResponseMetadata"], _ = common.Marshal(map[string]string{
+			"RequestId": c.GetString(common.RequestIdKey),
+			"Action":    action,
+			"Version":   nativeVersion(c),
+			"Service":   "ark",
+			"Region":    material_setting.GetConfig().VolcengineRegion,
+		})
+	}
+	normalized, err := common.Marshal(top)
+	if err != nil {
+		return
+	}
+	resp.Body = normalized
+}
+
+// isBareSessionAction 判断上游是否对该 Action 返回无信封的裸字段。
+func isBareSessionAction(action string) bool {
+	return action == "CreateVisualValidateSession" || action == "GetVisualValidateResult"
+}
+
+// nativeVersion 取下游传入的 Version，缺省时用网关默认值——与请求侧补值规则一致。
+func nativeVersion(c *gin.Context) string {
+	if version := c.Query("Version"); version != "" {
+		return version
+	}
+	return arkVersion
 }
 
 // attachOwnershipFields 提取 observeOwnership 需要的归属字段。原生入口的 Action

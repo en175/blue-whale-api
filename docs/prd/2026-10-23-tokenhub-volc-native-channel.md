@@ -257,8 +257,8 @@ Content-Type: application/json
 - `Version` 完全透传：下游传什么上游就收到什么；未传时补默认 `2024-01-01`。上游拒绝时原样返回官方错误码。
 - 其余 query 参数同样透传，网关只负责补 `Action`。
 - 上游 provider 沿用素材库全局配置（`tokenhub` / `volcengine`），凭证由网关注入。
-- 成功响应原样保留 `{"ResponseMetadata":...,"Result":...}`，会话类也不剥壳。
-- 错误响应：
+- 成功响应保留 `{"ResponseMetadata":...,"Result":...}`；会话类接口（`CreateVisualValidateSession` / `GetVisualValidateResult`）在上游不包信封时由网关补 `ResponseMetadata` / `Result`。
+- 错误响应：上游华鲲返回的顶层 `ResponseError` 由网关搬迁为 `ResponseMetadata.Error`（火山形状），`Result` 与其余字段原样保留。
 
 ```json
 {"ResponseMetadata": {"Error": {"Code": "...", "Message": "..."}, "RequestId": "..."}}

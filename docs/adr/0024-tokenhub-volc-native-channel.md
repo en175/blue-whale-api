@@ -28,8 +28,9 @@
 ### 2. 素材库新开根路径接口，旧接口不动
 
 - 正式路径 `POST /?Action=X&Version=2024-01-01`，别名 `POST /api/ark?Action=...`（防异常部署根路径不可达）。
-- 鉴权仍是网关 `sk-`；`Version` 不校验，与其余 query 一起原样透传上游（缺省补 `2024-01-01`），上游错误原样返回。
-- 响应原样保留 `ResponseMetadata` + `Result`；错误用 `ResponseMetadata.Error`，不做 tokenhub 归一化。
+- 鉴权仍是网关 `sk-`；`Version` 不校验，与其余 query 一起原样透传上游（缺省补 `2024-01-01`），上游错误码不改写。
+- 对客响应统一火山信封：华鲲的顶层 `ResponseError` 由网关搬迁进 `ResponseMetadata.Error`；会话类接口上游不包信封，由网关补 `ResponseMetadata` / `Result`。volcengine 直连本就符合火山形状，两步均为空操作。
+- 已知差异不补偿：`UpdateAssetGroup` 华鲲不支持改 `Name`（返回 `UnsupportedField`）；游标分页（`NextToken` / `MaxResults`）上游不支持，只提供页码分页。
 - 保留归属校验与真人认证回调改写；去掉本地组列表、认证结果缓存、名称过滤。
 
 ## 理由
