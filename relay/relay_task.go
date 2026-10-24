@@ -13,6 +13,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relay/channel"
 	"github.com/QuantumNous/new-api/relay/channel/task/taskcommon"
@@ -93,18 +94,19 @@ func ResolveOriginTask(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskErr
 	}
 
 	// 从原始任务推导模型名称
-	if info.OriginModelName == "" {
-		if originTask.Properties.OriginModelName != "" {
-			info.OriginModelName = originTask.Properties.OriginModelName
-		} else if originTask.Properties.UpstreamModelName != "" {
-			info.OriginModelName = originTask.Properties.UpstreamModelName
-		} else {
-			var taskData map[string]interface{}
-			_ = common.Unmarshal(originTask.Data, &taskData)
-			if m, ok := taskData["model"].(string); ok && m != "" {
-				info.OriginModelName = m
-			}
+	originModelName := originTask.Properties.OriginModelName
+	if originModelName == "" {
+		originModelName = originTask.Properties.UpstreamModelName
+	}
+	if originModelName == "" {
+		var taskData map[string]interface{}
+		_ = common.Unmarshal(originTask.Data, &taskData)
+		if m, ok := taskData["model"].(string); ok {
+			originModelName = m
 		}
+	}
+	if info.OriginModelName == "" {
+		info.OriginModelName = originModelName
 	}
 
 	// 锁定到原始任务的渠道（重试时复用同一渠道，轮换 key）
@@ -114,6 +116,18 @@ func ResolveOriginTask(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskErr
 	}
 	if ch.Status != common.ChannelStatusEnabled {
 		return service.TaskErrorWrapperLocal(errors.New("the channel of the origin task is disabled"), "task_channel_disable", http.StatusBadRequest)
+	}
+	// 出成片必须留在同一条协议通道上：/api/v3 只服务类型 70，/v1/videos 不服务
+	// 类型 70。跨通道成片会让适配器与响应形状错位（/api/v3 返回 OpenAI 视频对象，
+	// 或 /v1/videos 对 70 的样片报 build_request_failed 500）。
+	if info.Action == constant.TaskActionFinalize {
+		_, nativeRequest := tokenhubvolc.NativeRequestFrom(c)
+		if nativeRequest && ch.Type != constant.ChannelTypeTokenHubVolc {
+			return service.TaskErrorWrapperLocal(errors.New("the origin task was not created by a native channel"), "origin_task_not_native", http.StatusBadRequest)
+		}
+		if !nativeRequest && ch.Type == constant.ChannelTypeTokenHubVolc {
+			return service.TaskErrorWrapperLocal(errors.New("native channel draft tasks must be finalized on /api/v3"), "origin_task_requires_native_path", http.StatusBadRequest)
+		}
 	}
 	info.LockedChannel = ch
 
@@ -139,10 +153,17 @@ func ResolveOriginTask(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskErr
 	// 这里提前 return，绝不能继承 Step 1 的 OtherRatios：它的 seconds/size 会把
 	// Step 2 的 token 结算放大数倍（对比下面 remix 的整份复制）。
 	if info.Action == constant.TaskActionFinalize {
-		// 模型名为空时上游请求会退化成无价格的 "66_finalizedraft"，导致静默少收
-		if info.OriginModelName == "" {
+		// 出片模型必须由样片决定：成片请求仍带 model（协议要求），但客户端可以
+		// 传一个更便宜的模型来压低预扣与结算，而实际产出是原样片的模型。无条件
+		// 用原任务记录的模型覆盖，客户端值只用于日志。
+		if originModelName == "" {
+			// 模型名为空时上游请求会退化成无价格的 "66_finalizedraft"，导致静默少收
 			return service.TaskErrorWrapperLocal(errors.New("origin model name is missing"), "origin_model_name_missing", http.StatusBadRequest)
 		}
+		if info.OriginModelName != "" && info.OriginModelName != originModelName {
+			logger.LogWarn(c.Request.Context(), "finalize ignores mismatched client model: client="+info.OriginModelName+" origin="+originModelName)
+		}
+		info.OriginModelName = originModelName
 		if !originTask.Properties.Draft {
 			return service.TaskErrorWrapperLocal(errors.New("the origin task is not a draft"), "origin_not_draft", http.StatusBadRequest)
 		}

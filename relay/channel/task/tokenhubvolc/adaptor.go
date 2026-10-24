@@ -80,7 +80,13 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 
 	// 样片模式是 Seedance 2.5 独有的能力；其它模型收到 draft 只会被上游忽略，
 	// 客户端却以为拿到了样片，因此在预扣费之前明确拒绝。
-	if !isSeedance25Model(req.Model, info.OriginModelName) {
+	// 渠道 model_mapping 在 RelayTaskSubmit 的第 2 步才生效，这里提前解析一次，
+	// 否则把 2.5 映射成不含 "seedance-2-5" 的别名时会被误拒。
+	clientModel := req.Model
+	if clientModel == "" {
+		clientModel = info.OriginModelName
+	}
+	if !isSeedance25Model(clientModel, info.OriginModelName, mappedModelName(c, clientModel)) {
 		return service.TaskErrorWrapperLocal(
 			fmt.Errorf("draft mode is only supported by Seedance 2.5 models"), "invalid_draft_model", http.StatusBadRequest)
 	}
@@ -227,4 +233,27 @@ func isSeedance25Model(names ...string) bool {
 		}
 	}
 	return false
+}
+
+// mappedModelName 按渠道 model_mapping 解析上游模型名，支持链式重定向。
+// 只读上下文里的配置，不改 info；解析失败时退回原名，交正式映射步骤报错。
+func mappedModelName(c *gin.Context, modelName string) string {
+	raw := c.GetString("model_mapping")
+	if raw == "" || raw == "{}" || modelName == "" {
+		return modelName
+	}
+	var mapping map[string]string
+	if err := common.UnmarshalJsonStr(raw, &mapping); err != nil {
+		return modelName
+	}
+	visited := map[string]bool{modelName: true}
+	current := modelName
+	for {
+		next, exists := mapping[current]
+		if !exists || next == "" || visited[next] {
+			return current
+		}
+		visited[next] = true
+		current = next
+	}
 }

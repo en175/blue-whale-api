@@ -160,10 +160,16 @@ func attachOwnershipFields(ctx context.Context, action string, body []byte) cont
 func checkNativeOwnership(r *http.Request, action string, body []byte) (status int, code string, message string, ok bool) {
 	switch action {
 	case "GetAssetGroup", "UpdateAssetGroup", "DeleteAssetGroup":
+		if _, valid := nativeStringField(body, "Id"); !valid {
+			return 400, "InvalidParameter", "Id must be a string", false
+		}
 		if !groupOwnedByCurrentUser(r, body) {
 			return 404, "NotFound", "resource not found", false
 		}
 	case "CreateAsset":
+		if _, valid := nativeStringField(body, "GroupId"); !valid {
+			return 400, "InvalidParameter", "GroupId must be a string", false
+		}
 		if !createAssetGroupOwned(r, body) {
 			return 404, "NotFound", "resource not found", false
 		}
@@ -176,11 +182,33 @@ func checkNativeOwnership(r *http.Request, action string, body []byte) (status i
 			return 404, "NotFound", "resource not found", false
 		}
 	case "UpdateAsset", "DeleteAsset":
+		if _, valid := nativeStringField(body, "Id"); !valid {
+			return 400, "InvalidParameter", "Id must be a string", false
+		}
 		if !assetOwnedByCurrentUser(r, body) {
 			return 404, "NotFound", "resource not found", false
 		}
 	}
 	return 0, "", "", true
+}
+
+// nativeStringField 读取请求体中的字符串字段。valid=false 表示请求体不是 JSON
+// 对象，或字段存在但不是字符串——归属校验据此 fail-closed：下面的 helper 会把
+// 解析失败的标识当成缺省值放行，不能先让非法格式走到那一步。
+// 字段缺失时返回 ("", true)，由调用方区分「可选参数缺省」与「格式非法」。
+func nativeStringField(body []byte, field string) (value string, valid bool) {
+	var fields map[string]json.RawMessage
+	if err := common.Unmarshal(body, &fields); err != nil || fields == nil {
+		return "", false
+	}
+	raw, exists := fields[field]
+	if !exists || string(raw) == "null" {
+		return "", true
+	}
+	if err := common.Unmarshal(raw, &value); err != nil {
+		return "", false
+	}
+	return value, true
 }
 
 // assetOwnedByCurrentUser 校验单素材操作（Update/DeleteAsset）的目标组归属。

@@ -627,10 +627,46 @@ func respondTaskError(c *gin.Context, taskErr *dto.TaskError) {
 	}
 	// 火山原生协议的下游只认官方错误信封，与请求/成功响应的形状保持一致。
 	if middleware.IsArkNativePath(c) {
-		middleware.WriteArkError(c, taskErr.StatusCode, taskErr.Code, taskErr.Message)
+		code, message := taskErr.Code, taskErr.Message
+		if taskErr.Code == "fail_to_fetch_task" {
+			// 这条错误的 message 是上游非 200 的原始 body，可能含上游任务 ID 与
+			// 签名参数，不能整段回吐给下游；原文进后端日志。
+			logger.LogWarn(c.Request.Context(), "native task upstream error: "+taskErr.Message)
+			code, message = "InvalidRequest", upstreamTaskErrorMessage(taskErr.Message)
+		}
+		middleware.WriteArkError(c, taskErr.StatusCode, code, message)
 		return
 	}
 	c.JSON(taskErr.StatusCode, taskErr)
+}
+
+// upstreamTaskErrorMessage 从上游错误响应里取出面向调用方的描述。取不到时返回
+// 笼统文案，绝不把原始 body 透给下游。
+func upstreamTaskErrorMessage(rawBody string) string {
+	var payload struct {
+		Message string `json:"message"`
+		Error   any    `json:"error"`
+	}
+	message := ""
+	if err := common.UnmarshalJsonStr(rawBody, &payload); err == nil {
+		message = payload.Message
+		if message == "" {
+			if obj, ok := payload.Error.(map[string]any); ok {
+				message, _ = obj["message"].(string)
+			}
+			if message == "" {
+				message, _ = payload.Error.(string)
+			}
+		}
+	}
+	message = strings.TrimSpace(message)
+	if message == "" {
+		return "upstream request failed"
+	}
+	if runes := []rune(message); len(runes) > 300 {
+		message = string(runes[:300])
+	}
+	return message
 }
 
 func shouldRetryTaskRelay(c *gin.Context, channelId int, taskErr *dto.TaskError, retryTimes int) bool {

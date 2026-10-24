@@ -228,3 +228,32 @@ func TestHandleNativeRequest_wrapsBareSessionResponse(t *testing.T) {
 		})
 	}
 }
+
+// TestHandleNativeRequest_rejectsMalformedIdentifiers 验证白名单动作对格式非法的
+// 请求体 fail-closed：body 不是 JSON 对象、或标识字段不是字符串时，下游 helper
+// 会把标识当成缺省值放行，必须在归属校验之前就拒绝。
+func TestHandleNativeRequest_rejectsMalformedIdentifiers(t *testing.T) {
+	tests := []struct {
+		action string
+		body   string
+	}{
+		{"GetAssetGroup", `{"Id":123}`},
+		{"UpdateAssetGroup", `{"Id":123,"Description":"x"}`},
+		{"DeleteAssetGroup", `not-json`},
+		{"UpdateAsset", `{"Id":123}`},
+		{"DeleteAsset", `[]`},
+		{"CreateAsset", `{"GroupId":123,"URL":"https://x/y.jpg","Name":"a","AssetType":"Image"}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.action, func(t *testing.T) {
+			_, router := newNativeServer(t, func(w http.ResponseWriter, r *http.Request) {
+				t.Error("格式非法的请求不得发往上游")
+			})
+
+			w := doNativeRequest(t, router, "/api/ark?Action="+tt.action+"&Version=2024-01-01", tt.body)
+
+			require.Equal(t, http.StatusBadRequest, w.Code)
+			assert.Contains(t, w.Body.String(), "InvalidParameter")
+		})
+	}
+}

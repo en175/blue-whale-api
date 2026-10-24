@@ -234,3 +234,33 @@ func readPayload(t *testing.T, reader io.Reader) map[string]any {
 	require.NoError(t, common.Unmarshal(raw, &payload))
 	return payload
 }
+
+// TestValidateRequestAndSetAction_draftModelFollowsMapping 验证 2.5 判定看映射后的
+// 上游模型名：把对客别名映射到 2.5 时样片不能被误拒，映射到 2.0 时仍要拒绝。
+func TestValidateRequestAndSetAction_draftModelFollowsMapping(t *testing.T) {
+	newDraftContext := func(t *testing.T, model string) (*gin.Context, *relaycommon.RelayInfo) {
+		c, info, _ := newTaskContext(t,
+			`{"model":"`+model+`","content":[{"type":"text","text":"a cat"}],"draft":true,"resolution":"480p"}`)
+		return c, info
+	}
+
+	t.Run("别名映射到 2.5 时放行", func(t *testing.T) {
+		c, info := newDraftContext(t, "seedance-pro")
+		c.Set("model_mapping", `{"seedance-pro":"doubao-seedance-2-5-260628"}`)
+
+		taskErr := (&TaskAdaptor{}).ValidateRequestAndSetAction(c, info)
+
+		require.Nil(t, taskErr)
+		assert.True(t, info.Draft)
+	})
+
+	t.Run("别名映射到 2.0 时拒绝", func(t *testing.T) {
+		c, info := newDraftContext(t, "seedance-pro")
+		c.Set("model_mapping", `{"seedance-pro":"doubao-seedance-2-0-260128"}`)
+
+		taskErr := (&TaskAdaptor{}).ValidateRequestAndSetAction(c, info)
+
+		require.NotNil(t, taskErr)
+		assert.Equal(t, "invalid_draft_model", taskErr.Code)
+	})
+}
