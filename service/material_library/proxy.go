@@ -519,8 +519,10 @@ func observeOwnership(ctx context.Context, resp *Response) {
 		projectName, _ := ctx.Value(ctxProjectName).(string)
 		customCallback, _ := ctx.Value(ctxCustomCallback).(string)
 		name, _ := ctx.Value(ctxGroupName).(string)
-		// 组名 ≤255 rune 由 materialNameInvalid 在请求层保证（见 ADR 0007），此处不再截断。
+		name = mirrorName(ctx, name)
 		// 组名取请求体 Name（调用方可选传入，上游忽略但不报错），认证后用作归属组名；无则留空。
+		// 旧接口由 materialNameInvalid 在请求层拒绝非法名；原生入口不做名称过滤，
+		// 因此落库前统一经 mirrorName 收敛（见函数注释）。
 		// callbackURL 是发给上游的网关回调；customCallback 是客户自定义原回调（认证后 302 到它）。
 		if err := model.AddVisualValidateSession(userID, material_setting.GetConfig().Provider, name, bytedToken, h5Link, callbackURL, projectName, customCallback); err != nil {
 			logger.LogError(ctx, "material library record visual session failed: "+err.Error())
@@ -539,7 +541,7 @@ func observeOwnership(ctx context.Context, resp *Response) {
 			return
 		}
 		name, _ := ctx.Value(ctxGroupName).(string)
-		// 组名 ≤255 rune 由 materialNameInvalid 在请求层保证（见 ADR 0007），此处不再截断。
+		name = mirrorName(ctx, name)
 		if err := model.AddUserMaterialGroup(userID, material_setting.GetConfig().Provider, out.Result.Id, name, groupType); err != nil {
 			logger.LogError(ctx, "material library record group failed: "+err.Error())
 		}
@@ -607,6 +609,24 @@ func readJSONBodyField(c *gin.Context, field string) string {
 // SQL 注入负载不在此校验：网关是透明代理，注入防御在上游后端，网关照常透传（错误统一归一化处理）。
 func MaterialNameInvalid(name string) bool {
 	return utf8.RuneCountInString(name) > 255 || strings.ContainsAny(name, "<>")
+}
+
+// mirrorName 把写进归属镜像表的名称收敛到列宽与展示安全范围内，并在发生改动时
+// 记一条 trace_id 可关联的 warn。
+//
+// 旧接口在请求层用 MaterialNameInvalid 拒绝非法名；新的火山原生入口按 D13 不做
+// 名称过滤（请求原样透传上游），因此超长名或尖括号可能到达这里。镜像表是
+// varchar(255)：MySQL strict / PG 上超长插入会失败，归属丢失后该组的所有操作
+// 都会 fail-closed 返回 404。
+func mirrorName(ctx context.Context, name string) string {
+	sanitized := strings.NewReplacer("<", "", ">", "").Replace(name)
+	if runes := []rune(sanitized); len(runes) > 255 {
+		sanitized = string(runes[:255])
+	}
+	if sanitized != name {
+		logger.LogWarn(ctx, "material library mirror name sanitized: length "+strconv.Itoa(utf8.RuneCountInString(name)))
+	}
+	return sanitized
 }
 
 // materialNameInvalid 读取请求体 Name 字段并判非法，供对外代理在透传上游前拒绝。

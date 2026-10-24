@@ -6,10 +6,12 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/relay/channel/task/taskcommon"
 	tasktokenhub "github.com/QuantumNous/new-api/relay/channel/task/tokenhub"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
@@ -175,7 +177,9 @@ var finalizeOptionKeys = []string{
 // 样片固定按 480p 档；成片固定 1080p，且「是否含视频输入」继承第一步的样片。
 func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInfo) map[string]float64 {
 	if info != nil && info.Action == constant.TaskActionFinalize {
-		return taskcommon.EstimateVideoTierBillingForTier(info, Res1080p, info.OriginHasVideoInput)
+		ratios := taskcommon.EstimateVideoTierBillingForTier(info, Res1080p, info.OriginHasVideoInput)
+		warnMissingTier(c, info, ratios)
+		return ratios
 	}
 	req, err := relaycommon.GetTaskRequest(c)
 	if err != nil {
@@ -185,6 +189,29 @@ func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInf
 		return taskcommon.EstimateVideoTierBillingForTier(info, Res480p, info.HasVideoInput)
 	}
 	return taskcommon.EstimateVideoTierBilling(info, &req)
+}
+
+// missingTierWarned 去重档位缺失告警：每个模型+档位只告警一次，避免每次请求刷屏。
+var missingTierWarned sync.Map
+
+// warnMissingTier 在成片固定 1080p 档位拿不到倍率时告警。拿不到倍率意味着按
+// 基准价结算：2.5 成片只有 1080p，管理员漏配 video_tier_pricing 的 1080p /
+// 1080p_video 档位时会静默少收（PRD 5.6）。
+// 样片固定 480p，与 720p 同属基准键（video_tier_pricing 的 base 覆盖
+// 480p/720p），基准价本就是它的正确价格，因此不加告警。
+func warnMissingTier(c *gin.Context, info *relaycommon.RelayInfo, ratios map[string]float64) {
+	if ratios != nil || info == nil {
+		return
+	}
+	model := info.UpstreamModelName
+	if model == "" {
+		model = info.OriginModelName
+	}
+	if _, loaded := missingTierWarned.LoadOrStore(model+"|"+Res1080p, struct{}{}); loaded {
+		return
+	}
+	logger.LogWarn(c.Request.Context(), "video tier pricing missing: model="+model+
+		" resolution="+Res1080p+" action="+string(info.Action)+", billing falls back to base price")
 }
 
 // DoResponse 解析华鲲的 create 响应，并只回下游 {"id": <网关公开任务 ID>}。

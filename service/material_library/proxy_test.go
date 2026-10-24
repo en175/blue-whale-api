@@ -166,6 +166,28 @@ func TestNormalizeUpstreamResponse(t *testing.T) {
 	}
 }
 
+// TestMirrorName 保护镜像表写入边界：原生入口不做名称过滤（D13），超长名与
+// 尖括号会直接到达落库侧。列宽 varchar(255)，超长在 MySQL strict / PG 上插入
+// 失败会让归属丢失、该组后续操作全部 404；尖括号则进管理端展示。
+func TestMirrorName(t *testing.T) {
+	cases := []struct {
+		label string
+		in    string
+		want  string
+	}{
+		{"正常名不变", "我的素材组", "我的素材组"},
+		{"255 边界不变", strings.Repeat("中", 255), strings.Repeat("中", 255)},
+		{"超长截断到 255 rune", strings.Repeat("中", 300), strings.Repeat("中", 255)},
+		{"移除尖括号", "a<b>c", "abc"},
+		{"空名不变", "", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.label, func(t *testing.T) {
+			assert.Equal(t, tc.want, mirrorName(context.Background(), tc.in))
+		})
+	}
+}
+
 // TestMaterialNameInvalid 表驱动验证名称校验规则：超长（>255 rune）与 HTML 危险字符 < >
 // 判非法；正常中文/英文/数字名、255 边界、以及 SQL 注入负载（网关不拦、透传上游）放行。
 // 超长拒绝防镜像表列宽溢出（tokenhub 对超长名回 500）；SQL 注入防御在上游后端，网关不代劳。

@@ -58,7 +58,7 @@ func Distribute() func(c *gin.Context) {
 			// specific_channel_id 是令牌级钉死渠道的能力，同样不能绕过路径隔离：
 			// 否则可以把 /api/v3 钉到非 70 渠道，拿到形状错位的响应。
 			if !channelSupportsRequestPath(channel, c.Request.URL.Path, modelRequest.Model) {
-				abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorChannelDisabled), types.ErrorCodeGetChannelFailed)
+				abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorChannelPathMismatch), types.ErrorCodeGetChannelFailed)
 				return
 			}
 		} else {
