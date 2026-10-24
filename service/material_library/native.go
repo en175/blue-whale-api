@@ -23,14 +23,13 @@ import (
 // 保留 ResponseMetadata 信封（会话类也不剥壳）、ListAssetGroups 直接查上游、
 // GetVisualValidateResult 不读本地缓存、名称不做过滤。共用的只有 provider、
 // 凭证与 user_material_groups 归属表。
+//
+// Version 只做形式对齐、不参与路由：网关固定按 arkVersion 调上游，下游传什么版本都
+// 按当前实现处理，上游拒绝时原样返回官方错误码。
 func HandleNativeRequest(c *gin.Context) {
 	action := strings.TrimSpace(c.Query("Action"))
 	if action == "" {
 		writeNativeError(c, 400, "InvalidParameter", "Action is required")
-		return
-	}
-	if c.Query("Version") != arkVersion {
-		writeNativeError(c, 400, "InvalidParameter", "Version must be "+arkVersion)
 		return
 	}
 

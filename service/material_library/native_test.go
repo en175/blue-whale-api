@@ -35,38 +35,41 @@ func doNativeRequest(t *testing.T, router *gin.Engine, target, body string) *htt
 	return w
 }
 
-func TestHandleNativeRequest_requiresActionAndVersion(t *testing.T) {
+func TestHandleNativeRequest_requiresAction(t *testing.T) {
 	_, router := newNativeServer(t, func(w http.ResponseWriter, r *http.Request) {
 		t.Error("upstream must not be called for invalid requests")
 	})
 
-	tests := []struct {
-		name string
-		url  string
-	}{
-		{name: "缺少 Action", url: "/api/ark?Version=2024-01-01"},
-		{name: "缺少 Version", url: "/api/ark?Action=CreateAssetGroup"},
-		{name: "Version 不匹配", url: "/api/ark?Action=CreateAssetGroup&Version=2023-01-01"},
-	}
+	w := doNativeRequest(t, router, "/api/ark?Version=2024-01-01", `{}`)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			w := doNativeRequest(t, router, tt.url, `{}`)
-
-			require.Equal(t, http.StatusBadRequest, w.Code)
-			var envelope struct {
-				ResponseMetadata struct {
-					Error struct {
-						Code    string `json:"Code"`
-						Message string `json:"Message"`
-					} `json:"Error"`
-				} `json:"ResponseMetadata"`
-			}
-			require.NoError(t, common.Unmarshal(w.Body.Bytes(), &envelope))
-			assert.Equal(t, "InvalidParameter", envelope.ResponseMetadata.Error.Code)
-			assert.NotEmpty(t, envelope.ResponseMetadata.Error.Message)
-		})
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	var envelope struct {
+		ResponseMetadata struct {
+			Error struct {
+				Code    string `json:"Code"`
+				Message string `json:"Message"`
+			} `json:"Error"`
+		} `json:"ResponseMetadata"`
 	}
+	require.NoError(t, common.Unmarshal(w.Body.Bytes(), &envelope))
+	assert.Equal(t, "InvalidParameter", envelope.ResponseMetadata.Error.Code)
+	assert.NotEmpty(t, envelope.ResponseMetadata.Error.Message)
+}
+
+// TestHandleNativeRequest_ignoresVersion 验证下游传的 Version 不参与处理：
+// 网关固定按当前实现的版本调上游，上游的拒绝原样返回。
+func TestHandleNativeRequest_ignoresVersion(t *testing.T) {
+	var gotVersion string
+	_, router := newNativeServer(t, func(w http.ResponseWriter, r *http.Request) {
+		gotVersion = r.URL.Query().Get("Version")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ResponseMetadata":{"Error":{"Code":"InvalidParameter","Message":"unknown action"}}}`))
+	})
+
+	w := doNativeRequest(t, router, "/api/ark?Action=SomeFutureAction&Version=2023-01-01", `{}`)
+
+	assert.Equal(t, "2024-01-01", gotVersion, "上游固定收到网关实现的版本")
+	assert.JSONEq(t, `{"ResponseMetadata":{"Error":{"Code":"InvalidParameter","Message":"unknown action"}}}`, w.Body.String())
 }
 
 func TestHandleNativeRequest_passesUnknownActionThrough(t *testing.T) {

@@ -28,7 +28,7 @@
 ### 2. 素材库新开根路径接口，旧接口不动
 
 - 正式路径 `POST /?Action=X&Version=2024-01-01`，别名 `POST /api/ark?Action=...`（防异常部署根路径不可达）。
-- 鉴权仍是网关 `sk-`；`Version` 必传且必须 `2024-01-01`。
+- 鉴权仍是网关 `sk-`；`Version` 不参与校验，网关固定按 `2024-01-01` 调上游，上游错误原样返回。
 - 响应原样保留 `ResponseMetadata` + `Result`；错误用 `ResponseMetadata.Error`，不做 tokenhub 归一化。
 - 保留归属校验与真人认证回调改写；去掉本地组列表、认证结果缓存、名称过滤。
 
