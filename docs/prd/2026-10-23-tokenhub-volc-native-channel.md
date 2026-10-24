@@ -282,6 +282,7 @@ Content-Type: application/json
 | `GetVisualValidateResult` | 每次查上游（不读本地缓存） |
 | 其它 Action | 原样透传上游 |
 
+- 分页只支持页码模式：`PageNumber` + `PageSize` 原样透传（火山同样支持这两种参数）。`MaxResults` / `NextToken` 不做映射，上游会忽略。
 - 名称过滤（`<` `>`、255 字）本期在新接口**不做**；旧接口保持现状。
 - 单素材 `UpdateAsset` / `DeleteAsset` 的归属校验：先调上游 `GetAsset` 取 `GroupId`，再复用组归属校验。新旧两套接口共用同一个 helper，旧接口下越权操作会从“成功”变为 404。
 - 该校验依赖上游 `GetAsset` 返回 `GroupId`，上线前需在 tokenhub 与 volcengine 两个 provider 各验证一次；若某 provider 不返回，则该 provider 下暂按拒绝处理并单独提工单。

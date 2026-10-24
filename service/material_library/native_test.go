@@ -139,6 +139,24 @@ func TestHandleNativeRequest_listAssetsRequiresGroupIds(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "Filter.GroupIds")
 }
 
+// TestHandleNativeRequest_passesPageNumberThrough 验证分页只走页码模式：
+// PageNumber / PageSize 原样送达上游，不做 MaxResults / NextToken 映射。
+func TestHandleNativeRequest_passesPageNumberThrough(t *testing.T) {
+	var gotBody string
+	_, router := newNativeServer(t, func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		gotBody = string(body)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ResponseMetadata":{},"Result":{"TotalCount":0,"Items":[]}}`))
+	})
+
+	w := doNativeRequest(t, router, "/api/ark?Action=ListAssetGroups&Version=2024-01-01",
+		`{"Filter":{"GroupType":"AIGC"},"PageNumber":2,"PageSize":5}`)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.JSONEq(t, `{"Filter":{"GroupType":"AIGC"},"PageNumber":2,"PageSize":5}`, gotBody)
+}
+
 // TestHandleNativeRequest_restoresClientCallback 验证真人会话的回调改写闭环：
 // 上游收到网关回调，客户端看到的仍是自己传入的地址。
 func TestHandleNativeRequest_restoresClientCallback(t *testing.T) {
