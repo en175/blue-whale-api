@@ -106,6 +106,53 @@ All optional. `resolution` may only be omitted or `1080p`:
 
 ---
 
+## Ark-Compatible Mode (Volcengine Native Protocol)
+
+The same two-step flow is available on the Ark-compatible video endpoints, expressed in the official request shape (see [Submit a Task — Ark-Compatible Mode](./submit)). Both steps are ordinary task submissions; poll them with `GET /api/v3/contents/generations/tasks/{id}`.
+
+### Step 1: create the draft
+
+```bash
+BASE_URL="https://api.yunjizi.cn"
+
+curl "$BASE_URL/api/v3/contents/generations/tasks" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "dreamina-seedance-2-5-260628",
+    "content": [{"type": "text", "text": "An orange tabby stretching on a windowsill, raking sunlight, shallow depth of field"}],
+    "draft": true
+  }'
+# {"id":"task_draft_xxx"}
+```
+
+| Field | Behaviour |
+| --- | --- |
+| `draft` | Set `true` to enable draft mode |
+| `resolution` | May be omitted or `480p`; any other value returns 400 `invalid_resolution` |
+| Model | Seedance 2.5 only. Any other model with `draft: true` returns 400 `invalid_draft_model` |
+| Other fields | Same as a normal Ark-compatible submit (`duration`, `ratio`, `generate_audio`, `content[]`, ...) |
+
+### Step 2: finalize
+
+Submit a second task whose only content is a reference to the draft:
+
+```bash
+curl -X POST "$BASE_URL/api/v3/contents/generations/tasks" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "dreamina-seedance-2-5-260628",
+    "content": [{"type": "draft_task", "draft_task": {"id": "task_draft_xxx"}}]
+  }'
+# {"id":"task_final_xxx"}
+```
+
+- `draft_task.id` is the **gateway** task id returned in step 1 (never an upstream id).
+- The final is fixed at **1080p**; `resolution`, `duration` and `seed` sent with this request are ignored, and the prompt / duration / aspect ratio are inherited from the draft.
+- Only output-spec fields (`output_format`, `watermark`, `return_last_frame`, `service_tier`, `execution_expires_after`, `priority`, `callback_url`, `safety_identifier`) may be set on the finalize request.
+- The response is a **new task id** — a second, independent, separately billed task.
+
 ## Constraints
 
 | Constraint | Detail |
