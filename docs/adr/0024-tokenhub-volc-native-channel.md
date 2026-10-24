@@ -30,7 +30,7 @@
 - 正式路径 `POST /?Action=X&Version=2024-01-01`，别名 `POST /api/ark?Action=...`（防异常部署根路径不可达）。
 - 鉴权仍是网关 `sk-`；`Version` 不校验，与其余 query 一起原样透传上游（缺省补 `2024-01-01`），上游错误码不改写。
 - 对客响应统一火山信封：华鲲的顶层 `ResponseError` 由网关搬迁进 `ResponseMetadata.Error`；会话类接口上游不包信封，由网关补 `ResponseMetadata` / `Result`。volcengine 直连本就符合火山形状，两步均为空操作。
-- 已知差异不补偿：`UpdateAssetGroup` 华鲲不支持改 `Name`（返回 `UnsupportedField`）；游标分页（`NextToken` / `MaxResults`）上游不支持，只提供页码分页（火山同样支持该模式），因此深翻页（`PageSize * PageNumber > 20000`）不可用。
+- 已知差异不补偿：游标分页（`NextToken` / `MaxResults`）上游不支持，只提供页码分页（火山同样支持该模式），因此深翻页（`PageSize * PageNumber > 20000`）不可用。`UpdateAssetGroup` 改 `Name` 经 2026-10-24 真机联调验证可用（`GetAssetGroup` 读回新名称），此前记录的 `UnsupportedField` 结论不成立。
 - 保留归属校验与真人认证回调改写；去掉本地组列表、认证结果缓存、名称过滤。
 
 ## 理由
