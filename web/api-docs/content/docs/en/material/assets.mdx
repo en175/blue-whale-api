@@ -38,6 +38,27 @@ curl "$BASE_URL/api/material/CreateAsset" \
 
 Registration is asynchronous; check the status via `ListAssets` or `GetAsset`.
 
+### Ark-Compatible Endpoint
+
+When migrating code written for the Ark management plane, upload with `Action` in the query string instead of the path:
+
+```bash
+BASE_URL="https://api.yunjizi.cn"
+
+curl -X POST "$BASE_URL/?Action=CreateAsset&Version=2024-01-01" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"GroupId":"group-xxx","URL":"https://example.com/image.jpg","Name":"Asset 1","AssetType":"Image"}'
+
+# Alias for deployments where the root path is intercepted by a reverse proxy:
+# POST "$BASE_URL/api/ark?Action=CreateAsset&Version=2024-01-01"
+```
+
+- Request body, ownership checks and `Result.Id` are identical to `/api/material/CreateAsset`.
+- `Version` is optional: when omitted the gateway forwards `2024-01-01`; any other value is forwarded as-is.
+- Errors use the Ark envelope instead of a top-level error object: `{"ResponseMetadata":{"Error":{"Code":"...","Message":"..."},"RequestId":"..."}}`.
+- The query-string form works for every Action in this module (groups, assets, real-person verification), not only uploads.
+
 ## ListAssets — List Assets
 
 Lists assets by asset group. **Both `Filter.GroupIds` and `Filter.GroupType` are required** — when empty/missing the gateway returns `400 InvalidParameter`, preventing unauthorized listing of all assets under the shared account.
