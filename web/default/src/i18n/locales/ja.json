@@ -5381,6 +5381,9 @@
     "Zero retention": "データ保持なし",
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V 4",
-    "Zoom": "ズーム"
+    "Zoom": "ズーム",
+    "Seedance 2.5 finalize is always 1080p: configure both 1080p and 1080p_video tiers, otherwise billing falls back to the base price.": "Seedance 2.5 のファイナライズは常に 1080p です。1080p と 1080p_video の両方の料金枠を設定してください。設定しない場合、課金は基本料金で計算されます。",
+    "When video generation goes through a TokenHub channel, keep this provider set to tokenhub so asset:// references resolve in the same upstream account.": "動画生成を TokenHub チャネル経由で行う場合、asset:// 参照が同じ上流アカウント内で解決されるよう、このプロバイダーは tokenhub のままにしてください。",
+    "An asset group and the video API key must belong to the same upstream account and project.": "素材グループと動画用 API キーは、同じ上流アカウントかつ同じプロジェクトに属している必要があります。"
   }
 }

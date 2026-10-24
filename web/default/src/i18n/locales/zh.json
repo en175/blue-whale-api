@@ -5381,6 +5381,9 @@
     "Zero retention": "零数据保留",
     "Zhipu": "智谱",
     "Zhipu V4": "智谱 V4",
-    "Zoom": "缩放"
+    "Zoom": "缩放",
+    "Seedance 2.5 finalize is always 1080p: configure both 1080p and 1080p_video tiers, otherwise billing falls back to the base price.": "Seedance 2.5 成片固定 1080p：请同时配置 1080p 与 1080p_video 档位价，否则会按基准价少收。",
+    "When video generation goes through a TokenHub channel, keep this provider set to tokenhub so asset:// references resolve in the same upstream account.": "视频生成走 TokenHub 渠道时，素材库 provider 请保持 tokenhub，保证 asset:// 引用在同一个上游账号内解析。",
+    "An asset group and the video API key must belong to the same upstream account and project.": "素材组与视频 API key 必须属于同一个上游账号和同一个项目。"
   }
 }

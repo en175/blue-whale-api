@@ -5381,6 +5381,9 @@
     "Zero retention": "Không lưu dữ liệu",
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V4",
-    "Zoom": "Zoom"
+    "Zoom": "Zoom",
+    "Seedance 2.5 finalize is always 1080p: configure both 1080p and 1080p_video tiers, otherwise billing falls back to the base price.": "Seedance 2.5 luôn kết xuất ở 1080p: hãy cấu hình cả mức giá 1080p và 1080p_video, nếu không hệ thống sẽ tính theo giá cơ bản.",
+    "When video generation goes through a TokenHub channel, keep this provider set to tokenhub so asset:// references resolve in the same upstream account.": "Khi tạo video qua kênh TokenHub, hãy giữ provider này là tokenhub để các tham chiếu asset:// được phân giải trong cùng tài khoản thượng nguồn.",
+    "An asset group and the video API key must belong to the same upstream account and project.": "Nhóm tài nguyên và API key video phải thuộc cùng một tài khoản thượng nguồn và cùng một dự án."
   }
 }
