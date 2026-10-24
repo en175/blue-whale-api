@@ -5,10 +5,12 @@ package tokenhubvolc
 const ChannelName = "tokenhub-volc"
 
 // 输出分辨率档。样片（draft）只能 480p，成片（finalize）固定 1080p——这两个值
-// 同时是 video_tier_pricing.price_table 的键。
+// 同时是 video_tier_pricing.price_table 的键。4k 只出现在普通提交里，用于
+// 判断是否需要档位缺失告警。
 const (
 	Res480p  = "480p"
 	Res1080p = "1080p"
+	Res4k    = "4k"
 )
 
 // ModelList 是该渠道的默认模型名（对客）。实际可用模型由渠道 models 配置与

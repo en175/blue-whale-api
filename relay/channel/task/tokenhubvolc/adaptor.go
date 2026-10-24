@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -178,7 +180,7 @@ var finalizeOptionKeys = []string{
 func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInfo) map[string]float64 {
 	if info != nil && info.Action == constant.TaskActionFinalize {
 		ratios := taskcommon.EstimateVideoTierBillingForTier(info, Res1080p, info.OriginHasVideoInput)
-		warnMissingTier(c, info, ratios)
+		warnMissingTier(c, info, Res1080p, info.OriginHasVideoInput, ratios)
 		return ratios
 	}
 	req, err := relaycommon.GetTaskRequest(c)
@@ -188,30 +190,49 @@ func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInf
 	if info != nil && info.Draft {
 		return taskcommon.EstimateVideoTierBillingForTier(info, Res480p, info.HasVideoInput)
 	}
-	return taskcommon.EstimateVideoTierBilling(info, &req)
+	ratios := taskcommon.EstimateVideoTierBilling(info, &req)
+	// 直接提交 1080p / 4k 同样按档位收费：漏配时也是静默按基准价结算。
+	// 基准档（480p/720p 及未传分辨率）本来就是基准价，不告警。
+	resolution, _ := req.Metadata["resolution"].(string)
+	if normalized := strings.ToLower(strings.TrimSpace(resolution)); normalized == Res1080p || normalized == Res4k {
+		warnMissingTier(c, info, normalized, taskcommon.HasVideoInputInMetadata(req.Metadata), ratios)
+	}
+	return ratios
 }
 
-// missingTierWarned 去重档位缺失告警：每个模型+档位只告警一次，避免每次请求刷屏。
+const tierWarnInterval = 10 * time.Minute
+
+// missingTierWarned 去重档位缺失告警：同一 model + 档位 + 输入维度在
+// tierWarnInterval 内只告警一次，避免每次请求刷屏；超过间隔重新告警，
+// 管理员修好配置后又配错时无需重启进程。
 var missingTierWarned sync.Map
 
-// warnMissingTier 在成片固定 1080p 档位拿不到倍率时告警。拿不到倍率意味着按
-// 基准价结算：2.5 成片只有 1080p，管理员漏配 video_tier_pricing 的 1080p /
-// 1080p_video 档位时会静默少收（PRD 5.6）。
+// warnMissingTier 在按档位收费、但该档位没有显式单价时告警，避免静默按基准价
+// 结算（PRD 5.6）。只认「漏配」：倍率为 1.0 可能是配置了与基准价相同的单价，
+// 用 VideoTierPriceConfigured 区分，不误报。
 // 样片固定 480p，与 720p 同属基准键（video_tier_pricing 的 base 覆盖
-// 480p/720p），基准价本就是它的正确价格，因此不加告警。
-func warnMissingTier(c *gin.Context, info *relaycommon.RelayInfo, ratios map[string]float64) {
-	if ratios != nil || info == nil {
+// 480p/720p），基准价本就是它的正确价格，因此不调用本函数。
+func warnMissingTier(c *gin.Context, info *relaycommon.RelayInfo, resolution string, hasVideo bool, ratios map[string]float64) {
+	if info == nil || ratios != nil {
 		return
 	}
 	model := info.UpstreamModelName
 	if model == "" {
 		model = info.OriginModelName
 	}
-	if _, loaded := missingTierWarned.LoadOrStore(model+"|"+Res1080p, struct{}{}); loaded {
+	if taskcommon.VideoTierPriceConfigured(info.UpstreamModelName, resolution, hasVideo) ||
+		taskcommon.VideoTierPriceConfigured(info.OriginModelName, resolution, hasVideo) {
+		return // 档位有显式单价，只是恰好等于基准价
+	}
+	key := fmt.Sprintf("%s|%s|%t", model, resolution, hasVideo)
+	now := time.Now()
+	if last, loaded := missingTierWarned.Load(key); loaded && now.Sub(last.(time.Time)) < tierWarnInterval {
 		return
 	}
+	missingTierWarned.Store(key, now)
 	logger.LogWarn(c.Request.Context(), "video tier pricing missing: model="+model+
-		" resolution="+Res1080p+" action="+string(info.Action)+", billing falls back to base price")
+		" resolution="+resolution+" has_video="+strconv.FormatBool(hasVideo)+
+		" action="+string(info.Action)+", billing falls back to base price")
 }
 
 // DoResponse 解析华鲲的 create 响应，并只回下游 {"id": <网关公开任务 ID>}。
