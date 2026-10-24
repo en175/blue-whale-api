@@ -56,20 +56,20 @@ func TestHandleNativeRequest_requiresAction(t *testing.T) {
 	assert.NotEmpty(t, envelope.ResponseMetadata.Error.Message)
 }
 
-// TestHandleNativeRequest_ignoresVersion 验证下游传的 Version 不参与处理：
-// 网关固定按当前实现的版本调上游，上游的拒绝原样返回。
-func TestHandleNativeRequest_ignoresVersion(t *testing.T) {
+// TestHandleNativeRequest_passesVersionThrough 验证 Version 完全透传：
+// 下游传什么上游就收到什么，上游的拒绝原样返回。
+func TestHandleNativeRequest_passesVersionThrough(t *testing.T) {
 	var gotVersion string
 	_, router := newNativeServer(t, func(w http.ResponseWriter, r *http.Request) {
 		gotVersion = r.URL.Query().Get("Version")
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"ResponseMetadata":{"Error":{"Code":"InvalidParameter","Message":"unknown action"}}}`))
+		_, _ = w.Write([]byte(`{"ResponseMetadata":{"Error":{"Code":"InvalidParameter","Message":"unknown version"}}}`))
 	})
 
 	w := doNativeRequest(t, router, "/api/ark?Action=SomeFutureAction&Version=2023-01-01", `{}`)
 
-	assert.Equal(t, "2024-01-01", gotVersion, "上游固定收到网关实现的版本")
-	assert.JSONEq(t, `{"ResponseMetadata":{"Error":{"Code":"InvalidParameter","Message":"unknown action"}}}`, w.Body.String())
+	assert.Equal(t, "2023-01-01", gotVersion, "下游 Version 原样透传到上游")
+	assert.JSONEq(t, `{"ResponseMetadata":{"Error":{"Code":"InvalidParameter","Message":"unknown version"}}}`, w.Body.String())
 }
 
 func TestHandleNativeRequest_passesUnknownActionThrough(t *testing.T) {

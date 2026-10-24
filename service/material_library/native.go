@@ -24,8 +24,8 @@ import (
 // GetVisualValidateResult 不读本地缓存、名称不做过滤。共用的只有 provider、
 // 凭证与 user_material_groups 归属表。
 //
-// Version 只做形式对齐、不参与路由：网关固定按 arkVersion 调上游，下游传什么版本都
-// 按当前实现处理，上游拒绝时原样返回官方错误码。
+// Version 不校验、原样透传给上游；下游没传时由 provider 补默认值。上游拒绝时
+// 原样返回官方错误码，网关不改写。
 func HandleNativeRequest(c *gin.Context) {
 	action := strings.TrimSpace(c.Query("Action"))
 	if action == "" {
@@ -63,7 +63,8 @@ func HandleNativeRequest(c *gin.Context) {
 		return
 	}
 
-	resp, err := currentProvider().DoAction(ctx, action, nil, body)
+	// 下游 query 全部透传（含 Version 与业务方自定义参数），provider 只补 Action。
+	resp, err := currentProvider().DoAction(ctx, action, request.URL.Query(), body)
 	if err != nil {
 		// 不把 Go 内部错误细节返回给客户端，细节进带 trace_id 的后端日志。
 		logger.LogError(ctx, "material library upstream error: "+err.Error())
