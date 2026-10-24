@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Textarea } from '@/components/ui/textarea'
 
 import { updateSystemOption } from '../api'
@@ -72,6 +73,22 @@ export function ConfigCard({ entry, onSaved }: ConfigCardProps) {
           {t('Format')}
         </Button>
       </div>
+      {entry.key === 'material_library.config' && (
+        <>
+          <Alert>
+            <AlertDescription>
+              {t(
+                'When video generation goes through a TokenHub channel, keep this provider set to tokenhub so asset:// references resolve in the same upstream account.'
+              )}
+            </AlertDescription>
+          </Alert>
+          <p className='text-muted-foreground text-xs'>
+            {t(
+              'An asset group and the video API key must belong to the same upstream account and project.'
+            )}
+          </p>
+        </>
+      )}
       <Textarea
         value={value}
         onChange={(e) => {

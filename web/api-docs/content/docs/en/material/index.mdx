@@ -3,15 +3,16 @@ title: Material Library Overview
 description: Material library API — CRUD for virtual/real-person materials plus real-person verification
 ---
 
-The material library API exposes a single gateway entry point `POST /api/material/{Action}`, providing create/read/update/delete for **virtual (AIGC) asset groups and assets** plus **real-person (LivenessFace) verification**. Once created, materials can be referenced in [video generation](../video/submit) via `asset://<asset-id>`.
+The material library API provides create/read/update/delete for **virtual (AIGC) asset groups and assets** plus **real-person (LivenessFace) verification**, through two equivalent entry points: the gateway path form and the Volcengine Ark-compatible query form. Once created, materials can be referenced in [video generation](../video/submit) via `asset://<asset-id>`.
 
-## Unified Endpoint
+## Endpoints
 
-All operations share one endpoint, distinguished by the `Action` in the URL path:
+| Form | Endpoint | Business errors | Session actions |
+| --- | --- | --- | --- |
+| Gateway (path) | `POST /api/material/{Action}` | `{"ResponseMetadata":{},"ResponseError":{...}}` | Returned unwrapped |
+| Ark-compatible (query) | `POST /?Action={Action}&Version=2024-01-01`<br />alias: `POST /api/ark?Action={Action}&Version=2024-01-01` | `{"ResponseMetadata":{"Error":{...},"RequestId":"..."}}` | Wrapped in `ResponseMetadata` + `Result` |
 
-```bash
-POST /api/material/{Action}
-```
+Request bodies and ownership checks are **identical** between the two forms — only the URL shape and the response envelope on errors differ. `Version` is optional in the query form: when omitted the gateway forwards `2024-01-01`.
 
 `Action` values fall into three groups — see [Asset Groups](../material/groups), [Assets](../material/assets), and [Real-Person Verification](../material/real-person).
 
@@ -36,7 +37,7 @@ Authorization: Bearer sk-YOUR-KEY
 
 Two formats (unified to the gateway's actual response shape):
 
-**CRUD envelope** (create/list/update/delete for groups and assets):
+**CRUD envelope** (path form, and success responses of the query form):
 
 ```json
 {
@@ -45,11 +46,13 @@ Two formats (unified to the gateway's actual response shape):
 }
 ```
 
-**Session direct format** (`CreateVisualValidateSession` / `GetVisualValidateResult`, no envelope):
+**Session direct format** (path form only — `CreateVisualValidateSession` / `GetVisualValidateResult`):
 
 ```json
 { "BytedToken": "bt-xxx", "H5Link": "https://.../verify", "CallbackURL": "https://example.com/cb" }
 ```
+
+> On the Ark-compatible query form, session responses are wrapped instead: the same fields appear under `Result`, next to a `ResponseMetadata` object.
 
 ## Error Codes
 
@@ -61,6 +64,8 @@ Business-layer errors (returned by the gateway or normalized from upstream) use:
   "ResponseError": { "Code": "InvalidParameter", "Message": "invalid parameter" }
 }
 ```
+
+> The Ark-compatible query form returns the same `Code` / `Message` under `ResponseMetadata.Error` instead (with `RequestId` alongside).
 
 | HTTP | Code | Description |
 | --- | --- | --- |

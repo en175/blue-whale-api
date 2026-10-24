@@ -147,10 +147,11 @@ func GetChannel(group string, model string, retry int, requestPath string) (*Cha
 }
 
 // filterAbilitiesByRequestPathAndModel restricts candidates by request path and
-// model for the DB (non-memory-cache) selection path. Only Advanced Custom
-// (type 58) channels are path-checked: kept only when one of their routes matches
-// requestPath and model; all other channel types always pass. When requestPath is
-// empty, filtering is skipped.
+// model for the DB (non-memory-cache) selection path. Channels restricted to a
+// protocol by constant.ChannelServesRequestPath (Advanced Custom type 58 and
+// TokenHubVolc type 70) are path-checked; for type 58 the route must also match
+// requestPath and model. All other channel types always pass. When requestPath
+// is empty, filtering is skipped.
 func filterAbilitiesByRequestPathAndModel(abilities []Ability, requestPath string, model string) []Ability {
 	if requestPath == "" || len(abilities) == 0 {
 		return abilities
@@ -173,7 +174,9 @@ func filterAbilitiesByRequestPathAndModel(abilities []Ability, requestPath strin
 	}
 
 	advancedConfigs := make(map[int]*dto.AdvancedCustomConfig)
+	channelTypes := make(map[int]int, len(channels))
 	for _, channel := range channels {
+		channelTypes[channel.Id] = channel.Type
 		if channel.Type == constant.ChannelTypeAdvancedCustom {
 			advancedConfigs[channel.Id] = channel.GetOtherSettings().AdvancedCustom
 		}
@@ -181,6 +184,9 @@ func filterAbilitiesByRequestPathAndModel(abilities []Ability, requestPath strin
 
 	filtered := make([]Ability, 0, len(abilities))
 	for _, ability := range abilities {
+		if !constant.ChannelServesRequestPath(channelTypes[ability.ChannelId], requestPath) {
+			continue
+		}
 		config, isAdvancedCustom := advancedConfigs[ability.ChannelId]
 		if !isAdvancedCustom {
 			filtered = append(filtered, ability)

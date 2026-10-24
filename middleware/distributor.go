@@ -16,6 +16,7 @@ import (
 	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relay/channel/mediakit"
+	"github.com/QuantumNous/new-api/relay/channel/task/tokenhubvolc"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
@@ -52,6 +53,12 @@ func Distribute() func(c *gin.Context) {
 			}
 			if channel.Status != common.ChannelStatusEnabled {
 				abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorChannelDisabled))
+				return
+			}
+			// specific_channel_id 是令牌级钉死渠道的能力，同样不能绕过路径隔离：
+			// 否则可以把 /api/v3 钉到非 70 渠道，拿到形状错位的响应。
+			if !channelSupportsRequestPath(channel, c.Request.URL.Path, modelRequest.Model) {
+				abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorChannelPathMismatch), types.ErrorCodeGetChannelFailed)
 				return
 			}
 		} else {
@@ -171,10 +178,13 @@ func Distribute() func(c *gin.Context) {
 }
 
 // channelSupportsRequestPath reports whether a channel can serve the request path.
-// Only Advanced Custom (type 58) channels are path-checked; all other channel types
-// always pass. A type-58 channel is usable only when one of its routes matches.
+// 火山原生协议路径只服务类型 70，其它路径也不路由给它；Advanced Custom
+// (type 58) 再按自己的路由表二次校验，其余渠道类型一律通过。
 func channelSupportsRequestPath(channel *model.Channel, requestPath string, requestModel string) bool {
 	if channel == nil {
+		return false
+	}
+	if !constant.ChannelServesRequestPath(channel.Type, requestPath) {
 		return false
 	}
 	if channel.Type != constant.ChannelTypeAdvancedCustom {
@@ -379,6 +389,26 @@ func getModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
 		}
 		modelRequest.Model = mediakit.ModelNameForTool(spec.Name)
 		c.Set("relay_mode", relayconstant.RelayModeMediaKitAsync)
+	} else if strings.HasPrefix(c.Request.URL.Path, constant.NativeArkVideoTaskPath) {
+		// 火山原生视频协议。POST 的请求体已在 ArkNativeRequestConvert 里归一成
+		// 内部任务请求，model 仍在顶层；GET 只查本地任务，不重新选渠道。
+		if c.Request.Method == http.MethodPost {
+			req, err := getModelFromRequest(c)
+			if err != nil {
+				return nil, false, err
+			}
+			modelRequest.Model = req.Model
+			c.Set("relay_mode", relayconstant.RelayModeVideoSubmit)
+			// 第二步成片锁定原任务的渠道（ResolveOriginTask 负责切换），与
+			// /v1/videos/:id/finalize 的处理一致，这里不重新选渠道。
+			if native, ok := tokenhubvolc.NativeRequestFrom(c); ok && native.DraftTaskID() != "" {
+				shouldSelectChannel = false
+			}
+		} else {
+			shouldSelectChannel = false
+			modelRequest.Model = getTaskOriginModelName(c)
+			c.Set("relay_mode", relayconstant.RelayModeVideoFetchByID)
+		}
 	} else if !strings.HasPrefix(c.Request.URL.Path, "/v1/audio/transcriptions") && !strings.Contains(c.Request.Header.Get("Content-Type"), "multipart/form-data") {
 		req, err := getModelFromRequest(c)
 		if err != nil {

@@ -150,6 +150,67 @@ Instead of relying on auto-detection, set `metadata.omni_reference_task_type` to
 
 **⚠️ Hinting does not guarantee that task type**: the upstream still judges from the prompt semantics, and a mismatch still fails the task asynchronously. Write the prompt to match the task type you hint. Non-string values are rejected by the gateway (400 `invalid_omni_reference_task_type`).
 
+## Ark-Compatible Mode (Volcengine Native Protocol)
+
+The endpoints above are the gateway's own convention. The same models can also be called through the **Volcengine Ark native video API** — request body, response body and error envelope match the official `POST /api/v3/contents/generations/tasks` documentation, so code written for Volcengine / BytePlus only needs a different base URL and API key.
+
+| Operation | Endpoint |
+| --- | --- |
+| Create a task | `POST /api/v3/contents/generations/tasks` |
+| Query a task | `GET /api/v3/contents/generations/tasks/{id}` |
+
+Parameter mapping from the gateway form:
+
+| Gateway form | Ark-compatible form |
+| --- | --- |
+| `prompt` | `content: [{"type":"text","text":"..."}]` |
+| `seconds` | `duration` (seconds, top level) |
+| `metadata.resolution` | `resolution` (top level) |
+| `images` / `metadata.content` | `content[]` items (`image_url` / `video_url` / `audio_url`, including `asset://Asset-xxxxxx`) |
+| Other `metadata` fields (`ratio`, `generate_audio`, `watermark`, `seed`, `callback_url`, ...) | Top-level fields with the same names |
+
+Fields the gateway has not modelled are **forwarded as-is**, so official parameters not listed here still reach the upstream.
+
+```bash
+BASE_URL="https://api.yunjizi.cn"
+
+curl "$BASE_URL/api/v3/contents/generations/tasks" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "dreamina-seedance-2-0-260128",
+    "content": [{"type": "text", "text": "A blue whale leaping out of the ocean, slow motion, cinematic look"}],
+    "resolution": "720p",
+    "ratio": "16:9",
+    "duration": 5
+  }'
+# {"id":"task_xxx"}
+```
+
+The create response contains only the gateway task id. Query it with the same protocol:
+
+```bash
+curl "$BASE_URL/api/v3/contents/generations/tasks/task_xxx" \
+  -H "Authorization: Bearer sk-YOUR-KEY"
+# {
+#   "id":"task_xxx",
+#   "model":"dreamina-seedance-2-0-260128",
+#   "status":"succeeded",
+#   "content":{"video_url":"https://..."},
+#   "usage":{"completion_tokens":108900,"total_tokens":108900},
+#   "created_at":1786344639,
+#   "updated_at":1786344879,
+#   "resolution":"720p",
+#   "duration":5
+# }
+```
+
+- `status`: `queued` / `running` / `succeeded` / `failed`.
+- `content`, `usage`, `resolution` and `duration` appear only once the value is known — absent fields are omitted, not zero-filled.
+- Errors use the Ark envelope: `{"error":{"code":"...","message":"...","param":"","type":"BadRequest"}}`.
+- These two endpoints only route to **Volcengine-native channels**. If no such channel serves the model you get `503` with no available channel, and a Volcengine-native channel is likewise not selectable through `/v1/video/generations` or `/v1/videos`.
+- Draft mode (Seedance 2.5) has its own two-step flow in this protocol — see [Draft Mode](./draft).
+
 ## Examples
 
 ### Text-to-Video

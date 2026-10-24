@@ -5232,6 +5232,7 @@
     "VolcEngine25": "VolcEngine 2.5 (brouillon)",
     "VolcEngineEnhanced": "VolcEngine (amélioré)",
     "TokenHub25": "TokenHub 2.5 (brouillon)",
+    "TokenHubVolc": "TokenHub Volc natif (2.0/2.5)",
     "NovitaGemini": "Novita Gemini (image)",
     "NovitaOpenAI": "Novita OpenAI (image)",
     "vs. previous": "vs. précédent",
@@ -5380,6 +5381,9 @@
     "Zero retention": "Aucune rétention",
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V4",
-    "Zoom": "Zoom"
+    "Zoom": "Zoom",
+    "Seedance 2.5 finalize is always 1080p: configure both 1080p and 1080p_video tiers, otherwise billing falls back to the base price.": "La finalisation Seedance 2.5 est toujours en 1080p : configurez les niveaux 1080p et 1080p_video, sinon la facturation retombe sur le tarif de base.",
+    "When video generation goes through a TokenHub channel, keep this provider set to tokenhub so asset:// references resolve in the same upstream account.": "Lorsque la génération vidéo passe par un canal TokenHub, gardez ce fournisseur réglé sur tokenhub afin que les références asset:// soient résolues dans le même compte amont.",
+    "An asset group and the video API key must belong to the same upstream account and project.": "Un groupe d'actifs et la clé API vidéo doivent appartenir au même compte amont et au même projet."
   }
 }

@@ -13,9 +13,11 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relay/channel"
 	"github.com/QuantumNous/new-api/relay/channel/task/taskcommon"
+	tokenhubvolc "github.com/QuantumNous/new-api/relay/channel/task/tokenhubvolc"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relay/helper"
@@ -37,6 +39,16 @@ type TaskSubmitResult struct {
 // 以及提取 OtherRatios（时长、分辨率）。
 // 该函数在控制器的重试循环之前调用一次，其结果通过 info 字段和上下文持久化。
 func ResolveOriginTask(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskError {
+	// 火山原生协议的 action 不在路径里：第二步成片由 content[] 的 draft_task
+	// 引用表达，来源任务 ID 也就来自请求体。取出来后与 /v1/videos 的 finalize
+	// 共用下面同一套校验（归属、状态、7 天窗口、上游 ID）。
+	if native, ok := tokenhubvolc.NativeRequestFrom(c); ok {
+		if draftTaskID := native.DraftTaskID(); draftTaskID != "" {
+			info.Action = constant.TaskActionFinalize
+			info.OriginTaskID = draftTaskID
+		}
+	}
+
 	// 检测 remix / finalize action
 	path := c.Request.URL.Path
 	if strings.Contains(path, "/v1/videos/") {
@@ -51,6 +63,10 @@ func ResolveOriginTask(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskErr
 	// 提取 remix / finalize 任务的 video_id
 	if info.Action == constant.TaskActionRemix || info.Action == constant.TaskActionFinalize {
 		videoID := c.Param("video_id")
+		if strings.TrimSpace(videoID) == "" {
+			// 原生协议没有路径参数，来源任务 ID 已在上面的 draft_task 分支取到
+			videoID = info.OriginTaskID
+		}
 		if strings.TrimSpace(videoID) == "" {
 			return service.TaskErrorWrapperLocal(fmt.Errorf("video_id is required"), "invalid_request", http.StatusBadRequest)
 		}
@@ -78,18 +94,19 @@ func ResolveOriginTask(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskErr
 	}
 
 	// 从原始任务推导模型名称
-	if info.OriginModelName == "" {
-		if originTask.Properties.OriginModelName != "" {
-			info.OriginModelName = originTask.Properties.OriginModelName
-		} else if originTask.Properties.UpstreamModelName != "" {
-			info.OriginModelName = originTask.Properties.UpstreamModelName
-		} else {
-			var taskData map[string]interface{}
-			_ = common.Unmarshal(originTask.Data, &taskData)
-			if m, ok := taskData["model"].(string); ok && m != "" {
-				info.OriginModelName = m
-			}
+	originModelName := originTask.Properties.OriginModelName
+	if originModelName == "" {
+		originModelName = originTask.Properties.UpstreamModelName
+	}
+	if originModelName == "" {
+		var taskData map[string]interface{}
+		_ = common.Unmarshal(originTask.Data, &taskData)
+		if m, ok := taskData["model"].(string); ok {
+			originModelName = m
 		}
+	}
+	if info.OriginModelName == "" {
+		info.OriginModelName = originModelName
 	}
 
 	// 锁定到原始任务的渠道（重试时复用同一渠道，轮换 key）
@@ -99,6 +116,18 @@ func ResolveOriginTask(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskErr
 	}
 	if ch.Status != common.ChannelStatusEnabled {
 		return service.TaskErrorWrapperLocal(errors.New("the channel of the origin task is disabled"), "task_channel_disable", http.StatusBadRequest)
+	}
+	// 出成片必须留在同一条协议通道上：/api/v3 只服务类型 70，/v1/videos 不服务
+	// 类型 70。跨通道成片会让适配器与响应形状错位（/api/v3 返回 OpenAI 视频对象，
+	// 或 /v1/videos 对 70 的样片报 build_request_failed 500）。
+	if info.Action == constant.TaskActionFinalize {
+		_, nativeRequest := tokenhubvolc.NativeRequestFrom(c)
+		if nativeRequest && ch.Type != constant.ChannelTypeTokenHubVolc {
+			return service.TaskErrorWrapperLocal(errors.New("the origin task was not created by a native channel"), "origin_task_not_native", http.StatusBadRequest)
+		}
+		if !nativeRequest && ch.Type == constant.ChannelTypeTokenHubVolc {
+			return service.TaskErrorWrapperLocal(errors.New("native channel draft tasks must be finalized on /api/v3"), "origin_task_requires_native_path", http.StatusBadRequest)
+		}
 	}
 	info.LockedChannel = ch
 
@@ -124,10 +153,17 @@ func ResolveOriginTask(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskErr
 	// 这里提前 return，绝不能继承 Step 1 的 OtherRatios：它的 seconds/size 会把
 	// Step 2 的 token 结算放大数倍（对比下面 remix 的整份复制）。
 	if info.Action == constant.TaskActionFinalize {
-		// 模型名为空时上游请求会退化成无价格的 "66_finalizedraft"，导致静默少收
-		if info.OriginModelName == "" {
+		// 出片模型必须由样片决定：成片请求仍带 model（协议要求），但客户端可以
+		// 传一个更便宜的模型来压低预扣与结算，而实际产出是原样片的模型。无条件
+		// 用原任务记录的模型覆盖，客户端值只用于日志。
+		if originModelName == "" {
+			// 模型名为空时上游请求会退化成无价格的 "66_finalizedraft"，导致静默少收
 			return service.TaskErrorWrapperLocal(errors.New("origin model name is missing"), "origin_model_name_missing", http.StatusBadRequest)
 		}
+		if info.OriginModelName != "" && info.OriginModelName != originModelName {
+			logger.LogWarn(c.Request.Context(), "finalize ignores mismatched client model: client="+info.OriginModelName+" origin="+originModelName)
+		}
+		info.OriginModelName = originModelName
 		if !originTask.Properties.Draft {
 			return service.TaskErrorWrapperLocal(errors.New("the origin task is not a draft"), "origin_not_draft", http.StatusBadRequest)
 		}
@@ -187,6 +223,13 @@ func ResolveOriginTask(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskErr
 	}
 
 	return nil
+}
+
+// IsNativeArkFinalizeRequest 报告当前请求是否是火山原生协议的第二步成片。
+// 成片的上游 create 不是幂等的，调用方据此禁止重试。
+func IsNativeArkFinalizeRequest(c *gin.Context) bool {
+	native, ok := tokenhubvolc.NativeRequestFrom(c)
+	return ok && native.DraftTaskID() != ""
 }
 
 // RelayTaskSubmit 完成 task 提交的全部流程（每次尝试调用一次）：
@@ -514,6 +557,25 @@ func videoFetchByIDRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *d
 	}
 	if !exist {
 		taskResp = service.TaskErrorWrapperLocal(errors.New("task_not_exist"), "task_not_exist", http.StatusBadRequest)
+		return
+	}
+
+	// 火山原生协议：按 /api/v3 的形状回填任务对象
+	if strings.HasPrefix(c.Request.URL.Path, constant.NativeArkVideoTaskPath) {
+		adaptor := GetTaskAdaptor(originTask.Platform)
+		if adaptor == nil {
+			taskResp = service.TaskErrorWrapperLocal(fmt.Errorf("invalid channel id: %d", originTask.ChannelId), "invalid_channel_id", http.StatusBadRequest)
+			return
+		}
+		converter, ok := adaptor.(channel.NativeArkTaskConverter)
+		if !ok {
+			taskResp = service.TaskErrorWrapperLocal(fmt.Errorf("not_implemented:%s", originTask.Platform), "not_implemented", http.StatusNotImplemented)
+			return
+		}
+		respBody, err = converter.ConvertToNativeArkTask(originTask)
+		if err != nil {
+			taskResp = service.TaskErrorWrapper(err, "convert_to_native_ark_task_failed", http.StatusInternalServerError)
+		}
 		return
 	}
 

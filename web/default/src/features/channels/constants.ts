@@ -88,12 +88,13 @@ export const CHANNEL_TYPES = {
   67: 'TokenHub25',
   68: 'NovitaGemini',
   69: 'NovitaOpenAI',
+  70: 'TokenHubVolc',
 } as const
 
 const CHANNEL_TYPE_DISPLAY_ORDER: number[] = [
   1, 14, 33, 24, 43, 3, 41, 48, 58, 59, 42, 34, 20, 4, 40, 27, 25, 17, 26, 15,
   46, 23, 18, 45, 31, 35, 49, 19, 47, 37, 38, 39, 11, 8, 57, 22, 21, 44, 2, 5,
-  36, 50, 51, 52, 53, 54, 64, 65, 66, 67, 68, 69, 55, 56, 60, 61, 62, 63,
+  36, 50, 51, 52, 53, 54, 64, 65, 66, 67, 68, 69, 70, 55, 56, 60, 61, 62, 63,
 ]
 
 export const CHANNEL_TYPE_OPTIONS: { value: number; label: string }[] = (() => {
@@ -416,4 +417,5 @@ export const CHANNEL_TYPE_WARNINGS: Record<number, string> = {
   3: 'For channels added after May 10, 2025, no need to remove "." from model names during deployment',
   8: 'If connecting to upstream One API or New API relay projects, use OpenAI type instead unless you know what you are doing',
   37: 'Dify channels only support chatflow and agent, and agent does not support images',
+  70: 'Seedance 2.5 finalize is always 1080p: configure both 1080p and 1080p_video tiers, otherwise billing falls back to the base price.',
 }
