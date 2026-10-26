@@ -56,7 +56,7 @@
 - **只有 2.5 能开样片，成片固定 1080p。** 上游成片档位只有 1080p，价表只需 `1080p` 与 `1080p_video`；漏配会静默按基准价少收。
 - **素材库两套接口并存，行为有差异。** 两套接口都按 API key 做归属隔离：`ListAssetGroups` 都查本地归属表，仅 `GetVisualValidateResult` 不读缓存、名称过滤只由旧接口承担。文档必须分别说明，不能用一套说明覆盖两者。
 - **单素材 Get / Update / Delete 的归属校验依赖上游 `GetAsset` 返回 `GroupId`。** 不返回的 provider 按拒绝处理（fail-closed）。
-
-**2026-10-26 修订：** 兼容入口的 `ListAssetGroups` 改为本地归属表；`GetVisualValidateResult` 补会话归属校验；`GetAsset`（两个入口）补归属校验。缺陷单 IKQFXR。
 - **根路径 `POST /` 被占用。** 后续不能再在根路径挂其它 POST 路由；`/api/ark` 是异常部署时的退路。
-- **需求规格、验收场景与开放问题以 PRD 为准：** `docs/prd/2026-10-23-tokenhub-volc-native-channel.md`。
+- **需求规格、验收场景与开放问题以 PRD 为准：** `docs/prd/2026-10-23-tokenhub-volc-native-channel.md`。其中「`ListAssetGroups` 直查上游」「`GetAsset` 不校验归属」「`GetVisualValidateResult` 不校验会话」三处已被下面的修订推翻，以本 ADR 与 IKQFXR 为准。
+
+**2026-10-26 修订（IKQFXR）：** 兼容入口的 `ListAssetGroups` 改为查本地归属表；`GetVisualValidateResult` 补会话归属校验；`GetAsset`（两个入口）补归属校验且复用探测响应。归属字段按大小写不敏感匹配，与上游 JSON 解码口径一致。

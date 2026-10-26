@@ -272,20 +272,22 @@ Content-Type: application/json
 | `GetAssetGroup` | 归属校验 |
 | `UpdateAssetGroup` | 归属校验 |
 | `DeleteAssetGroup` | 归属校验 |
-| `ListAssetGroups` | 直接查上游（不查本地表） |
+| `ListAssetGroups` | 查本地归属表（按 API key 过滤），不查上游 |
 | `CreateAsset` | 目标组归属校验 |
-| `GetAsset` | 透传（只读，不校验归属） |
+| `GetAsset` | 先 `GetAsset` 反查 `GroupId`，校验组归属后再返回；探测响应直接复用 |
 | `UpdateAsset` | 先 `GetAsset` 反查 `GroupId`，校验组归属后再透传 |
 | `DeleteAsset` | 先 `GetAsset` 反查 `GroupId`，校验组归属后再透传 |
 | `ListAssets` | GroupIds 归属校验；空 GroupIds 拒绝 |
 | `CreateVisualValidateSession` | 客户 `CallbackURL` 替换为网关回调，认证后 302 回客户 |
-| `GetVisualValidateResult` | 每次查上游（不读本地缓存） |
+| `GetVisualValidateResult` | 先校验会话属于当前 API key；通过后每次查上游（不读本地缓存） |
 | 其它 Action | 原样透传上游 |
 
 - 分页只支持页码模式：`PageNumber` + `PageSize` 原样透传（火山同样支持这两种参数）。`MaxResults` / `NextToken` 不做映射，上游会忽略。火山要求 `PageSize * PageNumber > 20000` 时改用 `NextToken` 深翻页，本期不支持。
 - 名称过滤（`<` `>`、255 字）本期在新接口**不做**；旧接口保持现状。
-- 单素材 `UpdateAsset` / `DeleteAsset` 的归属校验：先调上游 `GetAsset` 取 `GroupId`，再复用组归属校验。新旧两套接口共用同一个 helper，旧接口下越权操作会从“成功”变为 404。
-- 该校验依赖上游 `GetAsset` 返回 `GroupId`，上线前需在 tokenhub 与 volcengine 两个 provider 各验证一次；若某 provider 不返回，则该 provider 下暂按拒绝处理并单独提工单。
+- 单素材 `GetAsset` / `UpdateAsset` / `DeleteAsset` 的归属校验：先调上游 `GetAsset` 取 `GroupId`，再复用组归属校验；`GetAsset` 直接复用探测响应，不重复读取。新旧两套接口共用同一个 helper，旧接口下越权操作会从“成功”变为 404。
+- 该路径已在 tokenhub 与 volcengine 两个 provider 的单测中覆盖；若上游不返回 `GroupId`，按拒绝处理。
+- 归属字段按大小写不敏感读取，与上游 JSON 解码口径一致；同名字段大小写冲突时 fail-closed。
+- **2026-10-26 修订（IKQFXR）：** 兼容入口 `ListAssetGroups` 改为查本地归属表；`GetAsset` 两个入口补归属校验；`GetVisualValidateResult` 补会话归属校验。安全边界优先于「行为与上游一致」。
 - 30 秒上游超时沿用。
 - 限流沿用 `GlobalAPIRateLimit`（按 ClientIP，默认 360 次 / 180 秒），不新增独立配额；根路径与 `/api/ark` 都必须显式挂载，不能依赖 `/api` 组的继承。
 
@@ -347,9 +349,9 @@ Content-Type: application/json
 | A14 | 素材库未知 Action | 原样透传上游并返回上游结果 |
 | A15 | `CreateVisualValidateSession` | 上游收到网关回调地址；认证完成后 302 回客户 |
 | A16 | `/api/material/{Action}` 旧接口回归 | 行为与改造前一致 |
-| A17 | `UpdateAsset` / `DeleteAsset` 操作他人素材 | 火山错误信封，不泄露素材是否存在 |
+| A17 | `GetAsset` / `UpdateAsset` / `DeleteAsset` 操作他人素材 | 火山错误信封 404，不泄露素材是否存在 |
 | A18 | 旧接口 `UpdateAsset` / `DeleteAsset` 操作他人素材 | 404，与 A17 共用同一 helper |
-| A19 | `GetAsset` 查询他人素材 | 保持透传（本期不校验），记录为已知限制 |
+| A19 | `GetAsset` 查询他人素材 | 404，与 A17 同一 helper |
 
 ---
 
@@ -363,7 +365,7 @@ Content-Type: application/json
 - 2.5 成片上游只支持 1080p，价表只需 `1080p` 与 `1080p_video` 两档。
 - 素材库接口对外暴露 `POST /`，根路径为正式入口；`/api/ark` 仅作异常部署时的别名。
 - 素材库不单独限流，沿用网关全局 API 限流（按 ClientIP，默认 360 次 / 180 秒）；根路径必须显式挂载该中间件，不能裸奔。
-- 单素材保护范围：`DeleteAsset` + `UpdateAsset`（先 `GetAsset` 反查组归属），`GetAsset` 只读不校验；新旧接口共用同一 helper。
+- 单素材保护范围：`GetAsset` + `DeleteAsset` + `UpdateAsset`（先 `GetAsset` 反查组归属），新旧接口共用同一 helper。
 
 ---
 

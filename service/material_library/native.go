@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -55,6 +56,26 @@ func HandleNativeRequest(c *gin.Context) {
 	if action == "GetVisualValidateResult" && !visualSessionOwnedByCurrentUser(request, body) {
 		writeNativeVisualResult(c, action)
 		return
+	}
+
+	// GetAsset 要先经上游反查 GroupId 才能校验归属；探测响应就是素材详情，
+	// 直接复用，避免同一素材查两次上游。
+	if action == "GetAsset" {
+		if _, valid := nativeStringField(body, "Id"); !valid {
+			writeNativeError(c, 400, "InvalidParameter", "Id must be a string")
+			return
+		}
+		probe, owned := probeAssetOwnership(ctx, body)
+		if !owned {
+			writeNativeError(c, 404, "NotFound", "resource not found")
+			return
+		}
+		if probe != nil {
+			normalizeNativeBody(probe, action, c)
+			writeNativeResponse(c, probe)
+			return
+		}
+		// Id 为空：交给上游报参数错误。
 	}
 
 	// 真人会话：客户自定义回调 → 替换为网关回调（网关要拿到认证结果），认证后
@@ -195,7 +216,7 @@ func checkNativeOwnership(r *http.Request, action string, body []byte) (status i
 		if !groupsOwnedByCurrentUser(r, body) {
 			return 404, "NotFound", "resource not found", false
 		}
-	case "UpdateAsset", "DeleteAsset", "GetAsset":
+	case "UpdateAsset", "DeleteAsset":
 		if _, valid := nativeStringField(body, "Id"); !valid {
 			return 400, "InvalidParameter", "Id must be a string", false
 		}
@@ -207,41 +228,35 @@ func checkNativeOwnership(r *http.Request, action string, body []byte) (status i
 }
 
 // nativeStringField 读取请求体中的字符串字段。valid=false 表示请求体不是 JSON
-// 对象，或字段存在但不是字符串——归属校验据此 fail-closed：下面的 helper 会把
-// 解析失败的标识当成缺省值放行，不能先让非法格式走到那一步。
-// 字段缺失时返回 ("", true)，由调用方区分「可选参数缺省」与「格式非法」。
+// 对象、字段存在但不是字符串，或同名键大小写冲突——归属校验据此 fail-closed。
+// 字段缺失（含 null）时返回 ("", true)，由调用方区分「可选参数缺省」与「格式非法」。
 func nativeStringField(body []byte, field string) (value string, valid bool) {
-	var fields map[string]json.RawMessage
-	if err := common.Unmarshal(body, &fields); err != nil || fields == nil {
-		return "", false
-	}
-	raw, exists := fields[field]
-	if !exists || string(raw) == "null" {
-		return "", true
-	}
-	if err := common.Unmarshal(raw, &value); err != nil {
-		return "", false
-	}
-	return value, true
+	return jsonStringFieldFold(body, field)
 }
 
-// assetOwnedByCurrentUser 校验单素材操作（Update/DeleteAsset）的目标组归属。
-//
-// 上游素材对象不携带网关侧归属，只能先 GetAsset 反查 GroupId，再复用组归属
-// 校验。查询失败或上游不返回 GroupId 时按无权处理（fail-closed），宁可拒绝也
-// 不放行越权删除。Id 缺失时放行，交上游报 InvalidParameter。
-func assetOwnedByCurrentUser(r *http.Request, body []byte) bool {
-	assetID := jsonStringFields(body, "Id")["Id"]
+// probeAssetOwnership 经上游 GetAsset 反查素材所属组并校验归属，返回探测响应
+// 供 GetAsset 直接复用。Id 缺失时返回 (nil, true)，交上游报参数错误；查询失败、
+// 无 GroupId 或非本人组返回 (nil, false)，避免越权读取/改名/删除。
+func probeAssetOwnership(ctx context.Context, body []byte) (*Response, bool) {
+	assetID, valid := jsonStringFieldFold(body, "Id")
+	if !valid {
+		return nil, false
+	}
 	if assetID == "" {
-		return true
+		return nil, true
 	}
 	probe, err := common.Marshal(map[string]string{"Id": assetID})
 	if err != nil {
-		return false
+		return nil, false
 	}
-	resp, err := currentProvider().DoAction(r.Context(), "GetAsset", nil, probe)
-	if err != nil || resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return false
+	resp, err := currentProvider().DoAction(ctx, "GetAsset", nil, probe)
+	if err != nil {
+		logger.LogError(ctx, "material library get asset ownership probe failed: "+err.Error())
+		return nil, false
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		logger.LogWarn(ctx, "material library get asset ownership probe rejected: upstream status "+strconv.Itoa(resp.StatusCode))
+		return nil, false
 	}
 	var parsed struct {
 		Result struct {
@@ -250,17 +265,29 @@ func assetOwnedByCurrentUser(r *http.Request, body []byte) bool {
 		GroupId string `json:"GroupId"`
 	}
 	if err := common.Unmarshal(resp.Body, &parsed); err != nil {
-		return false
+		return nil, false
 	}
 	groupID := parsed.Result.GroupId
 	if groupID == "" {
 		groupID = parsed.GroupId
 	}
 	if groupID == "" {
-		return false
+		return nil, false
 	}
-	userID, _ := r.Context().Value(ctxUserID).(int)
+	userID, _ := ctx.Value(ctxUserID).(int)
+	if userID <= 0 {
+		return nil, false
+	}
 	owned, _ := model.UserMaterialGroupExists(userID, material_setting.GetConfig().Provider, groupID)
+	if !owned {
+		return nil, false
+	}
+	return resp, true
+}
+
+// assetOwnedByCurrentUser 校验单素材写操作（Update/DeleteAsset）的目标组归属。
+func assetOwnedByCurrentUser(r *http.Request, body []byte) bool {
+	_, owned := probeAssetOwnership(r.Context(), body)
 	return owned
 }
 
@@ -279,9 +306,13 @@ func writeNativeResponse(c *gin.Context, resp *Response) {
 }
 
 // visualSessionOwnedByCurrentUser 校验 BytedToken 对应的会话属于当前 API key。
-// token 为空时放行，交上游报参数错误；会话不存在按无权处理。
+// token 为空时放行，交上游报参数错误；格式非法、会话不存在或不属于当前用户
+// 一律按无权处理（fail-closed）。
 func visualSessionOwnedByCurrentUser(r *http.Request, body []byte) bool {
-	token := jsonStringFields(body, "BytedToken")["BytedToken"]
+	token, valid := jsonStringFieldFold(body, "BytedToken")
+	if !valid {
+		return false
+	}
 	if token == "" {
 		return true
 	}
@@ -322,14 +353,52 @@ func writeNativeError(c *gin.Context, statusCode int, code string, message strin
 // 缺省处理）。body 不被消费，可继续原样发给上游。
 func jsonStringFields(body []byte, fields ...string) map[string]string {
 	var m map[string]any
-	if err := common.Unmarshal(body, &m); err != nil {
+	if err := common.Unmarshal(body, &m); err != nil || m == nil {
 		return map[string]string{}
 	}
 	result := make(map[string]string, len(fields))
 	for _, field := range fields {
-		if v, ok := m[field].(string); ok {
+		if v, ok := foldStringField(m, field); ok && v != "" {
 			result[field] = v
 		}
 	}
 	return result
+}
+
+// jsonStringFieldFold 按大小写不敏感读取请求体中的字符串字段。上游 Go 服务解码
+// JSON 时键名大小写不敏感；归属校验必须同口径，否则 {"id":...} 会绕过按精确键名
+// 的读取，直接被透传到共享上游。解析失败、类型不符或同名字段大小写冲突时返回
+// ("", false)，调用方按 fail-closed 处理。
+func jsonStringFieldFold(body []byte, field string) (string, bool) {
+	var m map[string]any
+	if err := common.Unmarshal(body, &m); err != nil || m == nil {
+		return "", false
+	}
+	return foldStringField(m, field)
+}
+
+// foldStringField 在已解析的对象里按大小写不敏感取字符串字段。
+func foldStringField(fields map[string]any, field string) (string, bool) {
+	value, found, conflict := "", false, false
+	for key, raw := range fields {
+		if !strings.EqualFold(key, field) {
+			continue
+		}
+		if raw == nil {
+			raw = ""
+		}
+		s, ok := raw.(string)
+		if !ok {
+			return "", false
+		}
+		if found && s != value {
+			conflict = true
+			continue
+		}
+		value, found = s, true
+	}
+	if conflict {
+		return "", false
+	}
+	return value, true
 }

@@ -131,9 +131,22 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 			writeMaterialNotFound(w)
 			return
 		}
-	case "GetAsset", "DeleteAsset":
+	case "GetAsset":
+		// 经上游反查 GroupId 再校验归属；探测响应就是素材详情，直接复用，
+		// 避免同一素材查两次上游。
+		probe, owned := probeAssetOwnership(r.Context(), body)
+		if !owned {
+			writeMaterialNotFound(w)
+			return
+		}
+		if probe != nil {
+			writeProxyUpstreamResponse(w, action, probe, "")
+			return
+		}
+		// Id 为空：交给上游报参数错误。
+	case "DeleteAsset":
 		// 按 asset id 操作：经上游 GetAsset 反查 GroupId 再校验归属，
-		// 防止拿到他人 id 就读取或删除。
+		// 防止拿到他人 id 就删除。
 		if !assetOwnedByCurrentUser(r, body) {
 			writeMaterialNotFound(w)
 			return
@@ -154,6 +167,12 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	observeOwnership(r.Context(), resp)
+	writeProxyUpstreamResponse(w, action, resp, customCallback)
+}
+
+// writeProxyUpstreamResponse 把上游响应按 tokenhub 对外格式回写：还原客户回调、
+// 归一化信封、跳过已失效的 Content-Length。
+func writeProxyUpstreamResponse(w http.ResponseWriter, action string, resp *Response, customCallback string) {
 	// 对外真人会话：响应 Result.CallbackURL 替换回客户原值（客户应看到自己传的回调，而非网关内置）。
 	if customCallback != "" {
 		resp.Body = restoreClientCallback(resp.Body, customCallback)
@@ -181,7 +200,7 @@ func rewriteVisualCallbackBody(r *http.Request, body []byte) ([]byte, string) {
 	if err := common.Unmarshal(body, &m); err != nil {
 		return body, ""
 	}
-	clientCB, _ := m["CallbackURL"].(string)
+	clientCB, _ := foldStringField(m, "CallbackURL")
 	if clientCB == "" {
 		return body, ""
 	}
@@ -189,7 +208,12 @@ func rewriteVisualCallbackBody(r *http.Request, body []byte) ([]byte, string) {
 	if clientCB == gatewayCB {
 		return body, ""
 	}
-	m["CallbackURL"] = gatewayCB
+	// 上游按大小写不敏感解析键名，所有同名字段都要替换，不能只改标准写法。
+	for key := range m {
+		if strings.EqualFold(key, "CallbackURL") {
+			m[key] = gatewayCB
+		}
+	}
 	rewritten, err := common.Marshal(m)
 	if err != nil {
 		return body, ""
@@ -274,16 +298,22 @@ func handleLocalAssetGroups(w http.ResponseWriter, r *http.Request, body []byte,
 		pageSize = req.PageSize
 	}
 	userID, _ := r.Context().Value(ctxUserID).(int)
-	groups, err := model.GetMaterialGroups(userID, material_setting.GetConfig().Provider, req.Filter.GroupType)
-	if err != nil {
-		logger.LogError(r.Context(), "list local asset groups failed: "+err.Error())
-		http.Error(w, "list asset groups failed", http.StatusInternalServerError)
-		return
+	var groups []*model.UserMaterialGroup
+	if userID > 0 {
+		var err error
+		groups, err = model.GetMaterialGroups(userID, material_setting.GetConfig().Provider, req.Filter.GroupType)
+		if err != nil {
+			logger.LogError(r.Context(), "list local asset groups failed: "+err.Error())
+			http.Error(w, "list asset groups failed", http.StatusInternalServerError)
+			return
+		}
 	}
 	total := len(groups)
-	start := (page - 1) * pageSize
-	if start > total {
-		start = total
+	// 先比较页码再相乘：直接算 (page-1)*pageSize 会被超大 PageNumber 溢出成负数
+	// 或错误的正数，导致切片越界。
+	start := total
+	if page-1 <= total/pageSize {
+		start = (page - 1) * pageSize
 	}
 	end := start + pageSize
 	if end > total {
