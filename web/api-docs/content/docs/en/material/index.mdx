@@ -3,7 +3,7 @@ title: Material Library Overview
 description: Material library API — CRUD for virtual/real-person materials plus real-person verification
 ---
 
-The material library API provides create/read/update/delete for **virtual (AIGC) asset groups and assets** plus **real-person (LivenessFace) verification**, through two equivalent entry points: the gateway path form and the Volcengine Ark-compatible query form. Once created, materials can be referenced in [video generation](../video/submit) via `asset://<asset-id>`.
+The material library API provides create/read/update/delete for **virtual (AIGC) asset groups and assets** plus **real-person (LivenessFace) verification**, through two entry points: the gateway path form and the Volcengine Ark-compatible query form. Once created, materials can be referenced in [video generation](../video/submit) via `asset://<asset-id>`.
 
 ## Endpoints
 
@@ -12,9 +12,61 @@ The material library API provides create/read/update/delete for **virtual (AIGC)
 | Gateway (path) | `POST /api/material/{Action}` | `{"ResponseMetadata":{},"ResponseError":{...}}` | Returned unwrapped |
 | Ark-compatible (query) | `POST /?Action={Action}&Version=2024-01-01`<br />alias: `POST /api/ark?Action={Action}&Version=2024-01-01` | `{"ResponseMetadata":{"Error":{...},"RequestId":"..."}}` | Wrapped in `ResponseMetadata` + `Result` |
 
-Request bodies and ownership checks are **identical** between the two forms — only the URL shape and the response envelope on errors differ. `Version` is optional in the query form: when omitted the gateway forwards `2024-01-01`.
+Request bodies use the same schemas on both forms, but the two are not drop-in equivalents — see [Differences Between the Two Forms](#differences-between-the-two-forms).
+
+Query-form request rules:
+
+- `Action` is **required**; missing or blank returns `400 InvalidParameter` (`Action is required`).
+- `Version` is **optional**. When omitted the gateway forwards `2024-01-01`; any other value is forwarded upstream unchanged — the gateway does not validate it.
+- Any additional query parameters are forwarded upstream as-is, except for `ListAssetGroups`, which is answered locally from the gateway ownership table.
+- The alias `/api/ark` exists for deployments where a reverse proxy intercepts `POST /`.
 
 `Action` values fall into three groups — see [Asset Groups](../material/groups), [Assets](../material/assets), and [Real-Person Verification](../material/real-person).
+
+## Ark-Compatible Action Reference
+
+All 12 Actions below are reachable through the query form. "Gateway ownership check" means the gateway verifies that the resource belongs to the API key that authenticated the request; failures return `404 NotFound` without revealing whether the resource exists.
+
+| Action | Module | Required body fields | Gateway ownership check | Served by |
+| --- | --- | --- | --- | --- |
+| `ListAssetGroups` | Groups | — (`Filter.GroupType`, `PageNumber`, `PageSize` optional) | Yes — results are limited to groups owned by the current API key | Gateway (local ownership table) |
+| `CreateAssetGroup` | Groups | `Name`, `GroupType` | None (creates a new group) | Upstream |
+| `GetAssetGroup` | Groups | `Id` | Yes | Upstream |
+| `UpdateAssetGroup` | Groups | `Id` | Yes | Upstream |
+| `DeleteAssetGroup` | Groups | `Id` | Yes | Upstream |
+| `CreateAsset` | Assets | `GroupId`, `URL`, `Name`, `AssetType` | Yes, on `GroupId` | Upstream |
+| `ListAssets` | Assets | `Filter.GroupIds`, `Filter.GroupType`, `PageNumber`, `PageSize` | Yes, every id in `Filter.GroupIds` | Upstream |
+| `GetAsset` | Assets | `Id` | Yes, resolved through `GetAsset.GroupId` | Upstream |
+| `UpdateAsset` | Assets | `Id` | Yes, resolved through `GetAsset.GroupId` | Upstream |
+| `DeleteAsset` | Assets | `Id` | Yes, resolved through `GetAsset.GroupId` | Upstream |
+| `CreateVisualValidateSession` | Real-person | `CallbackURL` | None (callback is rewritten and restored) | Upstream |
+| `GetVisualValidateResult` | Real-person | `BytedToken` | Yes — the session must belong to the current API key | Upstream |
+
+Unknown Actions are forwarded upstream unchanged and the upstream result is returned as-is; the gateway does not validate or rewrite the error code. `Id` / `GroupId` must be JSON **strings**; a non-string value is rejected by the gateway with `400 InvalidParameter` before any ownership check.
+
+Request/response examples for the query form are shown on each module page:
+
+- [Asset Groups — Ark-compatible examples](../material/groups#ark-compatible-examples)
+- [Assets — Ark-compatible examples](../material/assets#ark-compatible-examples)
+- [Real-Person Verification — Ark-compatible examples](../material/real-person#ark-compatible-examples)
+
+## Differences Between the Two Forms
+
+| Aspect | Path form | Ark-compatible query form |
+| --- | --- | --- |
+| `Action` location | Path segment | Query parameter (required) |
+| `Version` | Not applicable | Optional; default `2024-01-01`; other values forwarded unchanged |
+| `ListAssetGroups` | Served from the gateway ownership table, isolated per API key | Served from the gateway ownership table, isolated per API key |
+| `GetVisualValidateResult` | Local session cache first, then upstream | Always upstream, no cache |
+| Gateway name validation (length, `<`/`>`) | Rejected with `400 InvalidParameter` | Not performed by the gateway; upstream validation only |
+| Session responses | Returned unwrapped | Wrapped in `ResponseMetadata` + `Result` |
+| Errors | `ResponseMetadata` + top-level `ResponseError` | `ResponseMetadata.Error` |
+| Unknown Action | Forwarded upstream | Forwarded upstream |
+
+## Pagination Limits
+
+- Only page-number pagination (`PageNumber` / `PageSize`) is available; cursor pagination (`NextToken` / `MaxResults`) is not supported by upstream.
+- Deep pagination is unavailable upstream once `PageSize * PageNumber` exceeds 20,000.
 
 ## Authentication
 
@@ -71,7 +123,7 @@ Business-layer errors (returned by the gateway or normalized from upstream) use:
 | --- | --- | --- |
 | 400 | `InvalidParameter` | Invalid request parameter (e.g. empty `GroupIds` or missing `Filter.GroupType` in `ListAssets`, name containing `<`/`>` or too long) |
 | 404 | `NotFound` | Resource not found or **not owned by the current API key** (ownership check, returned by the gateway) |
-| 404 | `InvalidActionOrVersion` | Unknown `Action` (returned upstream) |
+| 404 | — | Unknown `Action`; the error code is returned by upstream and is not rewritten by the gateway |
 | 500 | `InternalError` | Upstream internal error |
 | 502 | — | The gateway failed to query upstream (e.g. a just-created real-person verification session not yet queryable); retry shortly |
 | 401 | — | Authentication failures use the OpenAI-style error (see "Authentication"), not listed here |
@@ -84,6 +136,7 @@ Materials are isolated by the **account owning the API key**:
 - `GetAsset` / `UpdateAsset` / `DeleteAsset` resolve ownership by calling upstream `GetAsset` and checking the returned `GroupId`; if upstream fails or returns no `GroupId`, the request is rejected.
 - `GetVisualValidateResult` only returns a `GroupId` for sessions created by the same API key; unknown or other-key tokens return an empty `GroupId` without querying upstream.
 - The Ark-compatible entry uses the same isolation rules as the path entry.
+- `ListAssetGroups` on either entry is read from the gateway ownership table and is tenant-isolated; see [Differences Between the Two Forms](#differences-between-the-two-forms).
 
 ## Referencing Materials
 

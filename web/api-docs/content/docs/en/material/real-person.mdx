@@ -5,7 +5,7 @@ description: H5 liveness verification loop for real-person (LivenessFace) materi
 
 Real-person materials (LivenessFace) require an H5 liveness verification loop: first create a verification session to obtain `H5Link` and `BytedToken`, have the verifier open the link and complete liveness verification, then query the result with `BytedToken`. **Session endpoints return the direct format** (no `ResponseMetadata`/`Result` envelope).
 
-> **Ark-compatible entry:** the same Actions also work as `POST /?Action={Action}&Version=2024-01-01` (alias `/api/ark`). There, session responses are **wrapped** into `ResponseMetadata` + `Result` instead of the direct format — see the [endpoint comparison](../material/index#endpoints).
+> **Ark-compatible entry:** the same Actions also work as `POST /?Action={Action}&Version=2024-01-01` (alias `/api/ark`). There, session responses are **wrapped** into `ResponseMetadata` + `Result` instead of the direct format. The query form also has **no local result cache** — `GetVisualValidateResult` always queries upstream, while the path form can return a result already settled in the gateway's local session record. See [Ark-compatible examples](#ark-compatible-examples) below and [Differences Between the Two Forms](../material/index#differences-between-the-two-forms).
 
 ## CreateVisualValidateSession — Create a Verification Session
 
@@ -67,3 +67,32 @@ Direct format (no envelope):
 > - Verification complete → `200` + `{"GroupId":"group-xxx"}`
 
 The real-person group id `group-xxx` returned after verification can be referenced in [video generation](../video/submit) via `asset://group-xxx` (see [Material Library Overview](../material/index)).
+
+## Ark-Compatible Examples
+
+The same Actions work through the query form. Unlike the path form, success responses are wrapped:
+
+```bash
+BASE_URL="https://api.yunjizi.cn"
+
+# CreateVisualValidateSession
+curl -X POST "$BASE_URL/?Action=CreateVisualValidateSession&Version=2024-01-01" \
+  -H "Authorization: Bearer sk-YOUR-KEY" -H "Content-Type: application/json" \
+  -d '{"Name":"My real-person group","CallbackURL":"https://example.com/cb","ProjectName":"default"}'
+
+# GetVisualValidateResult
+curl -X POST "$BASE_URL/?Action=GetVisualValidateResult&Version=2024-01-01" \
+  -H "Authorization: Bearer sk-YOUR-KEY" -H "Content-Type: application/json" \
+  -d '{"BytedToken":"bt-xxx"}'
+```
+
+Response through the query form:
+
+```json
+{
+  "ResponseMetadata": { "RequestId": "req_xxx", "Action": "GetVisualValidateResult", "Version": "2024-01-01", "Service": "ark", "Region": "cn-beijing" },
+  "Result": { "GroupId": "group-xxx" }
+}
+```
+
+`GroupId` is empty until verification completes; poll until it is populated. Because the query form has no local result cache, it reads upstream on every call; the path form can return a result already settled locally without calling upstream. The gateway still substitutes its own callback URL upstream and restores your `CallbackURL` in the response.

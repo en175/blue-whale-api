@@ -57,7 +57,7 @@ curl -X POST "$BASE_URL/?Action=CreateAsset&Version=2024-01-01" \
 - Request body, ownership checks and `Result.Id` are identical to `/api/material/CreateAsset`.
 - `Version` is optional: when omitted the gateway forwards `2024-01-01`; any other value is forwarded as-is.
 - Errors use the Ark envelope instead of a top-level error object: `{"ResponseMetadata":{"Error":{"Code":"...","Message":"..."},"RequestId":"..."}}`.
-- The query-string form works for every Action in this module (groups, assets, real-person verification), not only uploads.
+- The query-string form works for every Action in the material library. See [Ark-compatible examples](#ark-compatible-examples) below and [Differences Between the Two Forms](../material/index#differences-between-the-two-forms).
 
 ## ListAssets — List Assets
 
@@ -185,3 +185,38 @@ curl "$BASE_URL/api/material/DeleteAsset" \
 ```
 
 > Ownership note: `GetAsset` / `UpdateAsset` / `DeleteAsset` resolve ownership by calling upstream `GetAsset` and checking the returned `GroupId` against the current API key; if upstream fails or returns no `GroupId`, the request is rejected with `404 NotFound`. The Ark-compatible entry applies the same check. Assets in groups not registered to the current API key (for example, groups created outside the gateway) are treated as not found.
+
+## Ark-Compatible Examples
+
+Every Action on this page also accepts `Action` in the query string. Request bodies are unchanged; the success `Result` is the same object shown above, wrapped in `ResponseMetadata`:
+
+```bash
+BASE_URL="https://api.yunjizi.cn"
+
+# CreateAsset
+curl -X POST "$BASE_URL/?Action=CreateAsset&Version=2024-01-01" \
+  -H "Authorization: Bearer sk-YOUR-KEY" -H "Content-Type: application/json" \
+  -d '{"GroupId":"group-xxx","URL":"https://example.com/image.jpg","Name":"Asset 1","AssetType":"Image"}'
+
+# ListAssets — Filter.GroupIds is required and must be non-empty
+curl -X POST "$BASE_URL/?Action=ListAssets&Version=2024-01-01" \
+  -H "Authorization: Bearer sk-YOUR-KEY" -H "Content-Type: application/json" \
+  -d '{"Filter":{"GroupIds":["group-xxx"],"GroupType":"AIGC"},"PageNumber":1,"PageSize":10}'
+
+# GetAsset
+curl -X POST "$BASE_URL/?Action=GetAsset&Version=2024-01-01" \
+  -H "Authorization: Bearer sk-YOUR-KEY" -H "Content-Type: application/json" \
+  -d '{"Id":"Asset-xxx"}'
+
+# UpdateAsset — ownership resolved through GetAsset.GroupId
+curl -X POST "$BASE_URL/?Action=UpdateAsset&Version=2024-01-01" \
+  -H "Authorization: Bearer sk-YOUR-KEY" -H "Content-Type: application/json" \
+  -d '{"Id":"Asset-xxx","Name":"New name"}'
+
+# DeleteAsset — ownership resolved through GetAsset.GroupId
+curl -X POST "$BASE_URL/?Action=DeleteAsset&Version=2024-01-01" \
+  -H "Authorization: Bearer sk-YOUR-KEY" -H "Content-Type: application/json" \
+  -d '{"Id":"Asset-xxx"}'
+```
+
+Empty `Filter.GroupIds` returns `400 InvalidParameter` (`Filter.GroupIds is required`) before any upstream call. Errors use `ResponseMetadata.Error`; the `/api/ark` alias accepts the same query string when `POST /` is intercepted.
