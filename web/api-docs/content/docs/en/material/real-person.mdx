@@ -5,6 +5,8 @@ description: H5 liveness verification loop for real-person (LivenessFace) materi
 
 Real-person materials (LivenessFace) require an H5 liveness verification loop: first create a verification session to obtain `H5Link` and `BytedToken`, have the verifier open the link and complete liveness verification, then query the result with `BytedToken`. **Session endpoints return the direct format** (no `ResponseMetadata`/`Result` envelope).
 
+> **Ark-compatible entry:** the same Actions also work as `POST /?Action={Action}&Version=2024-01-01` (alias `/api/ark`). There, session responses are **wrapped** into `ResponseMetadata` + `Result` instead of the direct format — see the [endpoint comparison](../material/index#endpoints).
+
 ## CreateVisualValidateSession — Create a Verification Session
 
 ### Request

@@ -60,3 +60,50 @@ State flow: submitted → `QUEUED` → `IN_PROGRESS` → `SUCCESS` / `FAILURE`.
 > `usage` reflects the actual token consumption after the task completes. **Only upstreams that report real tokens (e.g. doubao / seedance) include this field on completed tasks**; kling, ali and other channels do not. Tokens relate to gateway billing (quota) but are a different unit — convert for display on your side.
 
 Once the status is `SUCCESS`, call [Download the Video](./download) to fetch the final video, or use `result_url` from the response directly (the URL form and validity period are subject to official confirmation).
+
+## Ark-Compatible Mode (Volcengine Native Protocol)
+
+Tasks created through the [Ark-compatible submit endpoint](./submit#ark-compatible-mode-volcengine-native-protocol) must be queried on the native path:
+
+**GET** `/api/v3/contents/generations/tasks/{id}`
+
+```bash
+BASE_URL="https://api.yunjizi.cn"
+
+curl "$BASE_URL/api/v3/contents/generations/tasks/task_9f3a2b7c" \
+  -H "Authorization: Bearer sk-YOUR-KEY"
+```
+
+### Response
+
+```json
+{
+  "id": "task_9f3a2b7c",
+  "model": "dreamina-seedance-2-0-fast-260128",
+  "status": "succeeded",
+  "content": { "video_url": "https://.../result.mp4?X-Tos-Signature=..." },
+  "usage": { "completion_tokens": 49761, "total_tokens": 49761 },
+  "created_at": 1792841408,
+  "updated_at": 1792841873,
+  "resolution": "480p",
+  "duration": 5
+}
+```
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | Gateway task id (the `id` returned at create time) |
+| `model` | string | Model used for the task |
+| `status` | string | `queued` / `running` / `succeeded` / `failed` |
+| `content.video_url` | string | Result video URL; present on succeeded tasks |
+| `usage` | object | `completion_tokens` / `total_tokens`; only upstreams that report real tokens include it |
+| `resolution` | string | Output resolution |
+| `duration` | number | Output duration in seconds |
+| `created_at` / `updated_at` | number | Unix timestamps (seconds) |
+| `error` | object | `code` / `message`, present on failed tasks |
+
+Status flow: `queued` → `running` → `succeeded` / `failed`.
+
+- The body is the task object itself — there is no `code` / `message` / `data` wrapper.
+- The native path only serves the native channel; `/v1/videos` never routes to it, and vice versa.
+- Errors use the Ark envelope: `{"error":{"code","message","param","type"}}` — see [Errors](../errors).

@@ -5,6 +5,8 @@ description: Create, query, update, and delete asset groups (GetAssetGroup / Cre
 
 An asset group is the container for assets. Create a group first, then upload assets into it (see [Assets](../material/assets)). All four Actions below use the **CRUD envelope** response format.
 
+> **Ark-compatible entry:** every Action on this page also works as `POST /?Action={Action}&Version=2024-01-01` (alias `/api/ark`). Request bodies and ownership checks are identical; only the URL shape and the error envelope differ — see the [endpoint comparison](../material/index#endpoints).
+
 ## GetAssetGroup — Get Asset Group Details
 
 Query an asset group by `Id`. **Only groups owned by the current API key are accessible**; others return `404 NotFound`.
