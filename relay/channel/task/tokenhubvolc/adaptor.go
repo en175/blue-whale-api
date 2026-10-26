@@ -66,6 +66,9 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 	}
 
 	info.HasVideoInput = native.HasVideoInput()
+	// 通用校验把 action 固定成 generate，任务日志会把纯文本和参考视频都显示成
+	// 「图生视频」。这里按 content[] 的实际输入形态改写，与 doubao 适配器同口径。
+	info.Action = inferNativeAction(native)
 
 	// duration 是计费乘数之一。火山用 -1 表示「编辑/延长」由模型决定时长，
 	// 其余必须是正整数且不超过通用上限——原生协议的 duration 不在
@@ -266,6 +269,25 @@ type createResponse struct {
 	ID      string `json:"id"`
 	Error   string `json:"error"`
 	Message string `json:"message"`
+}
+
+// inferNativeAction 按 content[] 的实际输入形态写入任务类型。任务日志与筛选
+// 依赖 action 区分「文生 / 图生 / 视频生」，与 doubao 适配器保持一致：视频优先，
+// 其次图片，纯文本兜底。音频与 draft_task 不单独构成一种类型。
+func inferNativeAction(native *NativeRequest) string {
+	hasImage := false
+	for _, item := range native.Content {
+		if item.Type == "video_url" || item.VideoURL != nil {
+			return constant.TaskActionVideoGenerate
+		}
+		if item.Type == "image_url" || item.ImageURL != nil {
+			hasImage = true
+		}
+	}
+	if hasImage {
+		return constant.TaskActionGenerate
+	}
+	return constant.TaskActionTextGenerate
 }
 
 // isSeedance25Model 报告模型名是否为 Seedance 2.5 系（样片模式的唯一支持者）。

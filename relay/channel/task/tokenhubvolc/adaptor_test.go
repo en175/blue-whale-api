@@ -226,6 +226,70 @@ func TestConvertToNativeArkTask_statusAndPayload(t *testing.T) {
 	})
 }
 
+// TestValidateRequestAndSetAction_infersTaskAction 验证任务日志的 action 按输入
+// 形态写入：参考视频 → videoGenerate、图片 → generate、纯文本 → textGenerate。
+// 之前固定成 generate，导致纯文本和视频生视频都显示成「图生视频」。
+func TestValidateRequestAndSetAction_infersTaskAction(t *testing.T) {
+	tests := []struct {
+		name       string
+		nativeJSON string
+		wantAction string
+	}{
+		{
+			name:       "纯文本是文生视频",
+			nativeJSON: `{"model":"doubao-seedance-2-0-260128","content":[{"type":"text","text":"a cat"}]}`,
+			wantAction: constant.TaskActionTextGenerate,
+		},
+		{
+			name:       "image_url 是图生视频",
+			nativeJSON: `{"model":"doubao-seedance-2-0-260128","content":[{"type":"text","text":"a cat"},{"type":"image_url","image_url":{"url":"asset://a"},"role":"first_frame"}]}`,
+			wantAction: constant.TaskActionGenerate,
+		},
+		{
+			name:       "只带 image_url 字段也识别为图生视频",
+			nativeJSON: `{"model":"doubao-seedance-2-0-260128","content":[{"type":"text","text":"a cat"},{"image_url":{"url":"https://x/a.png"}}]}`,
+			wantAction: constant.TaskActionGenerate,
+		},
+		{
+			name:       "参考视频是视频生视频",
+			nativeJSON: `{"model":"doubao-seedance-2-0-260128","content":[{"type":"text","text":"continue"},{"type":"video_url","video_url":{"url":"https://x/v.mp4"},"role":"reference_video"}]}`,
+			wantAction: constant.TaskActionVideoGenerate,
+		},
+		{
+			name:       "视频优先于图片",
+			nativeJSON: `{"model":"doubao-seedance-2-0-260128","content":[{"type":"text","text":"continue"},{"type":"image_url","image_url":{"url":"https://x/a.png"}},{"type":"video_url","video_url":{"url":"https://x/v.mp4"}}]}`,
+			wantAction: constant.TaskActionVideoGenerate,
+		},
+		{
+			name:       "纯音频不单独成类",
+			nativeJSON: `{"model":"doubao-seedance-2-5-260628","content":[{"type":"text","text":"score"},{"type":"audio_url","audio_url":{"url":"https://x/a.mp3"}}]}`,
+			wantAction: constant.TaskActionTextGenerate,
+		},
+		{
+			name:       "样片同样按输入推断",
+			nativeJSON: `{"model":"doubao-seedance-2-5-260628","content":[{"type":"text","text":"continue"},{"type":"video_url","video_url":{"url":"https://x/v.mp4"},"role":"reference_video"}],"draft":true}`,
+			wantAction: constant.TaskActionVideoGenerate,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c, info, _ := newTaskContext(t, tt.nativeJSON)
+
+			require.Nil(t, (&TaskAdaptor{}).ValidateRequestAndSetAction(c, info))
+			assert.Equal(t, tt.wantAction, info.Action)
+		})
+	}
+
+	t.Run("成片保持 finalizeDraft", func(t *testing.T) {
+		c, info, _ := newTaskContext(t, `{"model":"doubao-seedance-2-5-260628","content":[{"type":"draft_task","draft_task":{"id":"task_abc"}}]}`)
+		info.Action = constant.TaskActionFinalize
+
+		require.Nil(t, (&TaskAdaptor{}).ValidateRequestAndSetAction(c, info))
+		assert.Equal(t, constant.TaskActionFinalize, info.Action)
+	})
+}
+
 func readPayload(t *testing.T, reader io.Reader) map[string]any {
 	t.Helper()
 	raw, err := io.ReadAll(reader)
