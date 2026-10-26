@@ -284,7 +284,7 @@ type ListAssetGroupsResult struct {
 	PageSize   int              `json:"PageSize"`
 }
 
-// handleLocalAssetGroups 对外 ListAssetGroups 的本地实现：查当前用户（API key 所属）在当前
+// buildLocalAssetGroupsResponse 对外 ListAssetGroups 的本地实现：查当前用户（API key 所属）在当前
 // provider 下的归属组，按 Filter.GroupType 过滤 + 分页，包装成 ARK 信封返回。
 // 不查询上游——素材凭证共享，透传会越权看到其他租户的组。
 // version 与 requestID 由调用方给出：路径入口固定 arkVersion；原生入口回显下游 Version

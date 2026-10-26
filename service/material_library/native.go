@@ -276,7 +276,9 @@ func probeAssetOwnership(ctx context.Context, body []byte) (*Response, bool) {
 		return nil, false
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		logger.LogWarn(ctx, "material library get asset ownership probe rejected: upstream status "+strconv.Itoa(resp.StatusCode))
+		if resp.StatusCode >= 500 {
+			logger.LogWarn(ctx, "material library get asset ownership probe failed: upstream status "+strconv.Itoa(resp.StatusCode))
+		}
 		return nil, false
 	}
 	var parsed struct {

@@ -641,9 +641,9 @@ func TestProxy_getAssetOwnershipVolcengine(t *testing.T) {
 	}
 }
 
-// TestHandleLocalAssetGroups_failsClosedWithoutUser 验证缺少用户上下文时绝不按
+// TestBuildLocalAssetGroupsResponse_failsClosedWithoutUser 验证缺少用户上下文时绝不按
 // 「不过滤 user_id」查全表：模型层把 userID<=0 当作无过滤条件，这里必须先拦住。
-func TestHandleLocalAssetGroups_failsClosedWithoutUser(t *testing.T) {
+func TestBuildLocalAssetGroupsResponse_failsClosedWithoutUser(t *testing.T) {
 	model.DB = openMaterialRecordDB(t)
 	require.NoError(t, model.AddUserMaterialGroup(42, "tokenhub", "group-42", "组", "AIGC"))
 	setConfig(t, `{"enabled":true,"provider":"tokenhub","ak":"pak_x","sk":"psk_y"}`)

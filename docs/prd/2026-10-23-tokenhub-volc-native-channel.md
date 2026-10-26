@@ -350,7 +350,7 @@ Content-Type: application/json
 | A15 | `CreateVisualValidateSession` | 上游收到网关回调地址；认证完成后 302 回客户 |
 | A16 | `/api/material/{Action}` 旧接口回归 | 行为与改造前一致 |
 | A17 | `GetAsset` / `UpdateAsset` / `DeleteAsset` 操作他人素材 | 火山错误信封 404，不泄露素材是否存在 |
-| A18 | 旧接口 `UpdateAsset` / `DeleteAsset` 操作他人素材 | 404，与 A17 共用同一 helper |
+| A18 | 旧接口 `GetAsset` / `UpdateAsset` / `DeleteAsset` 操作他人素材 | 404，与 A17 共用同一 helper |
 | A19 | `GetAsset` 查询他人素材 | 404，与 A17 同一 helper |
 
 ---
