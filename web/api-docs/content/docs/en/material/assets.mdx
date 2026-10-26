@@ -184,4 +184,4 @@ curl "$BASE_URL/api/material/DeleteAsset" \
 }
 ```
 
-> Ownership note: `GetAsset` / `DeleteAsset` operate by asset id and **currently do not verify ownership** (assets have no ownership record; an "asset→group" mapping is required — a known limitation, see ADR-0007). Ensure the asset id belongs to the same account used for generation.
+> Ownership note: `GetAsset` / `UpdateAsset` / `DeleteAsset` resolve ownership by calling upstream `GetAsset` and checking the returned `GroupId` against the current API key; if upstream fails or returns no `GroupId`, the request is rejected with `404 NotFound`. The Ark-compatible entry applies the same check. Assets in groups not registered to the current API key (for example, groups created outside the gateway) are treated as not found.

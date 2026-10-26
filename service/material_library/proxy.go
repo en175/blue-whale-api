@@ -76,7 +76,7 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	// 对外查询分组列表：查本地归属表（按 API key 用户隔离，避免越权看到他人组），
 	// 保持 ARK 信封格式返回，不查询上游。
 	if action == "ListAssetGroups" {
-		handleLocalAssetGroups(w, r, body)
+		handleLocalAssetGroups(w, r, body, arkVersion, "")
 		return
 	}
 	// 对外查询真人认证结果：先查本地会话（group_id 已结算则直接返回），
@@ -131,7 +131,9 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 			writeMaterialNotFound(w)
 			return
 		}
-	case "DeleteAsset":
+	case "GetAsset", "DeleteAsset":
+		// 按 asset id 操作：经上游 GetAsset 反查 GroupId 再校验归属，
+		// 防止拿到他人 id 就读取或删除。
 		if !assetOwnedByCurrentUser(r, body) {
 			writeMaterialNotFound(w)
 			return
@@ -253,7 +255,9 @@ type ListAssetGroupsResult struct {
 // handleLocalAssetGroups 对外 ListAssetGroups 的本地实现：查当前用户（API key 所属）在当前
 // provider 下的归属组，按 Filter.GroupType 过滤 + 分页，包装成 ARK 信封返回。
 // 不查询上游——素材凭证共享，透传会越权看到其他租户的组。
-func handleLocalAssetGroups(w http.ResponseWriter, r *http.Request, body []byte) {
+// version 与 requestID 由调用方给出：路径入口固定 arkVersion；原生入口回显下游 Version
+// 与请求 ID，保持与其它 Action 的元数据一致。
+func handleLocalAssetGroups(w http.ResponseWriter, r *http.Request, body []byte, version, requestID string) {
 	var req struct {
 		Filter struct {
 			GroupType string `json:"GroupType"`
@@ -296,11 +300,14 @@ func handleLocalAssetGroups(w http.ResponseWriter, r *http.Request, body []byte)
 		})
 	}
 	// 保持 ARK 信封格式返回（与列表接口一致）：Result 内为 TotalCount/Items/PageNumber/PageSize。
+	if requestID == "" {
+		requestID = "req_local_" + strconv.Itoa(userID) + "_" + strconv.Itoa(page)
+	}
 	envelope := map[string]any{
 		"ResponseMetadata": map[string]any{
-			"RequestId": "req_local_" + strconv.Itoa(userID) + "_" + strconv.Itoa(page),
+			"RequestId": requestID,
 			"Action":    "ListAssetGroups",
-			"Version":   arkVersion,
+			"Version":   version,
 			"Service":   "ark",
 			"Region":    material_setting.GetConfig().VolcengineRegion,
 		},
@@ -606,6 +613,7 @@ func readJSONBodyField(c *gin.Context, field string) string {
 // MaterialNameInvalid 判断名称字段非法（对外代理与管理端共用）：
 //   - 超过 255 rune：防镜像表列宽溢出；超长透传上游 tokenhub 会 500（未优雅拒绝）
 //   - 含 HTML 危险字符 < >：防 XSS 存储
+//
 // SQL 注入负载不在此校验：网关是透明代理，注入防御在上游后端，网关照常透传（错误统一归一化处理）。
 func MaterialNameInvalid(name string) bool {
 	return utf8.RuneCountInString(name) > 255 || strings.ContainsAny(name, "<>")

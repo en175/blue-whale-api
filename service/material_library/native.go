@@ -21,9 +21,9 @@ import (
 //	POST /api/ark?Action=CreateAssetGroup&Version=2024-01-01
 //
 // 与 /api/material/{Action} 的差异（ADR 0024）：Action/Version 走 query、响应
-// 归一成火山官方信封、ListAssetGroups 直接查上游、
-// GetVisualValidateResult 不读本地缓存、名称不做过滤。共用的只有 provider、
-// 凭证与 user_material_groups 归属表。
+// 归一成火山官方信封、GetVisualValidateResult 不读本地缓存、名称不做过滤。
+// 归属隔离与路径入口一致：ListAssetGroups 查本地归属表，素材读取按 API key 校验。
+// 共用的只有 provider、凭证与 user_material_groups 归属表。
 //
 // Version 不校验、原样透传给上游；下游没传时由 provider 补默认值。上游拒绝时
 // 原样返回官方错误码，网关不改写。
@@ -42,6 +42,20 @@ func HandleNativeRequest(c *gin.Context) {
 
 	ctx := context.WithValue(c.Request.Context(), ctxUserID, c.GetInt("id"))
 	request := c.Request.WithContext(ctx)
+
+	// 组列表必须按当前 API key 的归属返回：上游是共享凭证，直接透传会把其他
+	// 租户的组一起列出。与路径入口同源，查本地归属表。
+	if action == "ListAssetGroups" {
+		handleLocalAssetGroups(c.Writer, request, body, nativeVersion(c), c.GetString(common.RequestIdKey))
+		return
+	}
+
+	// 认证结果必须属于当前 API key：路径入口同样先校验本地会话，避免拿着他人
+	// BytedToken 直查上游拿到 GroupId。拒绝时不区分「不存在」与「无权」。
+	if action == "GetVisualValidateResult" && !visualSessionOwnedByCurrentUser(request, body) {
+		writeNativeVisualResult(c, action)
+		return
+	}
 
 	// 真人会话：客户自定义回调 → 替换为网关回调（网关要拿到认证结果），认证后
 	// 再 302 回客户。归属记录里同时保留客户原值，供回调查询时还原。
@@ -181,7 +195,7 @@ func checkNativeOwnership(r *http.Request, action string, body []byte) (status i
 		if !groupsOwnedByCurrentUser(r, body) {
 			return 404, "NotFound", "resource not found", false
 		}
-	case "UpdateAsset", "DeleteAsset":
+	case "UpdateAsset", "DeleteAsset", "GetAsset":
 		if _, valid := nativeStringField(body, "Id"); !valid {
 			return 400, "InvalidParameter", "Id must be a string", false
 		}
@@ -262,6 +276,36 @@ func writeNativeResponse(c *gin.Context, resp *Response) {
 	}
 	c.Writer.WriteHeader(resp.StatusCode)
 	_, _ = c.Writer.Write(resp.Body)
+}
+
+// visualSessionOwnedByCurrentUser 校验 BytedToken 对应的会话属于当前 API key。
+// token 为空时放行，交上游报参数错误；会话不存在按无权处理。
+func visualSessionOwnedByCurrentUser(r *http.Request, body []byte) bool {
+	token := jsonStringFields(body, "BytedToken")["BytedToken"]
+	if token == "" {
+		return true
+	}
+	session, err := model.GetVisualValidateSessionByToken(token)
+	if err != nil || session == nil {
+		return false
+	}
+	userID, _ := r.Context().Value(ctxUserID).(int)
+	return session.UserId == userID
+}
+
+// writeNativeVisualResult 在归属校验失败时返回空 GroupId（火山信封），与路径入口
+// 语义一致：不区分会话不存在与不属于当前用户，避免探测。
+func writeNativeVisualResult(c *gin.Context, action string) {
+	c.JSON(http.StatusOK, map[string]any{
+		"ResponseMetadata": map[string]any{
+			"RequestId": c.GetString(common.RequestIdKey),
+			"Action":    action,
+			"Version":   nativeVersion(c),
+			"Service":   "ark",
+			"Region":    material_setting.GetConfig().VolcengineRegion,
+		},
+		"Result": map[string]string{"GroupId": ""},
+	})
 }
 
 // writeNativeError 构造火山管控面错误信封。

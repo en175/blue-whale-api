@@ -207,7 +207,7 @@ func TestProxy_listAssetGroupsLocalIsolation(t *testing.T) {
 	var out struct {
 		Result struct {
 			TotalCount int `json:"TotalCount"`
-			Items []struct {
+			Items      []struct {
 				Id        string `json:"Id"`
 				Name      string `json:"Name"`
 				GroupType string `json:"GroupType"`
@@ -562,4 +562,39 @@ func TestProxy_getVisualValidateResult_volcengineNotFound(t *testing.T) {
 	}
 	require.NoError(t, common.Unmarshal(rec.Body.Bytes(), &direct))
 	assert.Equal(t, "", direct.GroupId)
+}
+
+// TestProxy_getAssetRequiresOwnership 验证路径入口的 GetAsset 与 Update/Delete
+// 同口径：经上游 GetAsset 反查 GroupId 校验归属，非本人素材 404 且不再读取。
+func TestProxy_getAssetRequiresOwnership(t *testing.T) {
+	model.DB = openMaterialRecordDB(t)
+	require.NoError(t, model.AddUserMaterialGroup(42, "tokenhub", "group-owned", "我的组", "AIGC"))
+
+	for _, tc := range []struct {
+		name       string
+		groupID    string
+		wantStatus int
+		wantCalls  int
+	}{
+		{name: "foreign asset", groupID: "group-foreign", wantStatus: http.StatusNotFound, wantCalls: 1},
+		{name: "owned asset", groupID: "group-owned", wantStatus: http.StatusOK, wantCalls: 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			calls := 0
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls++
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"ResponseMetadata":{},"Result":{"Id":"asset-x","GroupId":"` + tc.groupID + `"}}`))
+			}))
+			defer upstream.Close()
+			setConfig(t, fmt.Sprintf(`{"enabled":true,"ak":"pak_x","sk":"psk_y","base_url":%q}`, upstream.URL))
+
+			c := newRecordContext(t, "/api/material/GetAsset", `{"Id":"asset-x"}`)
+			rec := httptest.NewRecorder()
+			Proxy().ServeHTTP(rec, c.Request)
+
+			require.Equal(t, tc.wantStatus, rec.Code)
+			assert.Equal(t, tc.wantCalls, calls)
+		})
+	}
 }
