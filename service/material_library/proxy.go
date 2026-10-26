@@ -76,7 +76,15 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	// 对外查询分组列表：查本地归属表（按 API key 用户隔离，避免越权看到他人组），
 	// 保持 ARK 信封格式返回，不查询上游。
 	if action == "ListAssetGroups" {
-		handleLocalAssetGroups(w, r, body)
+		data, err := buildLocalAssetGroupsResponse(r, body, arkVersion, "")
+		if err != nil {
+			logger.LogError(r.Context(), "list local asset groups failed: "+err.Error())
+			writeMaterialError(w, http.StatusInternalServerError, "InternalError", "list asset groups failed")
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(data)
 		return
 	}
 	// 对外查询真人认证结果：先查本地会话（group_id 已结算则直接返回），
@@ -131,7 +139,22 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 			writeMaterialNotFound(w)
 			return
 		}
+	case "GetAsset":
+		// 经上游反查 GroupId 再校验归属；探测响应就是素材详情，直接复用，
+		// 避免同一素材查两次上游。
+		probe, owned := probeAssetOwnership(r.Context(), body)
+		if !owned {
+			writeMaterialNotFound(w)
+			return
+		}
+		if probe != nil {
+			writeProxyUpstreamResponse(w, action, probe, "")
+			return
+		}
+		// Id 为空：交给上游报参数错误。
 	case "DeleteAsset":
+		// 按 asset id 操作：经上游 GetAsset 反查 GroupId 再校验归属，
+		// 防止拿到他人 id 就删除。
 		if !assetOwnedByCurrentUser(r, body) {
 			writeMaterialNotFound(w)
 			return
@@ -152,6 +175,12 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	observeOwnership(r.Context(), resp)
+	writeProxyUpstreamResponse(w, action, resp, customCallback)
+}
+
+// writeProxyUpstreamResponse 把上游响应按 tokenhub 对外格式回写：还原客户回调、
+// 归一化信封、跳过已失效的 Content-Length。
+func writeProxyUpstreamResponse(w http.ResponseWriter, action string, resp *Response, customCallback string) {
 	// 对外真人会话：响应 Result.CallbackURL 替换回客户原值（客户应看到自己传的回调，而非网关内置）。
 	if customCallback != "" {
 		resp.Body = restoreClientCallback(resp.Body, customCallback)
@@ -179,7 +208,7 @@ func rewriteVisualCallbackBody(r *http.Request, body []byte) ([]byte, string) {
 	if err := common.Unmarshal(body, &m); err != nil {
 		return body, ""
 	}
-	clientCB, _ := m["CallbackURL"].(string)
+	clientCB, _ := foldStringField(m, "CallbackURL")
 	if clientCB == "" {
 		return body, ""
 	}
@@ -187,7 +216,12 @@ func rewriteVisualCallbackBody(r *http.Request, body []byte) ([]byte, string) {
 	if clientCB == gatewayCB {
 		return body, ""
 	}
-	m["CallbackURL"] = gatewayCB
+	// 上游按大小写不敏感解析键名，所有同名字段都要替换，不能只改标准写法。
+	for key := range m {
+		if strings.EqualFold(key, "CallbackURL") {
+			m[key] = gatewayCB
+		}
+	}
 	rewritten, err := common.Marshal(m)
 	if err != nil {
 		return body, ""
@@ -250,10 +284,12 @@ type ListAssetGroupsResult struct {
 	PageSize   int              `json:"PageSize"`
 }
 
-// handleLocalAssetGroups 对外 ListAssetGroups 的本地实现：查当前用户（API key 所属）在当前
+// buildLocalAssetGroupsResponse 对外 ListAssetGroups 的本地实现：查当前用户（API key 所属）在当前
 // provider 下的归属组，按 Filter.GroupType 过滤 + 分页，包装成 ARK 信封返回。
 // 不查询上游——素材凭证共享，透传会越权看到其他租户的组。
-func handleLocalAssetGroups(w http.ResponseWriter, r *http.Request, body []byte) {
+// version 与 requestID 由调用方给出：路径入口固定 arkVersion；原生入口回显下游 Version
+// 与请求 ID，保持与其它 Action 的元数据一致。
+func buildLocalAssetGroupsResponse(r *http.Request, body []byte, version, requestID string) ([]byte, error) {
 	var req struct {
 		Filter struct {
 			GroupType string `json:"GroupType"`
@@ -270,16 +306,20 @@ func handleLocalAssetGroups(w http.ResponseWriter, r *http.Request, body []byte)
 		pageSize = req.PageSize
 	}
 	userID, _ := r.Context().Value(ctxUserID).(int)
-	groups, err := model.GetMaterialGroups(userID, material_setting.GetConfig().Provider, req.Filter.GroupType)
-	if err != nil {
-		logger.LogError(r.Context(), "list local asset groups failed: "+err.Error())
-		http.Error(w, "list asset groups failed", http.StatusInternalServerError)
-		return
+	var groups []*model.UserMaterialGroup
+	if userID > 0 {
+		var err error
+		groups, err = model.GetMaterialGroups(userID, material_setting.GetConfig().Provider, req.Filter.GroupType)
+		if err != nil {
+			return nil, err
+		}
 	}
 	total := len(groups)
-	start := (page - 1) * pageSize
-	if start > total {
-		start = total
+	// 先比较页码再相乘：直接算 (page-1)*pageSize 会被超大 PageNumber 溢出成负数
+	// 或错误的正数，导致切片越界。
+	start := total
+	if page-1 <= total/pageSize {
+		start = (page - 1) * pageSize
 	}
 	end := start + pageSize
 	if end > total {
@@ -296,24 +336,20 @@ func handleLocalAssetGroups(w http.ResponseWriter, r *http.Request, body []byte)
 		})
 	}
 	// 保持 ARK 信封格式返回（与列表接口一致）：Result 内为 TotalCount/Items/PageNumber/PageSize。
+	if requestID == "" {
+		requestID = "req_local_" + strconv.Itoa(userID) + "_" + strconv.Itoa(page)
+	}
 	envelope := map[string]any{
 		"ResponseMetadata": map[string]any{
-			"RequestId": "req_local_" + strconv.Itoa(userID) + "_" + strconv.Itoa(page),
+			"RequestId": requestID,
 			"Action":    "ListAssetGroups",
-			"Version":   arkVersion,
+			"Version":   version,
 			"Service":   "ark",
 			"Region":    material_setting.GetConfig().VolcengineRegion,
 		},
 		"Result": ListAssetGroupsResult{TotalCount: total, Items: items, PageNumber: page, PageSize: pageSize},
 	}
-	data, err := common.Marshal(envelope)
-	if err != nil {
-		http.Error(w, "list asset groups failed", http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(data)
+	return common.Marshal(envelope)
 }
 
 // handleGetVisualValidateResult 对外 GetVisualValidateResult 的缓存化实现：
@@ -456,25 +492,23 @@ func createAssetGroupOwned(r *http.Request, body []byte) bool {
 
 // writeMaterialNotFound 返回 tokenhub 风格 404 错误（不区分不存在/无权，避免探测）。
 func writeMaterialNotFound(w http.ResponseWriter) {
-	envelope := map[string]any{
-		"ResponseMetadata": map[string]any{},
-		"ResponseError":    map[string]any{"Code": "NotFound", "Message": "resource not found"},
-	}
-	data, _ := common.Marshal(envelope)
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusNotFound)
-	_, _ = w.Write(data)
+	writeMaterialError(w, http.StatusNotFound, "NotFound", "resource not found")
 }
 
 // writeMaterialBadRequest 返回 tokenhub 风格 400 错误（请求参数非法，如 ListAssets 空 GroupIds）。
 func writeMaterialBadRequest(w http.ResponseWriter) {
+	writeMaterialError(w, http.StatusBadRequest, "InvalidParameter", "invalid parameter")
+}
+
+// writeMaterialError 按旧接口契约写 tokenhub 风格错误信封。
+func writeMaterialError(w http.ResponseWriter, statusCode int, code, message string) {
 	envelope := map[string]any{
 		"ResponseMetadata": map[string]any{},
-		"ResponseError":    map[string]any{"Code": "InvalidParameter", "Message": "invalid parameter"},
+		"ResponseError":    map[string]any{"Code": code, "Message": message},
 	}
 	data, _ := common.Marshal(envelope)
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusBadRequest)
+	w.WriteHeader(statusCode)
 	_, _ = w.Write(data)
 }
 
@@ -606,6 +640,7 @@ func readJSONBodyField(c *gin.Context, field string) string {
 // MaterialNameInvalid 判断名称字段非法（对外代理与管理端共用）：
 //   - 超过 255 rune：防镜像表列宽溢出；超长透传上游 tokenhub 会 500（未优雅拒绝）
 //   - 含 HTML 危险字符 < >：防 XSS 存储
+//
 // SQL 注入负载不在此校验：网关是透明代理，注入防御在上游后端，网关照常透传（错误统一归一化处理）。
 func MaterialNameInvalid(name string) bool {
 	return utf8.RuneCountInString(name) > 255 || strings.ContainsAny(name, "<>")

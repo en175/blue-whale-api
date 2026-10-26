@@ -207,7 +207,7 @@ func TestProxy_listAssetGroupsLocalIsolation(t *testing.T) {
 	var out struct {
 		Result struct {
 			TotalCount int `json:"TotalCount"`
-			Items []struct {
+			Items      []struct {
 				Id        string `json:"Id"`
 				Name      string `json:"Name"`
 				GroupType string `json:"GroupType"`
@@ -562,4 +562,124 @@ func TestProxy_getVisualValidateResult_volcengineNotFound(t *testing.T) {
 	}
 	require.NoError(t, common.Unmarshal(rec.Body.Bytes(), &direct))
 	assert.Equal(t, "", direct.GroupId)
+}
+
+// TestProxy_getAssetRequiresOwnership 验证路径入口的 GetAsset 与 Update/Delete
+// 同口径：经上游 GetAsset 反查 GroupId 校验归属，非本人素材 404 且不再读取。
+func TestProxy_getAssetRequiresOwnership(t *testing.T) {
+	model.DB = openMaterialRecordDB(t)
+	require.NoError(t, model.AddUserMaterialGroup(42, "tokenhub", "group-owned", "我的组", "AIGC"))
+
+	for _, tc := range []struct {
+		name       string
+		body       string
+		groupID    string
+		wantStatus int
+		wantCalls  int
+	}{
+		{name: "foreign asset", body: `{"Id":"asset-x"}`, groupID: "group-foreign", wantStatus: http.StatusNotFound, wantCalls: 1},
+		{name: "foreign asset lowercase key", body: `{"id":"asset-x"}`, groupID: "group-foreign", wantStatus: http.StatusNotFound, wantCalls: 1},
+		{name: "conflicting keys", body: `{"Id":"asset-x","id":"asset-y"}`, wantStatus: http.StatusNotFound, wantCalls: 0},
+		{name: "owned asset", body: `{"Id":"asset-x"}`, groupID: "group-owned", wantStatus: http.StatusOK, wantCalls: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			calls := 0
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls++
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"ResponseMetadata":{},"Result":{"Id":"asset-x","GroupId":"` + tc.groupID + `"}}`))
+			}))
+			defer upstream.Close()
+			setConfig(t, fmt.Sprintf(`{"enabled":true,"ak":"pak_x","sk":"psk_y","base_url":%q}`, upstream.URL))
+
+			c := newRecordContext(t, "/api/material/GetAsset", tc.body)
+			rec := httptest.NewRecorder()
+			Proxy().ServeHTTP(rec, c.Request)
+
+			require.Equal(t, tc.wantStatus, rec.Code)
+			assert.Equal(t, tc.wantCalls, calls, "归属校验通过后直接复用探测响应，不再读取")
+		})
+	}
+}
+
+// TestProxy_getAssetOwnershipVolcengine 验证火山直连 provider 的素材归属探测
+// 同样读取 Result.GroupId（ADR 0024 要求两个 provider 各验证一次）。
+func TestProxy_getAssetOwnershipVolcengine(t *testing.T) {
+	model.DB = openMaterialRecordDB(t)
+	require.NoError(t, model.AddUserMaterialGroup(42, "volcengine", "group-volc", "组", "AIGC"))
+	defer setConfig(t, `{"enabled":true,"provider":"tokenhub","ak":"pak_x","sk":"psk_y","base_url":""}`)
+
+	for _, tc := range []struct {
+		name       string
+		groupID    string
+		wantStatus int
+	}{
+		{name: "foreign asset", groupID: "group-foreign", wantStatus: http.StatusNotFound},
+		{name: "owned asset", groupID: "group-volc", wantStatus: http.StatusOK},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			calls := 0
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls++
+				assert.NotEmpty(t, r.Header.Get("Authorization"), "火山请求必须带 SigV4 签名")
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"ResponseMetadata":{"RequestId":"req-1"},"Result":{"Id":"asset-x","GroupId":"` + tc.groupID + `"}}`))
+			}))
+			defer upstream.Close()
+			setConfig(t, fmt.Sprintf(`{"enabled":true,"provider":"volcengine","volcengine_access_key":"ak","volcengine_secret_key":"sk","volcengine_base_url":%q}`, upstream.URL))
+
+			c := newRecordContext(t, "/api/material/GetAsset", `{"Id":"asset-x"}`)
+			rec := httptest.NewRecorder()
+			Proxy().ServeHTTP(rec, c.Request)
+
+			require.Equal(t, tc.wantStatus, rec.Code)
+			assert.Equal(t, 1, calls)
+			if tc.wantStatus == http.StatusOK {
+				assert.JSONEq(t, `{"ResponseMetadata":{"RequestId":"req-1"},"Result":{"Id":"asset-x","GroupId":"`+tc.groupID+`"}}`, rec.Body.String())
+			}
+		})
+	}
+}
+
+// TestBuildLocalAssetGroupsResponse_failsClosedWithoutUser 验证缺少用户上下文时绝不按
+// 「不过滤 user_id」查全表：模型层把 userID<=0 当作无过滤条件，这里必须先拦住。
+func TestBuildLocalAssetGroupsResponse_failsClosedWithoutUser(t *testing.T) {
+	model.DB = openMaterialRecordDB(t)
+	require.NoError(t, model.AddUserMaterialGroup(42, "tokenhub", "group-42", "组", "AIGC"))
+	setConfig(t, `{"enabled":true,"provider":"tokenhub","ak":"pak_x","sk":"psk_y"}`)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/material/ListAssetGroups", strings.NewReader(`{}`))
+	data, err := buildLocalAssetGroupsResponse(req, []byte(`{}`), arkVersion, "")
+	require.NoError(t, err)
+
+	var out struct {
+		Result struct {
+			TotalCount int              `json:"TotalCount"`
+			Items      []AssetGroupItem `json:"Items"`
+		} `json:"Result"`
+	}
+	require.NoError(t, common.Unmarshal(data, &out))
+	assert.Zero(t, out.Result.TotalCount)
+	assert.Empty(t, out.Result.Items)
+}
+
+// TestProxy_listAssetGroupsDBErrorUsesEnvelope 验证本地组列表查询失败时仍按旧
+// 接口契约返回 tokenhub 错误信封，而不是纯文本 500。
+func TestProxy_listAssetGroupsDBErrorUsesEnvelope(t *testing.T) {
+	db := openMaterialRecordDB(t)
+	model.DB = db
+	require.NoError(t, db.Migrator().DropTable(&model.UserMaterialGroup{}))
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("ListAssetGroups 不得查上游")
+	}))
+	defer upstream.Close()
+	setConfig(t, fmt.Sprintf(`{"enabled":true,"ak":"pak_x","sk":"psk_y","base_url":%q}`, upstream.URL))
+
+	c := newRecordContext(t, "/api/material/ListAssetGroups", `{}`)
+	rec := httptest.NewRecorder()
+	Proxy().ServeHTTP(rec, c.Request)
+
+	require.Equal(t, http.StatusInternalServerError, rec.Code)
+	assert.JSONEq(t, `{"ResponseMetadata":{},"ResponseError":{"Code":"InternalError","Message":"list asset groups failed"}}`, rec.Body.String())
 }

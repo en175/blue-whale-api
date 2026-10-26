@@ -36,6 +36,7 @@ ADR 0005 以透明反向代理接入 ai-tokenhub 素材库（火山 ARK 兼容�
 - ListAssets：`Filter.GroupIds` 全部校验，空 GroupIds 400 拒绝
 - CreateAsset：目标组归属校验
 - 素材单操作（GetAsset/UpdateAsset/DeleteAsset）：素材不落库，需「素材→组」归属映射，后续处理
+  - 2026-10-26 已实现（IKQFXR）：先调上游 `GetAsset` 取 `GroupId`，再复用组归属校验；两个入口一致，查询失败或无 `GroupId` 一律拒绝。`ListAssetGroups` 在兼容入口也改为查本地归属表，`GetVisualValidateResult` 补会话归属校验。
 - 会话不存在 / 非本人：fail-closed 返回空（不查上游、不泄露）
 
 ### 4. 真人素材认证闭环

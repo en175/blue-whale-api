@@ -1,6 +1,7 @@
 package material_library
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -8,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/model"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -22,6 +24,7 @@ func newNativeServer(t *testing.T, upstream http.HandlerFunc) (*httptest.Server,
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
+	router.Use(func(c *gin.Context) { c.Set("id", 42) })
 	router.POST("/api/ark", HandleNativeRequest)
 	return server, router
 }
@@ -97,7 +100,7 @@ func TestHandleNativeRequest_keepsUpstreamErrorEnvelope(t *testing.T) {
 		_, _ = w.Write([]byte(`{"ResponseMetadata":{"Error":{"Code":"NotFound","Message":"no such group"}}}`))
 	})
 
-	w := doNativeRequest(t, router, "/api/ark?Action=GetAsset&Version=2024-01-01", `{"Id":"asset-1"}`)
+	w := doNativeRequest(t, router, "/api/ark?Action=SomeFutureAction&Version=2024-01-01", `{"Id":"asset-1"}`)
 
 	require.Equal(t, http.StatusNotFound, w.Code)
 	assert.JSONEq(t, `{"ResponseMetadata":{"Error":{"Code":"NotFound","Message":"no such group"}}}`, w.Body.String())
@@ -139,22 +142,72 @@ func TestHandleNativeRequest_listAssetsRequiresGroupIds(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "Filter.GroupIds")
 }
 
-// TestHandleNativeRequest_passesPageNumberThrough 验证分页只走页码模式：
-// PageNumber / PageSize 原样送达上游，不做 MaxResults / NextToken 映射。
-func TestHandleNativeRequest_passesPageNumberThrough(t *testing.T) {
-	var gotBody string
+// TestHandleNativeRequest_listAssetGroupsLocalIsolation 验证兼容入口的组列表
+// 与路径入口同源：只查本地归属表、按当前 API key 过滤，不触达上游。
+func TestHandleNativeRequest_listAssetGroupsLocalIsolation(t *testing.T) {
+	model.DB = openMaterialRecordDB(t)
+	require.NoError(t, model.AddUserMaterialGroup(42, "tokenhub", "g-user42-a", "A组", "AIGC"))
+	require.NoError(t, model.AddUserMaterialGroup(42, "tokenhub", "g-user42-b", "B组", "AIGC"))
+	require.NoError(t, model.AddUserMaterialGroup(42, "tokenhub", "g-user42-live", "真人组", "LivenessFace"))
+	require.NoError(t, model.AddUserMaterialGroup(7, "tokenhub", "g-user7", "他人组", "AIGC"))
+
 	_, router := newNativeServer(t, func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		gotBody = string(body)
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"ResponseMetadata":{},"Result":{"TotalCount":0,"Items":[]}}`))
+		t.Error("ListAssetGroups 不得查上游")
 	})
 
-	w := doNativeRequest(t, router, "/api/ark?Action=ListAssetGroups&Version=2024-01-01",
-		`{"Filter":{"GroupType":"AIGC"},"PageNumber":2,"PageSize":5}`)
+	w := doNativeRequest(t, router,
+		"/api/ark?Action=ListAssetGroups&Version=2023-01-01",
+		`{"Filter":{"GroupType":"AIGC"},"PageNumber":1,"PageSize":10}`)
 
 	require.Equal(t, http.StatusOK, w.Code)
-	assert.JSONEq(t, `{"Filter":{"GroupType":"AIGC"},"PageNumber":2,"PageSize":5}`, gotBody)
+	var out struct {
+		ResponseMetadata struct {
+			RequestId string `json:"RequestId"`
+			Action    string `json:"Action"`
+			Version   string `json:"Version"`
+		} `json:"ResponseMetadata"`
+		Result struct {
+			TotalCount int `json:"TotalCount"`
+			Items      []struct {
+				Id string `json:"Id"`
+			} `json:"Items"`
+		} `json:"Result"`
+	}
+	require.NoError(t, common.Unmarshal(w.Body.Bytes(), &out))
+	assert.Equal(t, "ListAssetGroups", out.ResponseMetadata.Action)
+	assert.Equal(t, "2023-01-01", out.ResponseMetadata.Version)
+	assert.NotEmpty(t, out.ResponseMetadata.RequestId)
+	assert.Equal(t, 2, out.Result.TotalCount)
+	require.Len(t, out.Result.Items, 2)
+	for _, item := range out.Result.Items {
+		assert.NotEqual(t, "g-user7", item.Id, "不得返回其他用户的组")
+	}
+}
+
+// TestHandleNativeRequest_listAssetGroupsHugePage 验证超大 PageNumber 不会因
+// (page-1)*pageSize 溢出而切片越界 panic，超出末页时返回空 Items。
+func TestHandleNativeRequest_listAssetGroupsHugePage(t *testing.T) {
+	model.DB = openMaterialRecordDB(t)
+	require.NoError(t, model.AddUserMaterialGroup(42, "tokenhub", "g-user42", "组", "AIGC"))
+
+	_, router := newNativeServer(t, func(w http.ResponseWriter, r *http.Request) {
+		t.Error("ListAssetGroups 不得查上游")
+	})
+
+	w := doNativeRequest(t, router,
+		"/api/ark?Action=ListAssetGroups&Version=2024-01-01",
+		`{"Filter":{"GroupType":"AIGC"},"PageNumber":922337203685477580,"PageSize":100}`)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var out struct {
+		Result struct {
+			TotalCount int   `json:"TotalCount"`
+			Items      []any `json:"Items"`
+		} `json:"Result"`
+	}
+	require.NoError(t, common.Unmarshal(w.Body.Bytes(), &out))
+	assert.Equal(t, 1, out.Result.TotalCount)
+	assert.Empty(t, out.Result.Items)
 }
 
 // TestHandleNativeRequest_restoresClientCallback 验证真人会话的回调改写闭环：
@@ -188,14 +241,14 @@ func TestHandleNativeRequest_movesResponseErrorIntoMetadata(t *testing.T) {
 	_, router := newNativeServer(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
-		_, _ = w.Write([]byte(`{"ResponseMetadata":{"RequestId":"up-1","Action":"GetAsset"},` +
+		_, _ = w.Write([]byte(`{"ResponseMetadata":{"RequestId":"up-1","Action":"SomeFutureAction"},` +
 			`"ResponseError":{"Code":"NotFound","Message":"resource not found"}}`))
 	})
 
-	w := doNativeRequest(t, router, "/api/ark?Action=GetAsset&Version=2024-01-01", `{"Id":"asset-1"}`)
+	w := doNativeRequest(t, router, "/api/ark?Action=SomeFutureAction&Version=2024-01-01", `{"Id":"asset-1"}`)
 
 	require.Equal(t, http.StatusNotFound, w.Code)
-	assert.JSONEq(t, `{"ResponseMetadata":{"RequestId":"up-1","Action":"GetAsset",`+
+	assert.JSONEq(t, `{"ResponseMetadata":{"RequestId":"up-1","Action":"SomeFutureAction",`+
 		`"Error":{"Code":"NotFound","Message":"resource not found"}}}`, w.Body.String())
 }
 
@@ -240,6 +293,8 @@ func TestHandleNativeRequest_rejectsMalformedIdentifiers(t *testing.T) {
 		{"GetAssetGroup", `{"Id":123}`},
 		{"UpdateAssetGroup", `{"Id":123,"Description":"x"}`},
 		{"DeleteAssetGroup", `not-json`},
+		{"GetAsset", `{"Id":123}`},
+		{"GetAsset", `{"id":123}`},
 		{"UpdateAsset", `{"Id":123}`},
 		{"DeleteAsset", `[]`},
 		{"CreateAsset", `{"GroupId":123,"URL":"https://x/y.jpg","Name":"a","AssetType":"Image"}`},
@@ -254,6 +309,177 @@ func TestHandleNativeRequest_rejectsMalformedIdentifiers(t *testing.T) {
 
 			require.Equal(t, http.StatusBadRequest, w.Code)
 			assert.Contains(t, w.Body.String(), "InvalidParameter")
+		})
+	}
+}
+
+// TestHandleNativeRequest_visualResultRequiresSessionOwner 验证兼容入口的认证结果
+// 查询与路径入口同口径：token 不存在或不属于当前 API key 时返回空 GroupId，
+// 且不向上游发起查询。
+func TestHandleNativeRequest_visualResultRequiresSessionOwner(t *testing.T) {
+	model.DB = openMaterialRecordDB(t)
+	require.NoError(t, model.AddVisualValidateSession(42, "tokenhub", "mine", "bt-mine", "h5", "cb", "proj", ""))
+	require.NoError(t, model.AddVisualValidateSession(7, "tokenhub", "other", "bt-other", "h5", "cb", "proj", ""))
+
+	for _, tc := range []struct {
+		name          string
+		body          string
+		upstreamCalls int
+		wantGroup     string
+	}{
+		{name: "owner", body: `{"BytedToken":"bt-mine"}`, upstreamCalls: 1, wantGroup: "group-mine"},
+		{name: "other user", body: `{"BytedToken":"bt-other"}`, upstreamCalls: 0},
+		{name: "unknown token", body: `{"BytedToken":"bt-unknown"}`, upstreamCalls: 0},
+		// 上游按大小写不敏感解析键名，小写字段同样必须走归属校验。
+		{name: "other user lowercase key", body: `{"bytedtoken":"bt-other"}`, upstreamCalls: 0},
+		{name: "conflicting keys", body: `{"BytedToken":"bt-mine","bytedtoken":"bt-other"}`, upstreamCalls: 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			calls := 0
+			_, router := newNativeServer(t, func(w http.ResponseWriter, r *http.Request) {
+				calls++
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"GroupId":"group-mine"}`))
+			})
+
+			w := doNativeRequest(t, router,
+				"/api/ark?Action=GetVisualValidateResult&Version=2024-01-01", tc.body)
+
+			require.Equal(t, http.StatusOK, w.Code)
+			var out struct {
+				Result struct {
+					GroupId string `json:"GroupId"`
+				} `json:"Result"`
+			}
+			require.NoError(t, common.Unmarshal(w.Body.Bytes(), &out))
+			assert.Equal(t, tc.wantGroup, out.Result.GroupId)
+			assert.Equal(t, tc.upstreamCalls, calls)
+		})
+	}
+}
+
+// TestWithProjectName 验证查询体里的 ProjectName 以会话记录为准，并兼容大小写键名。
+func TestWithProjectName(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		body string
+		want string
+	}{
+		{name: "missing", body: `{"BytedToken":"t"}`, want: `{"BytedToken":"t","ProjectName":"p"}`},
+		{name: "same", body: `{"BytedToken":"t","ProjectName":"p"}`, want: `{"BytedToken":"t","ProjectName":"p"}`},
+		{name: "mismatch", body: `{"BytedToken":"t","ProjectName":"other"}`, want: `{"BytedToken":"t","ProjectName":"p"}`},
+		{name: "lowercase key", body: `{"bytedToken":"t","projectName":"other"}`, want: `{"bytedToken":"t","ProjectName":"p"}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.JSONEq(t, tc.want, string(withProjectName([]byte(tc.body), "p")))
+		})
+	}
+}
+
+// TestHandleNativeRequest_visualResultUsesSessionProvider 验证兼容入口按会话记录
+// 的 provider 查询认证结果，并补上创建会话时的 ProjectName。
+func TestHandleNativeRequest_visualResultUsesSessionProvider(t *testing.T) {
+	model.DB = openMaterialRecordDB(t)
+	require.NoError(t, model.AddVisualValidateSession(42, "volcengine", "mine", "bt-mine", "h5", "cb", "proj-x", ""))
+
+	tokenhubCalls := 0
+	tokenhub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tokenhubCalls++
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"GroupId":"group-wrong"}`))
+	}))
+	defer tokenhub.Close()
+
+	var got struct {
+		BytedToken  string `json:"BytedToken"`
+		ProjectName string `json:"ProjectName"`
+	}
+	volcCalls := 0
+	volc := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		volcCalls++
+		body, _ := io.ReadAll(r.Body)
+		_ = common.Unmarshal(body, &got)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ResponseMetadata":{"RequestId":"req-volc"},"Result":{"GroupId":"group-mine"}}`))
+	}))
+	defer volc.Close()
+
+	setConfig(t, fmt.Sprintf(`{"enabled":true,"provider":"tokenhub","ak":"pak","sk":"psk","base_url":%q,`+
+		`"volcengine_access_key":"ak","volcengine_secret_key":"sk","volcengine_base_url":%q}`,
+		tokenhub.URL, volc.URL))
+	defer setConfig(t, `{"enabled":true,"provider":"tokenhub","ak":"pak","sk":"psk","base_url":""}`)
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(func(c *gin.Context) { c.Set("id", 42) })
+	router.POST("/api/ark", HandleNativeRequest)
+
+	w := doNativeRequest(t, router, "/api/ark?Action=GetVisualValidateResult&Version=2024-01-01", `{"BytedToken":"bt-mine"}`)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Zero(t, tokenhubCalls, "必须按会话记录的 provider 查询")
+	assert.Equal(t, 1, volcCalls)
+	assert.Equal(t, "bt-mine", got.BytedToken)
+	assert.Equal(t, "proj-x", got.ProjectName, "客户端漏传时补会话记录的 ProjectName")
+	assert.Contains(t, w.Body.String(), "group-mine")
+}
+
+// TestHandleNativeRequest_listAssetGroupsDBErrorUsesArkEnvelope 验证本地组列表
+// 查询失败时仍返回火山信封，而不是纯文本 500。
+func TestHandleNativeRequest_listAssetGroupsDBErrorUsesArkEnvelope(t *testing.T) {
+	db := openMaterialRecordDB(t)
+	model.DB = db
+	require.NoError(t, db.Migrator().DropTable(&model.UserMaterialGroup{}))
+
+	_, router := newNativeServer(t, func(w http.ResponseWriter, r *http.Request) {
+		t.Error("ListAssetGroups 不得查上游")
+	})
+
+	w := doNativeRequest(t, router, "/api/ark?Action=ListAssetGroups&Version=2024-01-01", `{}`)
+
+	require.Equal(t, http.StatusInternalServerError, w.Code)
+	var out struct {
+		ResponseMetadata struct {
+			Error struct {
+				Code    string `json:"Code"`
+				Message string `json:"Message"`
+			} `json:"Error"`
+		} `json:"ResponseMetadata"`
+	}
+	require.NoError(t, common.Unmarshal(w.Body.Bytes(), &out))
+	assert.Equal(t, "InternalError", out.ResponseMetadata.Error.Code)
+}
+
+// TestHandleNativeRequest_getAssetRequiresOwnership 验证兼容入口的 GetAsset
+// 与 Update/Delete 同口径：先反查 GroupId 校验归属，非本人素材 404 且不再读取。
+func TestHandleNativeRequest_getAssetRequiresOwnership(t *testing.T) {
+	model.DB = openMaterialRecordDB(t)
+	require.NoError(t, model.AddUserMaterialGroup(42, "tokenhub", "group-owned", "我的组", "AIGC"))
+
+	for _, tc := range []struct {
+		name         string
+		body         string
+		groupID      string
+		wantStatus   int
+		upstreamCall int
+	}{
+		{name: "foreign asset", body: `{"Id":"asset-x"}`, groupID: "group-foreign", wantStatus: http.StatusNotFound, upstreamCall: 1},
+		{name: "foreign asset lowercase key", body: `{"id":"asset-x"}`, groupID: "group-foreign", wantStatus: http.StatusNotFound, upstreamCall: 1},
+		{name: "conflicting keys", body: `{"Id":"asset-x","id":"asset-y"}`, wantStatus: http.StatusBadRequest, upstreamCall: 0},
+		{name: "owned asset", body: `{"Id":"asset-x"}`, groupID: "group-owned", wantStatus: http.StatusOK, upstreamCall: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			calls := 0
+			_, router := newNativeServer(t, func(w http.ResponseWriter, r *http.Request) {
+				calls++
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"ResponseMetadata":{},"Result":{"Id":"asset-x","GroupId":"` + tc.groupID + `"}}`))
+			})
+
+			w := doNativeRequest(t, router, "/api/ark?Action=GetAsset&Version=2024-01-01", tc.body)
+
+			require.Equal(t, tc.wantStatus, w.Code)
+			assert.Equal(t, tc.upstreamCall, calls, "归属校验通过后直接复用探测响应，不再读取")
 		})
 	}
 }

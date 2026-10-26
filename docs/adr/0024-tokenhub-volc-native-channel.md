@@ -31,7 +31,7 @@
 - 鉴权仍是网关 `sk-`；`Version` 不校验，与其余 query 一起原样透传上游（缺省补 `2024-01-01`），上游错误码不改写。
 - 对客响应统一火山信封：华鲲的顶层 `ResponseError` 由网关搬迁进 `ResponseMetadata.Error`；会话类接口上游不包信封，由网关补 `ResponseMetadata` / `Result`。volcengine 直连本就符合火山形状，两步均为空操作。
 - 已知差异不补偿：游标分页（`NextToken` / `MaxResults`）上游不支持，只提供页码分页（火山同样支持该模式），因此深翻页（`PageSize * PageNumber > 20000`）不可用。`UpdateAssetGroup` 改 `Name` 经 2026-10-24 真机联调验证可用（`GetAssetGroup` 读回新名称），此前记录的 `UnsupportedField` 结论不成立。
-- 保留归属校验与真人认证回调改写；去掉本地组列表、认证结果缓存、名称过滤。
+- 保留归属校验、组列表的本地隔离与真人认证回调改写；去掉认证结果缓存、名称过滤。`ListAssetGroups` 查本地归属表；`GetAsset` / `UpdateAsset` / `DeleteAsset` 经上游 `GroupId` 反查归属；`GetVisualValidateResult` 先校验会话属于当前 API key。
 
 ## 理由
 
@@ -45,7 +45,7 @@
 
 6. **旧接口已外发，改形状等于破坏契约。** 新根路径与旧接口共用 provider、凭证与归属表，只多一层形状转换，不增加运维配置。
 7. **保留归属校验与回调改写是安全底线。** 官方 API 没有网关侧归属概念（凭证即租户），但网关是单租户共享凭证，去掉归属校验后任意下游都能删别人的素材组；回调改写是真人认证闭环能拿到结果的唯一手段。这两项与「响应形状一致」不冲突。
-8. **去掉本地组列表、结果缓存和名称过滤，是为了行为可预期。** 下游迁移时不需要知道「网关偷偷换成了本地数据」；代价是失去一部分隔离和防护，名称校验仍由旧接口承担。
+8. **组列表与素材读取必须走网关归属，结果缓存和名称过滤可以去掉。** 兼容入口曾把 `ListAssetGroups` 直接转给共享上游账号，任意 API key 都能看到同一份组列表；`GetVisualValidateResult` 也未校验会话归属。共享凭证下，列表和读取是跨租户边界，不能为了「行为与上游一致」放弃隔离。认证结果缓存和名称校验不涉及跨租户可见性，去掉后行为仍可预期。
 
 ## 后果
 
@@ -54,7 +54,9 @@
 - **任务 ID 统一用网关公开 ID。** 2.5 第二步的 `draft_task.id` 也只接受公开 ID，网关查库换成华鲲的 `cgt-` ID。下游不能直接使用上游 ID。
 - **`duration` 由适配器校验，不进内部任务的时长字段。** 火山用 `-1` 表示「编辑/延长由模型决定时长」，内部任务校验只接受正数；原生请求的 `duration` 在适配器里判定边界（`-1` 或 1..`MaxTaskDurationSeconds`），原值随原始 body 透传上游。
 - **只有 2.5 能开样片，成片固定 1080p。** 上游成片档位只有 1080p，价表只需 `1080p` 与 `1080p_video`；漏配会静默按基准价少收。
-- **素材库两套接口并存，行为有差异。** 旧接口走本地组列表、结果缓存、tokenhub 归一化；新接口走上游、火山信封、不做名称过滤。文档必须分别说明，不能用一套说明覆盖两者。
-- **单素材 Update/Delete 的归属校验依赖上游 `GetAsset` 返回 `GroupId`。** 上线前需对 tokenhub 与 volcengine 各验证一次；不返回的 provider 按拒绝处理。
+- **素材库两套接口并存，行为有差异。** 两套接口都按 API key 做归属隔离：`ListAssetGroups` 都查本地归属表，仅 `GetVisualValidateResult` 不读缓存、名称过滤只由旧接口承担。文档必须分别说明，不能用一套说明覆盖两者。
+- **单素材 Get / Update / Delete 的归属校验依赖上游 `GetAsset` 返回 `GroupId`。** 不返回的 provider 按拒绝处理（fail-closed）。
 - **根路径 `POST /` 被占用。** 后续不能再在根路径挂其它 POST 路由；`/api/ark` 是异常部署时的退路。
-- **需求规格、验收场景与开放问题以 PRD 为准：** `docs/prd/2026-10-23-tokenhub-volc-native-channel.md`。
+- **需求规格、验收场景与开放问题以 PRD 为准：** `docs/prd/2026-10-23-tokenhub-volc-native-channel.md`。其中「`ListAssetGroups` 直查上游」「`GetAsset` 不校验归属」「`GetVisualValidateResult` 不校验会话」三处已被下面的修订推翻，以本 ADR 与 IKQFXR 为准。
+
+**2026-10-26 修订（IKQFXR）：** 兼容入口的 `ListAssetGroups` 改为查本地归属表；`GetVisualValidateResult` 补会话归属校验，并按会话记录的 provider 路由、补建会话时的 `ProjectName`；`GetAsset`（两个入口）补归属校验且复用探测响应；本地列表失败返回对应格式的错误信封。归属字段按大小写不敏感匹配，与上游 JSON 解码口径一致。
