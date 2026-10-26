@@ -279,7 +279,7 @@ Content-Type: application/json
 | `DeleteAsset` | 先 `GetAsset` 反查 `GroupId`，校验组归属后再透传 |
 | `ListAssets` | GroupIds 归属校验；空 GroupIds 拒绝 |
 | `CreateVisualValidateSession` | 客户 `CallbackURL` 替换为网关回调，认证后 302 回客户 |
-| `GetVisualValidateResult` | 先校验会话属于当前 API key；通过后每次查上游（不读本地缓存） |
+| `GetVisualValidateResult` | 先校验会话属于当前 API key；通过后按会话记录的 provider 查上游（不读本地缓存），并补建会话时的 `ProjectName` |
 | 其它 Action | 原样透传上游 |
 
 - 分页只支持页码模式：`PageNumber` + `PageSize` 原样透传（火山同样支持这两种参数）。`MaxResults` / `NextToken` 不做映射，上游会忽略。火山要求 `PageSize * PageNumber > 20000` 时改用 `NextToken` 深翻页，本期不支持。
@@ -287,7 +287,7 @@ Content-Type: application/json
 - 单素材 `GetAsset` / `UpdateAsset` / `DeleteAsset` 的归属校验：先调上游 `GetAsset` 取 `GroupId`，再复用组归属校验；`GetAsset` 直接复用探测响应，不重复读取。新旧两套接口共用同一个 helper，旧接口下越权操作会从“成功”变为 404。
 - 该路径已在 tokenhub 与 volcengine 两个 provider 的单测中覆盖；若上游不返回 `GroupId`，按拒绝处理。
 - 归属字段按大小写不敏感读取，与上游 JSON 解码口径一致；同名字段大小写冲突时 fail-closed。
-- **2026-10-26 修订（IKQFXR）：** 兼容入口 `ListAssetGroups` 改为查本地归属表；`GetAsset` 两个入口补归属校验；`GetVisualValidateResult` 补会话归属校验。安全边界优先于「行为与上游一致」。
+- **2026-10-26 修订（IKQFXR）：** 兼容入口 `ListAssetGroups` 改为查本地归属表；`GetAsset` 两个入口补归属校验；`GetVisualValidateResult` 补会话归属校验、按会话 provider 路由并补 `ProjectName`；本地列表失败也返回对应错误信封。安全边界优先于「行为与上游一致」。
 - 30 秒上游超时沿用。
 - 限流沿用 `GlobalAPIRateLimit`（按 ClientIP，默认 360 次 / 180 秒），不新增独立配额；根路径与 `/api/ark` 都必须显式挂载，不能依赖 `/api` 组的继承。
 

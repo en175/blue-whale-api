@@ -76,7 +76,15 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	// 对外查询分组列表：查本地归属表（按 API key 用户隔离，避免越权看到他人组），
 	// 保持 ARK 信封格式返回，不查询上游。
 	if action == "ListAssetGroups" {
-		handleLocalAssetGroups(w, r, body, arkVersion, "")
+		data, err := buildLocalAssetGroupsResponse(r, body, arkVersion, "")
+		if err != nil {
+			logger.LogError(r.Context(), "list local asset groups failed: "+err.Error())
+			writeMaterialError(w, http.StatusInternalServerError, "InternalError", "list asset groups failed")
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(data)
 		return
 	}
 	// 对外查询真人认证结果：先查本地会话（group_id 已结算则直接返回），
@@ -281,7 +289,7 @@ type ListAssetGroupsResult struct {
 // 不查询上游——素材凭证共享，透传会越权看到其他租户的组。
 // version 与 requestID 由调用方给出：路径入口固定 arkVersion；原生入口回显下游 Version
 // 与请求 ID，保持与其它 Action 的元数据一致。
-func handleLocalAssetGroups(w http.ResponseWriter, r *http.Request, body []byte, version, requestID string) {
+func buildLocalAssetGroupsResponse(r *http.Request, body []byte, version, requestID string) ([]byte, error) {
 	var req struct {
 		Filter struct {
 			GroupType string `json:"GroupType"`
@@ -303,9 +311,7 @@ func handleLocalAssetGroups(w http.ResponseWriter, r *http.Request, body []byte,
 		var err error
 		groups, err = model.GetMaterialGroups(userID, material_setting.GetConfig().Provider, req.Filter.GroupType)
 		if err != nil {
-			logger.LogError(r.Context(), "list local asset groups failed: "+err.Error())
-			http.Error(w, "list asset groups failed", http.StatusInternalServerError)
-			return
+			return nil, err
 		}
 	}
 	total := len(groups)
@@ -343,14 +349,7 @@ func handleLocalAssetGroups(w http.ResponseWriter, r *http.Request, body []byte,
 		},
 		"Result": ListAssetGroupsResult{TotalCount: total, Items: items, PageNumber: page, PageSize: pageSize},
 	}
-	data, err := common.Marshal(envelope)
-	if err != nil {
-		http.Error(w, "list asset groups failed", http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(data)
+	return common.Marshal(envelope)
 }
 
 // handleGetVisualValidateResult 对外 GetVisualValidateResult 的缓存化实现：
@@ -493,25 +492,23 @@ func createAssetGroupOwned(r *http.Request, body []byte) bool {
 
 // writeMaterialNotFound 返回 tokenhub 风格 404 错误（不区分不存在/无权，避免探测）。
 func writeMaterialNotFound(w http.ResponseWriter) {
-	envelope := map[string]any{
-		"ResponseMetadata": map[string]any{},
-		"ResponseError":    map[string]any{"Code": "NotFound", "Message": "resource not found"},
-	}
-	data, _ := common.Marshal(envelope)
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusNotFound)
-	_, _ = w.Write(data)
+	writeMaterialError(w, http.StatusNotFound, "NotFound", "resource not found")
 }
 
 // writeMaterialBadRequest 返回 tokenhub 风格 400 错误（请求参数非法，如 ListAssets 空 GroupIds）。
 func writeMaterialBadRequest(w http.ResponseWriter) {
+	writeMaterialError(w, http.StatusBadRequest, "InvalidParameter", "invalid parameter")
+}
+
+// writeMaterialError 按旧接口契约写 tokenhub 风格错误信封。
+func writeMaterialError(w http.ResponseWriter, statusCode int, code, message string) {
 	envelope := map[string]any{
 		"ResponseMetadata": map[string]any{},
-		"ResponseError":    map[string]any{"Code": "InvalidParameter", "Message": "invalid parameter"},
+		"ResponseError":    map[string]any{"Code": code, "Message": message},
 	}
 	data, _ := common.Marshal(envelope)
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusBadRequest)
+	w.WriteHeader(statusCode)
 	_, _ = w.Write(data)
 }
 

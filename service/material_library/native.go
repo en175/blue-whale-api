@@ -47,15 +47,31 @@ func HandleNativeRequest(c *gin.Context) {
 	// 组列表必须按当前 API key 的归属返回：上游是共享凭证，直接透传会把其他
 	// 租户的组一起列出。与路径入口同源，查本地归属表。
 	if action == "ListAssetGroups" {
-		handleLocalAssetGroups(c.Writer, request, body, nativeVersion(c), c.GetString(common.RequestIdKey))
+		data, err := buildLocalAssetGroupsResponse(request, body, nativeVersion(c), c.GetString(common.RequestIdKey))
+		if err != nil {
+			logger.LogError(ctx, "list local asset groups failed: "+err.Error())
+			writeNativeError(c, 500, "InternalError", "list asset groups failed")
+			return
+		}
+		c.Data(http.StatusOK, "application/json", data)
 		return
 	}
 
 	// 认证结果必须属于当前 API key：路径入口同样先校验本地会话，避免拿着他人
 	// BytedToken 直查上游拿到 GroupId。拒绝时不区分「不存在」与「无权」。
-	if action == "GetVisualValidateResult" && !visualSessionOwnedByCurrentUser(request, body) {
-		writeNativeVisualResult(c, action)
-		return
+	var visualSession *model.UserMaterialVisualSession
+	if action == "GetVisualValidateResult" {
+		var ok bool
+		visualSession, ok = loadVisualSessionForCaller(request, body)
+		if !ok {
+			writeNativeVisualResult(c, action)
+			return
+		}
+		// 火山契约：建会话时设了 ProjectName，查询必须传同值。客户端漏传或传错
+		// 时以会话记录为准，与路径入口一致。
+		if visualSession != nil && visualSession.ProjectName != "" {
+			body = withProjectName(body, visualSession.ProjectName)
+		}
 	}
 
 	// GetAsset 要先经上游反查 GroupId 才能校验归属；探测响应就是素材详情，
@@ -100,7 +116,12 @@ func HandleNativeRequest(c *gin.Context) {
 	}
 
 	// 下游 query 全部透传（含 Version 与业务方自定义参数），provider 只补 Action。
-	resp, err := currentProvider().DoAction(ctx, action, request.URL.Query(), body)
+	// 认证结果按会话记录的 provider 查询，避免全局配置切换后查错上游。
+	provider := currentProvider()
+	if visualSession != nil && visualSession.Provider != "" {
+		provider = providerByName(visualSession.Provider)
+	}
+	resp, err := provider.DoAction(ctx, action, request.URL.Query(), body)
 	if err != nil {
 		// 不把 Go 内部错误细节返回给客户端，细节进带 trace_id 的后端日志。
 		logger.LogError(ctx, "material library upstream error: "+err.Error())
@@ -305,23 +326,60 @@ func writeNativeResponse(c *gin.Context, resp *Response) {
 	_, _ = c.Writer.Write(resp.Body)
 }
 
-// visualSessionOwnedByCurrentUser 校验 BytedToken 对应的会话属于当前 API key。
-// token 为空时放行，交上游报参数错误；格式非法、会话不存在或不属于当前用户
-// 一律按无权处理（fail-closed）。
-func visualSessionOwnedByCurrentUser(r *http.Request, body []byte) bool {
+// loadVisualSessionForCaller 加载 BytedToken 对应的会话并校验归属。返回
+// (nil, true) 表示 token 为空，交上游报参数错误；格式非法、会话不存在或不属于
+// 当前用户时返回 (nil, false)，调用方按无权处理。
+func loadVisualSessionForCaller(r *http.Request, body []byte) (*model.UserMaterialVisualSession, bool) {
 	token, valid := jsonStringFieldFold(body, "BytedToken")
 	if !valid {
-		return false
+		return nil, false
 	}
 	if token == "" {
-		return true
+		return nil, true
 	}
 	session, err := model.GetVisualValidateSessionByToken(token)
 	if err != nil || session == nil {
-		return false
+		return nil, false
 	}
 	userID, _ := r.Context().Value(ctxUserID).(int)
-	return session.UserId == userID
+	if session.UserId != userID {
+		return nil, false
+	}
+	return session, true
+}
+
+// withProjectName 把会话创建时的 ProjectName 补进查询请求体。火山契约要求查询与
+// 建会话传同一个值（区分大小写）；客户端漏传或传错时以会话记录为准。
+func withProjectName(body []byte, projectName string) []byte {
+	var m map[string]any
+	if err := common.Unmarshal(body, &m); err != nil || m == nil {
+		return body
+	}
+	matches := 0
+	same := true
+	for key, raw := range m {
+		if !strings.EqualFold(key, "ProjectName") {
+			continue
+		}
+		matches++
+		if s, _ := raw.(string); s != projectName {
+			same = false
+		}
+	}
+	if matches == 1 && same {
+		return body
+	}
+	for key := range m {
+		if strings.EqualFold(key, "ProjectName") {
+			delete(m, key)
+		}
+	}
+	m["ProjectName"] = projectName
+	rewritten, err := common.Marshal(m)
+	if err != nil {
+		return body
+	}
+	return rewritten
 }
 
 // writeNativeVisualResult 在归属校验失败时返回空 GroupId（火山信封），与路径入口

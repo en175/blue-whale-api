@@ -1,6 +1,7 @@
 package material_library
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -355,6 +356,98 @@ func TestHandleNativeRequest_visualResultRequiresSessionOwner(t *testing.T) {
 			assert.Equal(t, tc.upstreamCalls, calls)
 		})
 	}
+}
+
+// TestWithProjectName 验证查询体里的 ProjectName 以会话记录为准，并兼容大小写键名。
+func TestWithProjectName(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		body string
+		want string
+	}{
+		{name: "missing", body: `{"BytedToken":"t"}`, want: `{"BytedToken":"t","ProjectName":"p"}`},
+		{name: "same", body: `{"BytedToken":"t","ProjectName":"p"}`, want: `{"BytedToken":"t","ProjectName":"p"}`},
+		{name: "mismatch", body: `{"BytedToken":"t","ProjectName":"other"}`, want: `{"BytedToken":"t","ProjectName":"p"}`},
+		{name: "lowercase key", body: `{"bytedToken":"t","projectName":"other"}`, want: `{"bytedToken":"t","ProjectName":"p"}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.JSONEq(t, tc.want, string(withProjectName([]byte(tc.body), "p")))
+		})
+	}
+}
+
+// TestHandleNativeRequest_visualResultUsesSessionProvider 验证兼容入口按会话记录
+// 的 provider 查询认证结果，并补上创建会话时的 ProjectName。
+func TestHandleNativeRequest_visualResultUsesSessionProvider(t *testing.T) {
+	model.DB = openMaterialRecordDB(t)
+	require.NoError(t, model.AddVisualValidateSession(42, "volcengine", "mine", "bt-mine", "h5", "cb", "proj-x", ""))
+
+	tokenhubCalls := 0
+	tokenhub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tokenhubCalls++
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"GroupId":"group-wrong"}`))
+	}))
+	defer tokenhub.Close()
+
+	var got struct {
+		BytedToken  string `json:"BytedToken"`
+		ProjectName string `json:"ProjectName"`
+	}
+	volcCalls := 0
+	volc := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		volcCalls++
+		body, _ := io.ReadAll(r.Body)
+		_ = common.Unmarshal(body, &got)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ResponseMetadata":{"RequestId":"req-volc"},"Result":{"GroupId":"group-mine"}}`))
+	}))
+	defer volc.Close()
+
+	setConfig(t, fmt.Sprintf(`{"enabled":true,"provider":"tokenhub","ak":"pak","sk":"psk","base_url":%q,`+
+		`"volcengine_access_key":"ak","volcengine_secret_key":"sk","volcengine_base_url":%q}`,
+		tokenhub.URL, volc.URL))
+	defer setConfig(t, `{"enabled":true,"provider":"tokenhub","ak":"pak","sk":"psk","base_url":""}`)
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(func(c *gin.Context) { c.Set("id", 42) })
+	router.POST("/api/ark", HandleNativeRequest)
+
+	w := doNativeRequest(t, router, "/api/ark?Action=GetVisualValidateResult&Version=2024-01-01", `{"BytedToken":"bt-mine"}`)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Zero(t, tokenhubCalls, "必须按会话记录的 provider 查询")
+	assert.Equal(t, 1, volcCalls)
+	assert.Equal(t, "bt-mine", got.BytedToken)
+	assert.Equal(t, "proj-x", got.ProjectName, "客户端漏传时补会话记录的 ProjectName")
+	assert.Contains(t, w.Body.String(), "group-mine")
+}
+
+// TestHandleNativeRequest_listAssetGroupsDBErrorUsesArkEnvelope 验证本地组列表
+// 查询失败时仍返回火山信封，而不是纯文本 500。
+func TestHandleNativeRequest_listAssetGroupsDBErrorUsesArkEnvelope(t *testing.T) {
+	db := openMaterialRecordDB(t)
+	model.DB = db
+	require.NoError(t, db.Migrator().DropTable(&model.UserMaterialGroup{}))
+
+	_, router := newNativeServer(t, func(w http.ResponseWriter, r *http.Request) {
+		t.Error("ListAssetGroups 不得查上游")
+	})
+
+	w := doNativeRequest(t, router, "/api/ark?Action=ListAssetGroups&Version=2024-01-01", `{}`)
+
+	require.Equal(t, http.StatusInternalServerError, w.Code)
+	var out struct {
+		ResponseMetadata struct {
+			Error struct {
+				Code    string `json:"Code"`
+				Message string `json:"Message"`
+			} `json:"Error"`
+		} `json:"ResponseMetadata"`
+	}
+	require.NoError(t, common.Unmarshal(w.Body.Bytes(), &out))
+	assert.Equal(t, "InternalError", out.ResponseMetadata.Error.Code)
 }
 
 // TestHandleNativeRequest_getAssetRequiresOwnership 验证兼容入口的 GetAsset

@@ -648,18 +648,38 @@ func TestHandleLocalAssetGroups_failsClosedWithoutUser(t *testing.T) {
 	require.NoError(t, model.AddUserMaterialGroup(42, "tokenhub", "group-42", "组", "AIGC"))
 	setConfig(t, `{"enabled":true,"provider":"tokenhub","ak":"pak_x","sk":"psk_y"}`)
 
-	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/material/ListAssetGroups", strings.NewReader(`{}`))
-	handleLocalAssetGroups(rec, req, []byte(`{}`), arkVersion, "")
+	data, err := buildLocalAssetGroupsResponse(req, []byte(`{}`), arkVersion, "")
+	require.NoError(t, err)
 
-	require.Equal(t, http.StatusOK, rec.Code)
 	var out struct {
 		Result struct {
 			TotalCount int              `json:"TotalCount"`
 			Items      []AssetGroupItem `json:"Items"`
 		} `json:"Result"`
 	}
-	require.NoError(t, common.Unmarshal(rec.Body.Bytes(), &out))
+	require.NoError(t, common.Unmarshal(data, &out))
 	assert.Zero(t, out.Result.TotalCount)
 	assert.Empty(t, out.Result.Items)
+}
+
+// TestProxy_listAssetGroupsDBErrorUsesEnvelope 验证本地组列表查询失败时仍按旧
+// 接口契约返回 tokenhub 错误信封，而不是纯文本 500。
+func TestProxy_listAssetGroupsDBErrorUsesEnvelope(t *testing.T) {
+	db := openMaterialRecordDB(t)
+	model.DB = db
+	require.NoError(t, db.Migrator().DropTable(&model.UserMaterialGroup{}))
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("ListAssetGroups 不得查上游")
+	}))
+	defer upstream.Close()
+	setConfig(t, fmt.Sprintf(`{"enabled":true,"ak":"pak_x","sk":"psk_y","base_url":%q}`, upstream.URL))
+
+	c := newRecordContext(t, "/api/material/ListAssetGroups", `{}`)
+	rec := httptest.NewRecorder()
+	Proxy().ServeHTTP(rec, c.Request)
+
+	require.Equal(t, http.StatusInternalServerError, rec.Code)
+	assert.JSONEq(t, `{"ResponseMetadata":{},"ResponseError":{"Code":"InternalError","Message":"list asset groups failed"}}`, rec.Body.String())
 }
