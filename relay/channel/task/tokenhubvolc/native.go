@@ -151,18 +151,32 @@ func nativeRequestFromLegacy(c *gin.Context) (*NativeRequest, bool) {
 	}
 	raw["model"] = req.Model
 	content, _ := raw["content"].([]any)
-	if _, exists := raw["content"]; !exists {
-		// 兼容旧接口顶层的 images 写法：metadata.content 缺省时按图片引用补齐，
-		// 顺序与 tokenhub 一致（媒体在前，提示词在后）。
-		for _, imageURL := range req.Images {
-			if strings.TrimSpace(imageURL) == "" {
+	// 旧接口顶层的 images 与 metadata.content 可以同时出现：把尚未出现的图片
+	// 引用补进 content，避免任何一侧被静默丢弃。
+	for _, imageURL := range req.Images {
+		imageURL = strings.TrimSpace(imageURL)
+		if imageURL == "" {
+			continue
+		}
+		duplicate := false
+		for _, item := range content {
+			m, ok := item.(map[string]any)
+			if !ok || m["type"] != "image_url" {
 				continue
 			}
-			content = append(content, map[string]any{
-				"type":      "image_url",
-				"image_url": map[string]any{"url": imageURL},
-			})
+			image, _ := m["image_url"].(map[string]any)
+			if existing, _ := image["url"].(string); existing == imageURL {
+				duplicate = true
+				break
+			}
 		}
+		if duplicate {
+			continue
+		}
+		content = append(content, map[string]any{
+			"type":      "image_url",
+			"image_url": map[string]any{"url": imageURL},
+		})
 	}
 	if prompt := strings.TrimSpace(req.Prompt); prompt != "" {
 		// 与 tokenhub 一致：旧接口的提示词以顶层 prompt 为准，content 里已有的

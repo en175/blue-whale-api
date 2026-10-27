@@ -594,3 +594,22 @@ func TestBuildRequestBody_legacyPromptWins(t *testing.T) {
 		map[string]any{"type": "text", "text": "outer prompt"},
 	}, payload["content"])
 }
+
+// TestBuildRequestBody_legacyMergesTopLevelImages 旧接口的 images 与
+// metadata.content 可以同时出现：未出现过的图片补进 content，重复引用不重复发送。
+func TestBuildRequestBody_legacyMergesTopLevelImages(t *testing.T) {
+	body := `{"model":"doubao-seedance-2-0-260128","prompt":"a cat","images":["asset://Asset-A","asset://Asset-B"],"metadata":{"content":[{"type":"image_url","image_url":{"url":"asset://Asset-B"}}]}}`
+	c, info := newLegacyContext(t, "/v1/video/generations", body)
+	info.UpstreamModelName = "dreamina-seedance-2-0-260128"
+
+	require.Nil(t, (&TaskAdaptor{}).ValidateRequestAndSetAction(c, info))
+	reader, err := (&TaskAdaptor{}).BuildRequestBody(c, info)
+	require.NoError(t, err)
+	payload := readPayload(t, reader)
+
+	assert.Equal(t, []any{
+		map[string]any{"type": "image_url", "image_url": map[string]any{"url": "asset://Asset-B"}},
+		map[string]any{"type": "image_url", "image_url": map[string]any{"url": "asset://Asset-A"}},
+		map[string]any{"type": "text", "text": "a cat"},
+	}, payload["content"], "images 只能补齐缺失项，不能覆盖或重复 metadata.content")
+}

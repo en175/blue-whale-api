@@ -105,5 +105,5 @@ curl "$BASE_URL/api/v3/contents/generations/tasks/task_9f3a2b7c" \
 Status flow: `queued` → `running` → `succeeded` / `failed`.
 
 - The body is the task object itself — there is no `code` / `message` / `data` wrapper.
-- The native path only serves the native channel; `/v1/videos` never routes to it, and vice versa.
+- The native path only serves the native channel. That channel also serves the gateway task API — `/v1/video/generations` for submit and query, and `/v1/videos/{task_id}/finalize` for drafts — while the OpenAI-shaped `POST /v1/videos` create endpoint never routes to it.
 - Errors use the Ark envelope: `{"error":{"code","message","param","type"}}` — see [Errors](../errors).
