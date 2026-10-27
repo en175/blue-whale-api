@@ -60,7 +60,16 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 
 	native, ok := arkRequest(c)
 	if !ok {
-		return service.TaskErrorWrapperLocal(fmt.Errorf("ark native request is missing"), "invalid_request", http.StatusBadRequest)
+		return service.TaskErrorWrapperLocal(fmt.Errorf("task metadata cannot be converted to a video request"), "invalid_request", http.StatusBadRequest)
+	}
+
+	// 成片只能走 /v1/videos/{id}/finalize：那条路径经 ResolveOriginTask 校验归属、
+	// 样片状态与 7 天窗口，并按成片档位计费。旧提交入口收到 draft_task 引用必须
+	// 拒绝，否则它会被当作普通 content 透传给上游，绕过全部成片校验与计费。
+	if _, isNative := NativeRequestFrom(c); !isNative && native.HasDraftTask() {
+		return service.TaskErrorWrapperLocal(
+			fmt.Errorf("draft_task references are only accepted on the finalize endpoint"),
+			"invalid_content", http.StatusBadRequest)
 	}
 	req, err := relaycommon.GetTaskRequest(c)
 	if err != nil {
@@ -172,6 +181,11 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 	} else {
 		if native == nil {
 			return nil, fmt.Errorf("ark native request is missing")
+		}
+		if native.HasDraftTask() {
+			// 校验阶段已拒绝旧接口的 draft_task；这里兜底，避免任何入口把它
+			// 当普通 content 透传、绕过成片归属与计费。
+			return nil, fmt.Errorf("draft_task references are only accepted on finalize requests")
 		}
 		payload = make(map[string]any, len(native.Raw)+2)
 		for key, value := range native.Raw {

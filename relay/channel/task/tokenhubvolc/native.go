@@ -165,16 +165,16 @@ func nativeRequestFromLegacy(c *gin.Context) (*NativeRequest, bool) {
 		}
 	}
 	if prompt := strings.TrimSpace(req.Prompt); prompt != "" {
-		hasText := false
+		// 与 tokenhub 一致：旧接口的提示词以顶层 prompt 为准，content 里已有的
+		// 文本项不再重复发送，媒体项保持原顺序，提示词排在最后。
+		media := make([]any, 0, len(content)+1)
 		for _, item := range content {
 			if m, ok := item.(map[string]any); ok && m["type"] == "text" {
-				hasText = true
-				break
+				continue
 			}
+			media = append(media, item)
 		}
-		if !hasText {
-			content = append(content, map[string]any{"type": "text", "text": prompt})
-		}
+		content = append(media, map[string]any{"type": "text", "text": prompt})
 	}
 	if content != nil {
 		raw["content"] = content

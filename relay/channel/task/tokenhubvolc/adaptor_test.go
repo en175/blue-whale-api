@@ -561,3 +561,36 @@ func TestDoResponse_shapeByEntry(t *testing.T) {
 		assert.Equal(t, "doubao-seedance-2-5-260628", video["model"])
 	})
 }
+
+// TestValidateRequestAndSetAction_legacyRejectsDraftTask 旧提交入口不能携带
+// draft_task 引用：成片必须走 /v1/videos/{id}/finalize，由 ResolveOriginTask
+// 校验归属、样片状态与 7 天窗口，并按成片档位计费。放行会在网关侧绕过这些
+// 边界（引用被当作普通 content 发给上游）。
+func TestValidateRequestAndSetAction_legacyRejectsDraftTask(t *testing.T) {
+	body := `{"model":"doubao-seedance-2-5-260628","prompt":"a cat","metadata":{"content":[{"type":"draft_task","draft_task":{"id":"cgt-upstream-1"}}]}}`
+	c, info := newLegacyContext(t, "/v1/video/generations", body)
+
+	taskErr := (&TaskAdaptor{}).ValidateRequestAndSetAction(c, info)
+
+	require.NotNil(t, taskErr)
+	assert.Equal(t, "invalid_content", taskErr.Code)
+	assert.Equal(t, http.StatusBadRequest, taskErr.StatusCode)
+}
+
+// TestBuildRequestBody_legacyPromptWins 旧接口的提示词以顶层 prompt 为准：
+// metadata.content 里已有的文本项不重复发送，媒体项原样保留。
+func TestBuildRequestBody_legacyPromptWins(t *testing.T) {
+	body := `{"model":"doubao-seedance-2-0-260128","prompt":"outer prompt","metadata":{"content":[{"type":"text","text":"inner prompt"},{"type":"image_url","image_url":{"url":"asset://Asset-1"}}]}}`
+	c, info := newLegacyContext(t, "/v1/video/generations", body)
+	info.UpstreamModelName = "dreamina-seedance-2-0-260128"
+
+	require.Nil(t, (&TaskAdaptor{}).ValidateRequestAndSetAction(c, info))
+	reader, err := (&TaskAdaptor{}).BuildRequestBody(c, info)
+	require.NoError(t, err)
+	payload := readPayload(t, reader)
+
+	assert.Equal(t, []any{
+		map[string]any{"type": "image_url", "image_url": map[string]any{"url": "asset://Asset-1"}},
+		map[string]any{"type": "text", "text": "outer prompt"},
+	}, payload["content"])
+}

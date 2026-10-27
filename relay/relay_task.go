@@ -125,6 +125,12 @@ func ResolveOriginTask(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskErr
 			return service.TaskErrorWrapperLocal(errors.New("the origin task was not created by a native channel"), "origin_task_not_native", http.StatusBadRequest)
 		}
 	}
+	// 锁定到原任务渠道会绕过 Distribute 的路径校验，因此这里补一次：remix 只在
+	// 原渠道执行，但类型 70 不支持 remix（它只兼容 /v1/video/generations 与成片），
+	// 不能因为“渠道已锁定”就让 70 接下一个它不认识的动作。
+	if !constant.ChannelServesRequestPath(ch.Type, c.Request.URL.Path) {
+		return service.TaskErrorWrapperLocal(errors.New("the channel of the origin task does not support this path"), "origin_task_path_mismatch", http.StatusBadRequest)
+	}
 	info.LockedChannel = ch
 
 	if originTask.ChannelId != info.ChannelId {
