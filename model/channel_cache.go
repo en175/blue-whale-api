@@ -315,8 +315,9 @@ func channelBelongsToGroup(channel *Channel, group string) bool {
 }
 
 // filterChannelsByRequestPathAndModel restricts candidates by request path and
-// model. 火山原生协议路径（/api/v3）只保留类型 70，其它路径一律不路由给类型 70；
-// Advanced Custom (type 58) 再按自己的路由表二次校验，其余渠道类型通过。
+// model. 火山原生协议路径（/api/v3）只保留类型 70；类型 70 另外兼容旧视频任务
+// 接口（/v1/video/generations 与成片），其余路径不路由给它。Advanced Custom
+// (type 58) 再按自己的路由表二次校验，其余渠道类型通过。
 // When requestPath is empty, filtering is skipped.
 // Caller must hold channelSyncLock (read lock). The cached slice is never mutated.
 func filterChannelsByRequestPathAndModel(channels []int, requestPath string, model string) []int {

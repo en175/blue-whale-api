@@ -14,6 +14,8 @@ The two steps are **two independent tasks**, each billed and queried separately,
 | 3. Finalize | `POST /v1/videos/{task_id}/finalize` | 1080p final task (**new `task_id`**) |
 
 > ⚠️ **The finalize endpoint exists only at `/v1/videos/{task_id}/finalize`.** Submitting the draft works on both `/v1/video/generations` and `/v1/videos`, but step 3 must use `/v1/videos/`.
+>
+> Both flows below require a model with draft mode (Seedance 2.5). When a model supports drafts, it accepts both the gateway task API (`/v1/video/generations` + `/v1/videos/{task_id}/finalize`) and the Ark-compatible `/api/v3` endpoints; only the OpenAI-shaped `POST /v1/videos` create endpoint is not supported.
 
 ---
 

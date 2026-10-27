@@ -208,7 +208,8 @@ curl "$BASE_URL/api/v3/contents/generations/tasks/task_xxx" \
 - `status`: `queued` / `running` / `succeeded` / `failed`.
 - `content`, `usage`, `resolution` and `duration` appear only once the value is known — absent fields are omitted, not zero-filled.
 - Errors use the Ark envelope: `{"error":{"code":"...","message":"...","param":"","type":"BadRequest"}}`.
-- These two endpoints only route to **Volcengine-native channels**. If no such channel serves the model you get `503` with no available channel, and a Volcengine-native channel is likewise not selectable through `/v1/video/generations` or `/v1/videos`.
+- These two endpoints only serve models available on the **Ark-compatible protocol**. If the model is not available there you get `503` with no available channel.
+- The same models are also available through the gateway task API: `/v1/video/generations` (submit and query, documented in this guide) and `/v1/videos/{task_id}/finalize` (draft finalize). Only the OpenAI-shaped `POST /v1/videos` create endpoint is not supported for them.
 - Draft mode (Seedance 2.5) has its own two-step flow in this protocol — see [Draft Mode](./draft).
 
 ## Examples

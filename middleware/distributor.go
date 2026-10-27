@@ -178,8 +178,9 @@ func Distribute() func(c *gin.Context) {
 }
 
 // channelSupportsRequestPath reports whether a channel can serve the request path.
-// 火山原生协议路径只服务类型 70，其它路径也不路由给它；Advanced Custom
-// (type 58) 再按自己的路由表二次校验，其余渠道类型一律通过。
+// 火山原生协议路径只服务类型 70；类型 70 另外兼容旧视频任务接口
+// （/v1/video/generations 与成片，见 constant.ChannelServesRequestPath）。Advanced
+// Custom (type 58) 再按自己的路由表二次校验，其余渠道类型一律通过。
 func channelSupportsRequestPath(channel *model.Channel, requestPath string, requestModel string) bool {
 	if channel == nil {
 		return false

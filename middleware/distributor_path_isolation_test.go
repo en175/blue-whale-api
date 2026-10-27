@@ -23,7 +23,7 @@ const (
 	pathIsolationGroup     = "default"
 	pathIsolationModel     = "doubao-seedance-2-5-260628"
 	pathIsolationOpenAICh  = 6701 // 类型 66，服务 /v1/videos
-	pathIsolationNativeCh  = 6702 // 类型 70，只服务 /api/v3
+	pathIsolationNativeCh  = 6702 // 类型 70，服务 /api/v3 与旧视频任务接口
 	pathIsolationAbortCode = http.StatusTeapot
 )
 

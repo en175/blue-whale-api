@@ -60,3 +60,5 @@
 - **需求规格、验收场景与开放问题以 PRD 为准：** `docs/prd/2026-10-23-tokenhub-volc-native-channel.md`。其中「`ListAssetGroups` 直查上游」「`GetAsset` 不校验归属」「`GetVisualValidateResult` 不校验会话」三处已被下面的修订推翻，以本 ADR 与 IKQFXR 为准。
 
 **2026-10-26 修订（IKQFXR）：** 兼容入口的 `ListAssetGroups` 改为查本地归属表；`GetVisualValidateResult` 补会话归属校验，并按会话记录的 provider 路由、补建会话时的 `ProjectName`；`GetAsset`（两个入口）补归属校验且复用探测响应；本地列表失败返回对应格式的错误信封。归属字段按大小写不敏感匹配，与上游 JSON 解码口径一致。
+
+**2026-10-27 修订（渠道 70 兼容旧视频接口）：** 类型 70 不再只服务 `/api/v3`，同时兼容网关旧视频任务接口 `/v1/video/generations`（提交、查询）与 `/v1/videos/{id}/finalize`（成片第二步）。路径判定仍收敛在 `constant.ChannelServesRequestPath`；旧提交入口接受 `prompt + seconds + metadata`，由适配器还原成火山形状后与原生入口共用校验、draft 守卫、上游构造与计费。`/v1/videos`（OpenAI 视频创建）与 `/v1/videos/{id}/remix` 仍不路由给类型 70：remix 会锁定原任务渠道、绕过 Distribute，因此在 `ResolveOriginTask` 里补了一次路径判定。旧提交入口显式拒绝 `content[].draft_task`，成片只能走带归属与 7 天窗口校验的 finalize 入口。响应按入口分流：原生只回 `{"id": ...}`，旧接口回 OpenAI 视频对象。

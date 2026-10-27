@@ -117,17 +117,19 @@ func ResolveOriginTask(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskErr
 	if ch.Status != common.ChannelStatusEnabled {
 		return service.TaskErrorWrapperLocal(errors.New("the channel of the origin task is disabled"), "task_channel_disable", http.StatusBadRequest)
 	}
-	// 出成片必须留在同一条协议通道上：/api/v3 只服务类型 70，/v1/videos 不服务
-	// 类型 70。跨通道成片会让适配器与响应形状错位（/api/v3 返回 OpenAI 视频对象，
-	// 或 /v1/videos 对 70 的样片报 build_request_failed 500）。
+	// 出成片必须留在能承载样片的同一条通道上：/api/v3 只服务类型 70，反向不成立
+	// ——类型 70 同时兼容旧视频接口，所以旧接口的样片可以在类型 70 渠道上成片。
+	// 但原生协议的样片不能跨到其它渠道：那些渠道的适配器不认 draft_task 引用。
 	if info.Action == constant.TaskActionFinalize {
-		_, nativeRequest := tokenhubvolc.NativeRequestFrom(c)
-		if nativeRequest && ch.Type != constant.ChannelTypeTokenHubVolc {
+		if _, nativeRequest := tokenhubvolc.NativeRequestFrom(c); nativeRequest && ch.Type != constant.ChannelTypeTokenHubVolc {
 			return service.TaskErrorWrapperLocal(errors.New("the origin task was not created by a native channel"), "origin_task_not_native", http.StatusBadRequest)
 		}
-		if !nativeRequest && ch.Type == constant.ChannelTypeTokenHubVolc {
-			return service.TaskErrorWrapperLocal(errors.New("native channel draft tasks must be finalized on /api/v3"), "origin_task_requires_native_path", http.StatusBadRequest)
-		}
+	}
+	// 锁定到原任务渠道会绕过 Distribute 的路径校验，因此这里补一次：remix 只在
+	// 原渠道执行，但类型 70 不支持 remix（它只兼容 /v1/video/generations 与成片），
+	// 不能因为“渠道已锁定”就让 70 接下一个它不认识的动作。
+	if !constant.ChannelServesRequestPath(ch.Type, c.Request.URL.Path) {
+		return service.TaskErrorWrapperLocal(errors.New("the channel of the origin task does not support this path"), "origin_task_path_mismatch", http.StatusBadRequest)
 	}
 	info.LockedChannel = ch
 
