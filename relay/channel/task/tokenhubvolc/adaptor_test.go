@@ -328,3 +328,63 @@ func TestValidateRequestAndSetAction_draftModelFollowsMapping(t *testing.T) {
 		assert.Equal(t, "invalid_draft_model", taskErr.Code)
 	})
 }
+
+// TestEstimateBilling_tierByAction 锁定三步各自的档位来源：样片固定 480p、
+// 成片固定 1080p 且视频输入维度继承样片、普通请求按本次请求体的分辨率与
+// content[]。前两步不能用当次请求体——样片请求体只有 prompt，成片请求体里
+// 没有 content，取错维度会静默按基准价结算。
+func TestEstimateBilling_tierByAction(t *testing.T) {
+	// doubao-seedance-2-0-260128 内置价格表（元/百万 token）：
+	// 基准 46、基准含视频 28、1080p 51、1080p 含视频 31。
+	const model = "doubao-seedance-2-0-260128"
+	tests := []struct {
+		name string
+		info relaycommon.TaskRelayInfo
+		req  relaycommon.TaskSubmitReq
+		want float64
+	}{
+		{
+			name: "成片固定1080p并继承样片的视频输入",
+			info: relaycommon.TaskRelayInfo{Action: constant.TaskActionFinalize, OriginHasVideoInput: true},
+			want: 31.0 / 46.0,
+		},
+		{
+			// HasVideoInput 故意置为 true：成片必须只看 OriginHasVideoInput，
+			// 本次请求体里的视频项不参与档位判定。
+			name: "成片继承样片不含视频，忽略当次请求",
+			info: relaycommon.TaskRelayInfo{Action: constant.TaskActionFinalize, HasVideoInput: true},
+			want: 51.0 / 46.0,
+		},
+		{
+			// metadata 故意写 4k：样片一律按 480p 档，不能跟随请求体分辨率。
+			name: "样片固定480p档",
+			info: relaycommon.TaskRelayInfo{Draft: true, HasVideoInput: true},
+			req:  relaycommon.TaskSubmitReq{Metadata: map[string]interface{}{"resolution": "4k"}},
+			want: 28.0 / 46.0,
+		},
+		{
+			name: "普通请求按metadata分辨率与视频输入",
+			req: relaycommon.TaskSubmitReq{Metadata: map[string]interface{}{
+				"resolution": "1080p",
+				"content":    []interface{}{map[string]interface{}{"type": "video_url"}},
+			}},
+			want: 31.0 / 46.0,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gin.SetMode(gin.TestMode)
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Set("task_request", tt.req)
+			info := &relaycommon.RelayInfo{
+				TaskRelayInfo: &tt.info,
+				ChannelMeta:   &relaycommon.ChannelMeta{UpstreamModelName: model},
+			}
+
+			got := (&TaskAdaptor{}).EstimateBilling(c, info)
+
+			require.Len(t, got, 1)
+			assert.InDelta(t, tt.want, got["video_input"], 1e-9)
+		})
+	}
+}
