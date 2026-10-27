@@ -300,7 +300,7 @@ func warnMissingTier(c *gin.Context, info *relaycommon.RelayInfo, resolution str
 
 // DoResponse 解析华鲲的 create 响应，按入口回不同形状：原生协议只回
 // {"id": <网关公开任务 ID>}，旧视频接口回 OpenAI 视频对象（与 61/66/67 一致）。
-// 上游的 cgt- 任务 ID 只落库，不暴露给下游。
+// 上游的 cgt- 任务 ID 不在创建响应里暴露，由查询接口的 upstreamTaskId 回给下游。
 func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (string, []byte, *dto.TaskError) {
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
