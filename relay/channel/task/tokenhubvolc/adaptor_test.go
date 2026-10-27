@@ -182,7 +182,7 @@ func TestConvertToNativeArkTask_statusAndPayload(t *testing.T) {
 			UpdatedAt: 200,
 		}
 		task.Properties.OriginModelName = "doubao-seedance-2-5-260628"
-		task.Data = []byte(`{"resultSummary":{"content":{"video_url":"https://cdn/v.mp4"},"resolution":"1080p","duration":"5","usage":{"completion_tokens":120,"total_tokens":150}}}`)
+		task.Data = []byte(`{"id":"01a17b4f-083d-71f4-bcab-c5128ba2f00c","upstreamTaskId":"cgt-20261027110219-vvggz","status":"succeeded","resultSummary":{"content":{"video_url":"https://cdn/v.mp4"},"resolution":"1080p","duration":"5","usage":{"completion_tokens":120,"total_tokens":150}}}`)
 
 		raw, err := adaptor.ConvertToNativeArkTask(task)
 		require.NoError(t, err)
@@ -192,6 +192,8 @@ func TestConvertToNativeArkTask_statusAndPayload(t *testing.T) {
 		assert.Equal(t, "task_ok", out["id"])
 		assert.Equal(t, "succeeded", out["status"])
 		assert.Equal(t, "doubao-seedance-2-5-260628", out["model"])
+		// 华鲲的 UUID 是轮询键，火山 cgt 号才是到火山侧排障的凭据，两者都要能让下游看到
+		assert.Equal(t, "cgt-20261027110219-vvggz", out["upstreamTaskId"])
 		assert.Equal(t, map[string]any{"video_url": "https://cdn/v.mp4"}, out["content"])
 		assert.Equal(t, map[string]any{"completion_tokens": float64(120), "total_tokens": float64(150)}, out["usage"])
 		assert.Equal(t, "1080p", out["resolution"])
@@ -223,6 +225,8 @@ func TestConvertToNativeArkTask_statusAndPayload(t *testing.T) {
 		require.NoError(t, common.Unmarshal(raw, &out))
 		assert.Equal(t, "failed", out["status"])
 		assert.Equal(t, map[string]any{"code": "TaskFailed", "message": "content blocked"}, out["error"])
+		// 上游没给出 cgt 号时省略字段，不返回空串占位
+		assert.NotContains(t, out, "upstreamTaskId")
 	})
 }
 

@@ -81,6 +81,7 @@ curl "$BASE_URL/api/v3/contents/generations/tasks/task_9f3a2b7c" \
   "id": "task_9f3a2b7c",
   "model": "dreamina-seedance-2-0-fast-260128",
   "status": "succeeded",
+  "upstreamTaskId": "cgt-20261027110219-vvggz",
   "content": { "video_url": "https://.../result.mp4?X-Tos-Signature=..." },
   "usage": { "completion_tokens": 49761, "total_tokens": 49761 },
   "created_at": 1792841408,
@@ -95,6 +96,7 @@ curl "$BASE_URL/api/v3/contents/generations/tasks/task_9f3a2b7c" \
 | `id` | string | Gateway task id (the `id` returned at create time) |
 | `model` | string | Model used for the task |
 | `status` | string | `queued` / `running` / `succeeded` / `failed` |
+| `upstreamTaskId` | string | Upstream (Volcengine) task id, e.g. `cgt-...`; omit if the upstream does not provide one. Quote it when contacting support |
 | `content.video_url` | string | Result video URL; present on succeeded tasks |
 | `usage` | object | `completion_tokens` / `total_tokens`; only upstreams that report real tokens include it |
 | `resolution` | string | Output resolution |

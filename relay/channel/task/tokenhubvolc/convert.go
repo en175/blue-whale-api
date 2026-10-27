@@ -23,16 +23,20 @@ var arkTaskStatus = map[model.TaskStatus]string{
 // nativeTaskResponse 是查询接口回给下游的火山形状。拿不到值的字段一律省略，
 // 不返回零值占位。
 type nativeTaskResponse struct {
-	ID         string            `json:"id"`
-	Model      string            `json:"model,omitempty"`
-	Status     string            `json:"status"`
-	Content    *nativeTaskResult `json:"content,omitempty"`
-	Usage      *dto.TaskUsage    `json:"usage,omitempty"`
-	CreatedAt  int64             `json:"created_at"`
-	UpdatedAt  int64             `json:"updated_at"`
-	Resolution string            `json:"resolution,omitempty"`
-	Duration   *int              `json:"duration,omitempty"`
-	Error      *nativeTaskError  `json:"error,omitempty"`
+	ID     string `json:"id"`
+	Model  string `json:"model,omitempty"`
+	Status string `json:"status"`
+	// UpstreamTaskID 是华鲲透出的火山任务号（cgt-...）。华鲲的创建与查询响应
+	// 都带这个字段，网关此前只留了华鲲 UUID 做轮询键，下游拿不到 cgt 号，
+	// 无法直接到火山侧排障。
+	UpstreamTaskID string            `json:"upstreamTaskId,omitempty"`
+	Content        *nativeTaskResult `json:"content,omitempty"`
+	Usage          *dto.TaskUsage    `json:"usage,omitempty"`
+	CreatedAt      int64             `json:"created_at"`
+	UpdatedAt      int64             `json:"updated_at"`
+	Resolution     string            `json:"resolution,omitempty"`
+	Duration       *int              `json:"duration,omitempty"`
+	Error          *nativeTaskError  `json:"error,omitempty"`
 }
 
 type nativeTaskResult struct {
@@ -47,7 +51,9 @@ type nativeTaskError struct {
 // upstreamTaskData 是华鲲查询响应中网关需要的部分：结果包在 resultSummary 里
 // （与 /api/v3 的顶层 content 不同）。
 type upstreamTaskData struct {
-	ResultSummary struct {
+	// UpstreamTaskID 在创建响应与查询响应里都是顶层字段，不在 resultSummary 内。
+	UpstreamTaskID string `json:"upstreamTaskId"`
+	ResultSummary  struct {
 		Content struct {
 			VideoURL string `json:"video_url"`
 		} `json:"content"`
@@ -84,11 +90,12 @@ func (a *TaskAdaptor) ConvertToNativeArkTask(originTask *model.Task) ([]byte, er
 	}
 
 	response := nativeTaskResponse{
-		ID:        originTask.TaskID,
-		Model:     originTask.Properties.OriginModelName,
-		Status:    status,
-		CreatedAt: originTask.CreatedAt,
-		UpdatedAt: originTask.UpdatedAt,
+		ID:             originTask.TaskID,
+		Model:          originTask.Properties.OriginModelName,
+		Status:         status,
+		CreatedAt:      originTask.CreatedAt,
+		UpdatedAt:      originTask.UpdatedAt,
+		UpstreamTaskID: data.UpstreamTaskID,
 	}
 
 	if originTask.Status == model.TaskStatusSuccess && data.ResultSummary.Content.VideoURL != "" {
