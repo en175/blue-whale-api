@@ -1,9 +1,50 @@
 ---
 title: Asset Groups
-description: Create, query, update, and delete asset groups (GetAssetGroup / CreateAssetGroup / UpdateAssetGroup / DeleteAssetGroup)
+description: List, create, query, update, and delete asset groups (ListAssetGroups / GetAssetGroup / CreateAssetGroup / UpdateAssetGroup / DeleteAssetGroup)
 ---
 
-An asset group is the container for assets. Create a group first, then upload assets into it (see [Assets](../material/assets)). All four Actions below use the **CRUD envelope** response format.
+An asset group is the container for assets. Create a group first, then upload assets into it (see [Assets](../material/assets)). All five Actions below use the **CRUD envelope** response format.
+
+> **Ark-compatible entry:** every Action on this page also works as `POST /?Action={Action}&Version=2024-01-01` (alias `/api/ark`). Request bodies use the same schemas; `ListAssetGroups` is answered from the gateway ownership table on both forms. See [Ark-compatible examples](#ark-compatible-examples) below and [Differences Between the Two Forms](../material/index#differences-between-the-two-forms).
+
+## ListAssetGroups — List Asset Groups
+
+Lists the asset groups **owned by the current API key**, read from the gateway ownership table (no upstream call). Both the path form and the Ark-compatible form use this same source.
+
+### Request
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `Filter.GroupType` | string | No | Group type filter (`AIGC` / `LivenessFace`) |
+| `PageNumber` | int | No | Page number, starting at 1; values below 1 fall back to `1` |
+| `PageSize` | int | No | Page size, 1–100; values outside that range fall back to `20` |
+
+```bash
+BASE_URL="https://yunjizi.cn"   # Domestic; overseas use https://api.yunjizi.cn
+
+curl "$BASE_URL/api/material/ListAssetGroups" \
+  -H "Authorization: Bearer sk-YOUR-KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"Filter":{"GroupType":"AIGC"},"PageNumber":1,"PageSize":20}'
+```
+
+### Response
+
+```json
+{
+  "ResponseMetadata": { "RequestId": "req_local_1_1", "Action": "ListAssetGroups", "Version": "2024-01-01", "Service": "ark", "Region": "cn-beijing" },
+  "Result": {
+    "TotalCount": 1,
+    "Items": [
+      { "Id": "group-xxx", "Name": "My Asset Group", "GroupType": "AIGC", "CreateTime": "2026-08-19T02:10:00Z", "UpdateTime": "2026-08-19T02:10:00Z" }
+    ],
+    "PageNumber": 1,
+    "PageSize": 20
+  }
+}
+```
+
+> The list is built from the gateway ownership table, so a group renamed through `UpdateAssetGroup` may still show its old `Name` here until the local record is refreshed. Use `GetAssetGroup` (which reads upstream) for the current name. The Ark-compatible form uses the same local ownership table and applies the same API-key isolation — see [Ark-compatible examples](#ark-compatible-examples).
 
 ## GetAssetGroup — Get Asset Group Details
 
@@ -120,3 +161,54 @@ curl "$BASE_URL/api/material/DeleteAssetGroup" \
   "Result": {}
 }
 ```
+
+## Ark-Compatible Examples
+
+Every Action on this page also accepts `Action` in the query string. Request bodies are unchanged; the success `Result` is the same object shown above, wrapped in `ResponseMetadata`:
+
+```bash
+BASE_URL="https://api.yunjizi.cn"
+
+# ListAssetGroups — served from the gateway ownership table, isolated per API key
+curl -X POST "$BASE_URL/?Action=ListAssetGroups&Version=2024-01-01" \
+  -H "Authorization: Bearer sk-YOUR-KEY" -H "Content-Type: application/json" \
+  -d '{"Filter":{"GroupType":"AIGC"},"PageNumber":1,"PageSize":20}'
+
+# CreateAssetGroup
+curl -X POST "$BASE_URL/?Action=CreateAssetGroup&Version=2024-01-01" \
+  -H "Authorization: Bearer sk-YOUR-KEY" -H "Content-Type: application/json" \
+  -d '{"Name":"My Asset Group","Description":"test","GroupType":"AIGC"}'
+
+# GetAssetGroup
+curl -X POST "$BASE_URL/?Action=GetAssetGroup&Version=2024-01-01" \
+  -H "Authorization: Bearer sk-YOUR-KEY" -H "Content-Type: application/json" \
+  -d '{"Id":"group-xxx"}'
+
+# UpdateAssetGroup
+curl -X POST "$BASE_URL/?Action=UpdateAssetGroup&Version=2024-01-01" \
+  -H "Authorization: Bearer sk-YOUR-KEY" -H "Content-Type: application/json" \
+  -d '{"Id":"group-xxx","Description":"New description"}'
+
+# DeleteAssetGroup
+curl -X POST "$BASE_URL/?Action=DeleteAssetGroup&Version=2024-01-01" \
+  -H "Authorization: Bearer sk-YOUR-KEY" -H "Content-Type: application/json" \
+  -d '{"Id":"group-xxx"}'
+```
+
+`ListAssetGroups` response through the query form — read from the same local ownership table as the path form, wrapped in the Ark envelope:
+
+```json
+{
+  "ResponseMetadata": { "RequestId": "req_xxx", "Action": "ListAssetGroups", "Version": "2024-01-01", "Service": "ark", "Region": "cn-beijing" },
+  "Result": {
+    "TotalCount": 1,
+    "Items": [
+      { "Id": "group-xxx", "Name": "My Asset Group", "GroupType": "AIGC", "CreateTime": "2026-08-19T02:10:00Z", "UpdateTime": "2026-08-19T02:10:00Z" }
+    ],
+    "PageNumber": 1,
+    "PageSize": 20
+  }
+}
+```
+
+Errors on the query form use `ResponseMetadata.Error`. Actions forwarded to upstream keep the upstream HTTP status; a failure of the local `ListAssetGroups` query returns `500 InternalError` from the gateway. A non-string `Id` is rejected with `400 InvalidParameter` before any ownership check. The `/api/ark` alias accepts the same query string when `POST /` is intercepted.
