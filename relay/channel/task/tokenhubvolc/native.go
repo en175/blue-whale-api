@@ -2,15 +2,21 @@ package tokenhubvolc
 
 import (
 	"errors"
+	"strconv"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/relay/channel/task/taskcommon"
+	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/gin-gonic/gin"
 )
 
 // NativeRequestContextKey 是请求转换中间件写入解析结果的上下文键。
 // relay 层据此判定成片请求，适配器据此重建上游请求体。
 const NativeRequestContextKey = "ark_native_request"
+
+// legacyFinalizeOptionsKey 保存旧接口成片请求体解析出的输出规格参数。
+const legacyFinalizeOptionsKey = "ark_legacy_finalize_options"
 
 // NativeRequest 是下游按火山方舟文档发来的视频任务请求。
 //
@@ -125,6 +131,85 @@ func NativeRequestFrom(c *gin.Context) (*NativeRequest, bool) {
 	}
 	req, ok := value.(*NativeRequest)
 	return req, ok
+}
+
+// nativeRequestFromLegacy 把网关旧视频接口（/v1/video/generations）注册在上下文
+// 里的内部请求体还原成火山形状：顶层 prompt 补成 content[] 的第一条 text，
+// metadata 里的火山顶层参数（content / resolution / ratio / duration / watermark
+// 等）原样提到顶层，顶层 duration / seconds / draft 补进缺失的键。
+//
+// 还原结果只用于校验与构造上游请求体，不写回原生请求的上下文键——relay 层仍以
+// “有没有原生请求”区分两个入口，决定成片归属校验与响应形状。
+func nativeRequestFromLegacy(c *gin.Context) (*NativeRequest, bool) {
+	req, err := relaycommon.GetTaskRequest(c)
+	if err != nil {
+		return nil, false
+	}
+	raw := make(map[string]any, len(req.Metadata)+4)
+	for key, value := range req.Metadata {
+		raw[key] = value
+	}
+	raw["model"] = req.Model
+	content, _ := raw["content"].([]any)
+	if _, exists := raw["content"]; !exists {
+		// 兼容旧接口顶层的 images 写法：metadata.content 缺省时按图片引用补齐，
+		// 顺序与 tokenhub 一致（媒体在前，提示词在后）。
+		for _, imageURL := range req.Images {
+			if strings.TrimSpace(imageURL) == "" {
+				continue
+			}
+			content = append(content, map[string]any{
+				"type":      "image_url",
+				"image_url": map[string]any{"url": imageURL},
+			})
+		}
+	}
+	if prompt := strings.TrimSpace(req.Prompt); prompt != "" {
+		hasText := false
+		for _, item := range content {
+			if m, ok := item.(map[string]any); ok && m["type"] == "text" {
+				hasText = true
+				break
+			}
+		}
+		if !hasText {
+			content = append(content, map[string]any{"type": "text", "text": prompt})
+		}
+	}
+	if content != nil {
+		raw["content"] = content
+	}
+	if _, exists := raw["duration"]; !exists {
+		switch {
+		case req.Duration > 0:
+			raw["duration"] = req.Duration
+		case strings.TrimSpace(req.Seconds) != "":
+			if seconds, err := strconv.Atoi(strings.TrimSpace(req.Seconds)); err == nil {
+				raw["duration"] = seconds
+			}
+		}
+	}
+	if taskcommon.IsDraftRequest(&req) {
+		raw["draft"] = true
+	}
+	data, err := common.Marshal(raw)
+	if err != nil {
+		return nil, false
+	}
+	native, err := ParseNativeRequest(data)
+	if err != nil {
+		return nil, false
+	}
+	return native, true
+}
+
+// arkRequest 返回本次请求的火山形状：原生入口由请求转换中间件写入，旧接口按
+// 内部请求体还原。两条入口由此共用同一套校验、上游构造与计费。
+func arkRequest(c *gin.Context) (*NativeRequest, bool) {
+	if native, ok := NativeRequestFrom(c); ok {
+		return native, true
+	}
+	return nativeRequestFromLegacy(c)
 }
 
 // StoreNativeRequest 供请求转换中间件写入解析结果。

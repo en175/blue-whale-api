@@ -328,3 +328,236 @@ func TestValidateRequestAndSetAction_draftModelFollowsMapping(t *testing.T) {
 		assert.Equal(t, "invalid_draft_model", taskErr.Code)
 	})
 }
+
+// newLegacyContext 构造旧视频接口（/v1/video/generations、/v1/videos/{id}/finalize）
+// 的 gin 上下文：请求体是网关内部任务请求（prompt + seconds + metadata），同时写入
+// BodyStorage，供通用校验与成片参数解析各自读取一次。
+func newLegacyContext(t *testing.T, path, body string) (*gin.Context, *relaycommon.RelayInfo) {
+	t.Helper()
+
+	gin.SetMode(gin.TestMode)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, path, bytes.NewReader([]byte(body)))
+	c.Request.Header.Set("Content-Type", "application/json")
+	storage, err := common.CreateBodyStorage([]byte(body))
+	require.NoError(t, err)
+	c.Set(common.KeyBodyStorage, storage)
+
+	info := &relaycommon.RelayInfo{
+		TaskRelayInfo: &relaycommon.TaskRelayInfo{},
+		ChannelMeta:   &relaycommon.ChannelMeta{},
+	}
+	return c, info
+}
+
+// TestValidateRequestAndSetAction_legacyEntry 验证旧接口的请求体经 prompt +
+// metadata 还原成火山形状后，与原生入口共用同一套样片守卫与输入判定。
+func TestValidateRequestAndSetAction_legacyEntry(t *testing.T) {
+	tests := []struct {
+		name        string
+		body        string
+		wantCode    string
+		wantDraft   bool
+		wantVideoIn bool
+		wantAction  string
+	}{
+		{
+			name:       "图片参考按图生视频",
+			body:       `{"model":"doubao-seedance-2-0-260128","prompt":"a cat","seconds":"5","metadata":{"resolution":"720p","content":[{"type":"image_url","image_url":{"url":"asset://Asset-1"},"role":"reference_image"}]}}`,
+			wantAction: constant.TaskActionGenerate,
+		},
+		{
+			name:        "参考视频被识别为视频输入",
+			body:        `{"model":"doubao-seedance-2-0-260128","prompt":"continue","metadata":{"content":[{"type":"video_url","video_url":{"url":"https://x/v.mp4"}}]}}`,
+			wantVideoIn: true,
+			wantAction:  constant.TaskActionVideoGenerate,
+		},
+		{
+			name:       "2.5 样片 480p 通过",
+			body:       `{"model":"doubao-seedance-2-5-260628","prompt":"a cat","metadata":{"draft":true,"resolution":"480p"}}`,
+			wantDraft:  true,
+			wantAction: constant.TaskActionTextGenerate,
+		},
+		{
+			name:     "2.0 开启样片被拒",
+			body:     `{"model":"doubao-seedance-2-0-260128","prompt":"a cat","metadata":{"draft":true}}`,
+			wantCode: "invalid_draft_model",
+		},
+		{
+			name:     "样片请求 720p 被拒",
+			body:     `{"model":"doubao-seedance-2-5-260628","prompt":"a cat","metadata":{"draft":true,"resolution":"720p"}}`,
+			wantCode: "invalid_resolution",
+		},
+		{
+			name:     "时长越界被拒",
+			body:     `{"model":"doubao-seedance-2-5-260628","prompt":"a cat","metadata":{"duration":999999}}`,
+			wantCode: "invalid_duration",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c, info := newLegacyContext(t, "/v1/video/generations", tt.body)
+
+			taskErr := (&TaskAdaptor{}).ValidateRequestAndSetAction(c, info)
+
+			if tt.wantCode != "" {
+				require.NotNil(t, taskErr)
+				assert.Equal(t, tt.wantCode, taskErr.Code)
+				assert.Equal(t, http.StatusBadRequest, taskErr.StatusCode)
+				return
+			}
+			require.Nil(t, taskErr)
+			assert.Equal(t, tt.wantDraft, info.Draft)
+			assert.Equal(t, tt.wantVideoIn, info.HasVideoInput)
+			assert.Equal(t, tt.wantAction, info.Action)
+		})
+	}
+}
+
+// TestBuildRequestBody_legacyEntry 验证旧接口的出站请求体：提示词补成 content[]
+// 的文本项、metadata.content 的媒体项原样保留、seconds 变成顶层 duration。
+func TestBuildRequestBody_legacyEntry(t *testing.T) {
+	body := `{"model":"doubao-seedance-2-0-260128","prompt":"a cat","seconds":"5","metadata":{"resolution":"720p","generate_audio":false,"content":[{"type":"image_url","image_url":{"url":"asset://Asset-1"},"role":"reference_image"}]}}`
+	c, info := newLegacyContext(t, "/v1/video/generations", body)
+	info.UpstreamModelName = "dreamina-seedance-2-0-260128"
+
+	require.Nil(t, (&TaskAdaptor{}).ValidateRequestAndSetAction(c, info))
+	reader, err := (&TaskAdaptor{}).BuildRequestBody(c, info)
+	require.NoError(t, err)
+	payload := readPayload(t, reader)
+
+	assert.Equal(t, "dreamina-seedance-2-0-260128", payload["model"])
+	assert.Equal(t, "720p", payload["resolution"])
+	assert.Equal(t, float64(5), payload["duration"])
+	assert.Equal(t, false, payload["generate_audio"], "显式 false 必须原样发给上游")
+	assert.Equal(t, []any{
+		map[string]any{"type": "image_url", "image_url": map[string]any{"url": "asset://Asset-1"}, "role": "reference_image"},
+		map[string]any{"type": "text", "text": "a cat"},
+	}, payload["content"])
+}
+
+// TestBuildRequestBody_legacyDraft 验证旧接口的样片同样强制 draft=true + 480p。
+func TestBuildRequestBody_legacyDraft(t *testing.T) {
+	body := `{"model":"doubao-seedance-2-5-260628","prompt":"a cat","metadata":{"draft":true,"resolution":"480p"}}`
+	c, info := newLegacyContext(t, "/v1/video/generations", body)
+	info.UpstreamModelName = "dreamina-seedance-2-5-260628"
+
+	require.Nil(t, (&TaskAdaptor{}).ValidateRequestAndSetAction(c, info))
+	require.True(t, info.Draft)
+
+	reader, err := (&TaskAdaptor{}).BuildRequestBody(c, info)
+	require.NoError(t, err)
+	payload := readPayload(t, reader)
+
+	assert.Equal(t, true, payload["draft"])
+	assert.Equal(t, Res480p, payload["resolution"])
+	assert.Equal(t, Res480p, info.UpstreamResolution)
+}
+
+// TestValidateRequestAndSetAction_legacyFinalize 验证旧接口的成片第二步：空体与
+// 空对象都放行，非 1080p 分辨率被拒，输出规格类参数落到上下文供后续构造使用。
+func TestValidateRequestAndSetAction_legacyFinalize(t *testing.T) {
+	tests := []struct {
+		name     string
+		body     string
+		wantCode string
+	}{
+		{name: "空请求体", body: ""},
+		{name: "空对象", body: `{}`},
+		{name: "1080p 放行", body: `{"resolution":"1080p"}`},
+		{name: "720p 被拒", body: `{"resolution":"720p"}`, wantCode: "invalid_resolution"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c, info := newLegacyContext(t, "/v1/videos/task_draft/finalize", tt.body)
+			info.Action = constant.TaskActionFinalize
+
+			taskErr := (&TaskAdaptor{}).ValidateRequestAndSetAction(c, info)
+
+			if tt.wantCode != "" {
+				require.NotNil(t, taskErr)
+				assert.Equal(t, tt.wantCode, taskErr.Code)
+				return
+			}
+			require.Nil(t, taskErr)
+		})
+	}
+}
+
+// TestBuildRequestBody_legacyFinalize 验证旧接口成片：content 只能是网关换过 ID
+// 的 draft_task 引用，分辨率固定 1080p，白名单内的输出规格原样带上（含 false）。
+func TestBuildRequestBody_legacyFinalize(t *testing.T) {
+	body := `{"output_format":"mov","watermark":false,"duration":10,"seed":3}`
+	c, info := newLegacyContext(t, "/v1/videos/task_draft/finalize", body)
+	info.UpstreamModelName = "dreamina-seedance-2-5-260628"
+	info.Action = constant.TaskActionFinalize
+	info.OriginUpstreamTaskID = "cgt-upstream-1"
+
+	require.Nil(t, (&TaskAdaptor{}).ValidateRequestAndSetAction(c, info))
+	reader, err := (&TaskAdaptor{}).BuildRequestBody(c, info)
+	require.NoError(t, err)
+	payload := readPayload(t, reader)
+
+	assert.Equal(t, Res1080p, payload["resolution"])
+	assert.Equal(t, "mov", payload["output_format"])
+	assert.Equal(t, false, payload["watermark"], "白名单内的显式 false 必须保留")
+	assert.Equal(t, []any{map[string]any{
+		"type":       "draft_task",
+		"draft_task": map[string]any{"id": "cgt-upstream-1"},
+	}}, payload["content"])
+	for _, key := range []string{"duration", "seed", "prompt", "draft"} {
+		assert.NotContains(t, payload, key)
+	}
+}
+
+// TestDoResponse_shapeByEntry 验证创建响应按入口分流：原生协议只回 {"id"}，
+// 旧视频接口回 OpenAI 视频对象（与 61/66/67 一致）。
+func TestDoResponse_shapeByEntry(t *testing.T) {
+	newResponse := func() *http.Response {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(bytes.NewReader([]byte(`{"id":"cgt-upstream-9"}`))),
+		}
+	}
+	newInfo := func() *relaycommon.RelayInfo {
+		return &relaycommon.RelayInfo{
+			TaskRelayInfo:   &relaycommon.TaskRelayInfo{PublicTaskID: "task_public"},
+			ChannelMeta:     &relaycommon.ChannelMeta{},
+			OriginModelName: "doubao-seedance-2-5-260628",
+		}
+	}
+
+	t.Run("原生协议只回 id", func(t *testing.T) {
+		gin.SetMode(gin.TestMode)
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodPost, constant.NativeArkVideoTaskPath, nil)
+
+		taskID, _, taskErr := (&TaskAdaptor{}).DoResponse(c, newResponse(), newInfo())
+		require.Nil(t, taskErr)
+		assert.Equal(t, "cgt-upstream-9", taskID)
+		assert.JSONEq(t, `{"id":"task_public"}`, w.Body.String())
+	})
+
+	t.Run("旧接口回 OpenAI 视频对象", func(t *testing.T) {
+		gin.SetMode(gin.TestMode)
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodPost, "/v1/video/generations", nil)
+
+		taskID, _, taskErr := (&TaskAdaptor{}).DoResponse(c, newResponse(), newInfo())
+		require.Nil(t, taskErr)
+		assert.Equal(t, "cgt-upstream-9", taskID)
+
+		var video map[string]any
+		require.NoError(t, common.Unmarshal(w.Body.Bytes(), &video))
+		assert.Equal(t, "task_public", video["id"])
+		assert.Equal(t, "task_public", video["task_id"])
+		assert.Equal(t, "video", video["object"])
+		assert.Equal(t, "queued", video["status"])
+		assert.Equal(t, "doubao-seedance-2-5-260628", video["model"])
+	})
+}

@@ -221,15 +221,30 @@ var ChannelTypeNames = map[int]string{
 // NativeArkVideoTaskPath 是火山方舟原生视频协议的对客路径前缀。
 //
 // 该路径与 /v1/videos 承载的上游协议不同：请求体是 content[]，任务查询按
-// 火山字段返回。两种形状不能共用一个渠道类型，否则适配器会收到自己解析不了
-// 的内容，因此按路径做渠道隔离。
+// 火山字段返回。除它之外，类型 70 同时兼容网关旧视频接口（见
+// servesLegacyVideoTaskPath），由适配器按入口形状分流。
 const NativeArkVideoTaskPath = "/api/v3/contents/generations/tasks"
 
 // ChannelServesRequestPath 报告某渠道类型能否服务该请求路径。
-// 只有类型 70 服务 NativeArkVideoTaskPath，其余路径一律不路由给它。
+// 只有类型 70 服务 NativeArkVideoTaskPath；它同时兼容旧视频接口，其余路径
+// 一律不路由给它。
 func ChannelServesRequestPath(channelType int, requestPath string) bool {
 	isNativeArkTask := strings.HasPrefix(requestPath, NativeArkVideoTaskPath)
-	return isNativeArkTask == (channelType == ChannelTypeTokenHubVolc)
+	if channelType == ChannelTypeTokenHubVolc {
+		return isNativeArkTask || servesLegacyVideoTaskPath(requestPath)
+	}
+	return !isNativeArkTask
+}
+
+// servesLegacyVideoTaskPath 报告路径是否属于类型 70 兼容的旧视频接口：
+// /v1/video/generations（提交与查询）与 /v1/videos/{id}/finalize（样片第二步，
+// 该动作只有这一条路由）。/v1/videos 的创建走 OpenAI 视频对象，不在此列。
+func servesLegacyVideoTaskPath(requestPath string) bool {
+	if requestPath == "/v1/video/generations" ||
+		strings.HasPrefix(requestPath, "/v1/video/generations/") {
+		return true
+	}
+	return strings.HasPrefix(requestPath, "/v1/videos/") && strings.HasSuffix(requestPath, "/finalize")
 }
 
 func GetChannelTypeName(channelType int) string {

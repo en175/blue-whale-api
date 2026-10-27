@@ -41,24 +41,26 @@ func (a *TaskAdaptor) GetModelList() []string {
 
 // ValidateRequestAndSetAction 区分三步：
 //
-//	成片（finalize）：中间件已校验过 draft_task 引用，这里不再走通用校验
+//	成片（finalize）：原生入口的引用已由中间件校验，旧接口只解析输出规格参数
 //	样片（draft）   ：只允许 2.5 模型，且只允许 480p
 //	普通提交        ：完全沿用 /v1/videos 的通用校验
 //
 // 通用校验读的是中间件改写后的内部请求体（prompt + metadata），因此提示词必填、
-// 时长上限等既有约束原样生效。
+// 时长上限等既有约束原样生效。旧接口的请求体由 arkRequest 还原成火山形状后，
+// 与原生入口走完全相同的前两条判定。
 func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskError {
-	native, ok := NativeRequestFrom(c)
-	if !ok {
-		return service.TaskErrorWrapperLocal(fmt.Errorf("ark native request is missing"), "invalid_request", http.StatusBadRequest)
-	}
-
 	if info != nil && info.Action == constant.TaskActionFinalize {
-		return nil
+		return validateFinalizeRequest(c)
 	}
 
+	// 通用校验先把内部请求体解析并写进上下文；旧接口的火山形状要在它之后才能还原。
 	if taskErr := a.TaskAdaptor.ValidateRequestAndSetAction(c, info); taskErr != nil {
 		return taskErr
+	}
+
+	native, ok := arkRequest(c)
+	if !ok {
+		return service.TaskErrorWrapperLocal(fmt.Errorf("ark native request is missing"), "invalid_request", http.StatusBadRequest)
 	}
 	req, err := relaycommon.GetTaskRequest(c)
 	if err != nil {
@@ -105,16 +107,46 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 	return nil
 }
 
+// validateFinalizeRequest 校验成片第二步。原生入口的 draft_task 引用已在请求
+// 转换中间件里校验，这里直接放行；旧接口没有 prompt，走不了通用校验，只解析
+// 输出规格类参数，并拒绝非 1080p 的分辨率——上游成片档位只有 1080p。
+//
+// 空请求体与 `{}` 都必须通过：客户端通常直接 POST 空体，由网关套用默认值。
+func validateFinalizeRequest(c *gin.Context) *dto.TaskError {
+	if _, ok := NativeRequestFrom(c); ok {
+		return nil
+	}
+
+	options := map[string]any{}
+	storage, err := common.GetBodyStorage(c)
+	if err != nil {
+		return service.TaskErrorWrapper(err, "get_request_body_failed", http.StatusBadRequest)
+	}
+	if storage.Size() > 0 {
+		if err := common.UnmarshalBodyReusable(c, &options); err != nil {
+			return service.TaskErrorWrapper(err, "invalid_json", http.StatusBadRequest)
+		}
+	}
+
+	if resolution, ok := options["resolution"].(string); ok {
+		if normalized := strings.ToLower(strings.TrimSpace(resolution)); normalized != "" && normalized != Res1080p {
+			return service.TaskErrorWrapperLocal(
+				fmt.Errorf("finalize only supports resolution %s", Res1080p), "invalid_resolution", http.StatusBadRequest)
+		}
+	}
+
+	c.Set(legacyFinalizeOptionsKey, options)
+	return nil
+}
+
 // BuildRequestBody 构造发给华鲲的请求体。
 //
 // 普通与样片请求从下游原始 JSON 出发，只覆盖 model 与样片相关字段——火山新增
-// 的顶层参数（tools、priority 等）无需在本包建模也能透传。成片请求则从零构造：
+// 的顶层参数（tools、priority 等）无需在本包建模也能透传。旧接口的原始 JSON
+// 由 arkRequest 从 prompt + metadata 合成，其后完全同路。成片请求则从零构造：
 // 它的 content 只能是 draft_task 引用，可重设的只有输出规格类参数。
 func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayInfo) (io.Reader, error) {
-	native, ok := NativeRequestFrom(c)
-	if !ok {
-		return nil, fmt.Errorf("ark native request is missing")
-	}
+	native, _ := arkRequest(c)
 
 	var payload map[string]any
 	if info != nil && info.Action == constant.TaskActionFinalize {
@@ -131,13 +163,16 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 			"resolution": Res1080p,
 		}
 		for _, key := range finalizeOptionKeys {
-			if value, exists := native.Raw[key]; exists && value != nil {
+			if value := finalizeOptionValue(c, native, key); value != nil {
 				payload[key] = value
 			}
 		}
 		info.RequestedResolution = Res1080p
 		info.UpstreamResolution = Res1080p
 	} else {
+		if native == nil {
+			return nil, fmt.Errorf("ark native request is missing")
+		}
 		payload = make(map[string]any, len(native.Raw)+2)
 		for key, value := range native.Raw {
 			payload[key] = value
@@ -176,6 +211,17 @@ var finalizeOptionKeys = []string{
 	"priority",
 	"callback_url",
 	"safety_identifier",
+}
+
+// finalizeOptionValue 按入口取成片可重设参数：原生入口读原始 JSON，旧接口读
+// 校验阶段解析出的请求体。两者都只认 finalizeOptionKeys 白名单。
+func finalizeOptionValue(c *gin.Context, native *NativeRequest, key string) any {
+	if native != nil {
+		return native.Raw[key]
+	}
+	value, _ := c.Get(legacyFinalizeOptionsKey)
+	options, _ := value.(map[string]any)
+	return options[key]
 }
 
 // EstimateBilling 返回档位价倍率（video_input）。
@@ -238,7 +284,8 @@ func warnMissingTier(c *gin.Context, info *relaycommon.RelayInfo, resolution str
 		" action="+string(info.Action)+", billing falls back to base price")
 }
 
-// DoResponse 解析华鲲的 create 响应，并只回下游 {"id": <网关公开任务 ID>}。
+// DoResponse 解析华鲲的 create 响应，按入口回不同形状：原生协议只回
+// {"id": <网关公开任务 ID>}，旧视频接口回 OpenAI 视频对象（与 61/66/67 一致）。
 // 上游的 cgt- 任务 ID 只落库，不暴露给下游。
 func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (string, []byte, *dto.TaskError) {
 	responseBody, err := io.ReadAll(resp.Body)
@@ -259,7 +306,17 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 		return "", nil, service.TaskErrorWrapper(fmt.Errorf("%s (error=%s)", message, upstream.Error), "upstream_error", http.StatusInternalServerError)
 	}
 
-	c.JSON(http.StatusOK, gin.H{"id": info.PublicTaskID})
+	if c.Request != nil && strings.HasPrefix(c.Request.URL.Path, constant.NativeArkVideoTaskPath) {
+		c.JSON(http.StatusOK, gin.H{"id": info.PublicTaskID})
+		return upstream.ID, responseBody, nil
+	}
+
+	video := dto.NewOpenAIVideo()
+	video.ID = info.PublicTaskID
+	video.TaskID = info.PublicTaskID
+	video.CreatedAt = time.Now().Unix()
+	video.Model = info.OriginModelName
+	c.JSON(http.StatusOK, video)
 	return upstream.ID, responseBody, nil
 }
 

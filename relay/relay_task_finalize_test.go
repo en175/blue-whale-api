@@ -303,10 +303,10 @@ func TestResolveOriginTaskFinalizeIgnoresClientModel(t *testing.T) {
 	assert.Equal(t, finalizeTestModel, info.OriginModelName, "计费模型必须取原任务记录的模型")
 }
 
-// TestResolveOriginTaskFinalizeRejectsCrossChannel 验证成片不能跨协议通道：
-// /api/v3 只服务类型 70，/v1/videos 不服务类型 70。跨通道会让适配器与响应
-// 形状错位。
-func TestResolveOriginTaskFinalizeRejectsCrossChannel(t *testing.T) {
+// TestResolveOriginTaskFinalizeChannelRouting 验证成片停留在能承载样片的通道上：
+// 原生协议的样片不能跨到非 70 渠道（那些适配器不认 draft_task 引用）；类型 70
+// 兼容旧视频接口，所以 /v1/videos 引用的 70 渠道样片可以在原渠道成片。
+func TestResolveOriginTaskFinalizeChannelRouting(t *testing.T) {
 	now := time.Now().Unix()
 	base := finalizeFixture{
 		Draft: true, Status: model.TaskStatusSuccess, SubmitTime: now, FinishTime: now,
@@ -332,6 +332,10 @@ func TestResolveOriginTaskFinalizeRejectsCrossChannel(t *testing.T) {
 		tc := base
 		tc.ChannelType = constant.ChannelTypeTokenHubVolc
 		c := seedOriginFixture(t, tc, "finalize")
-		assert.Equal(t, "origin_task_requires_native_path", taskErrCode(ResolveOriginTask(c, newInfo())))
+
+		info := newInfo()
+		require.Empty(t, taskErrCode(ResolveOriginTask(c, info)))
+		assert.Equal(t, constant.TaskActionFinalize, info.Action)
+		assert.Equal(t, "cgt-origin-123", info.OriginUpstreamTaskID)
 	})
 }
