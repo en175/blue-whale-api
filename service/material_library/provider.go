@@ -111,8 +111,17 @@ func (tokenhubProvider) newRequest(ctx context.Context, action string, query url
 
 // tokenhubAssetStatusAliases 把对客的火山素材状态枚举翻译成 tokenhub 实际匹配的
 // 内部值。上游文档写 Active/Processing/Failed，但 ListAssets 过滤只认小写内部
-// 枚举（实测 success 命中，Active/Processing 恒为空），必须在出站请求里兼容。
-// 上游修复后本表可整体删除——已是对客枚举之外的值会原样放行。
+// 枚举，必须在出站请求里兼容。上游修复后本表可整体删除——不在表内的值原样放行。
+//
+// 实测边界（图片素材、2026-10-27）：
+//   - Filter.Statuses=["success"] 命中，但命中的素材里 Active 和 Processing 都有，
+//     上游的 success 不是状态一一对应；
+//   - ["active"]、["processing"] 返回 0 条（上游 enum 大小写敏感，只认小写内部值）；
+//   - ["verifying"]、["failed"] 也返回 0 条，但当时账号内没有这两种状态的素材，
+//     属于无效探测——processing→verifying、failed→failed 两条映射未经证实，
+//     上线后需用真实素材复核；
+//   - 响应里的 Result.Items[].Status 未做反向翻译，客户端按 Active 过滤成功后，
+//     读回的 Status 仍可能是上游内部值。
 var tokenhubAssetStatusAliases = map[string]string{
 	"active":     "success",
 	"processing": "verifying",

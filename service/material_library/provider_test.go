@@ -95,6 +95,21 @@ func TestTranslateTokenhubAssetStatuses(t *testing.T) {
 		assert.Equal(t, []string{"success", "Custom"}, statusesOf(t, translateTokenhubAssetStatuses(body)))
 	})
 
+	t.Run("只改状态值，其余字段与数字精度原样保留", func(t *testing.T) {
+		body := []byte(`{"Filter":{"GroupIds":["g1","g2"],"Name":"n","Statuses":["Active"]},"PageNumber":9007199254740993,"PageSize":10,"Unknown":{"k":[1,2.5]}}`)
+		translated := translateTokenhubAssetStatuses(body)
+		assert.Equal(t, []string{"success"}, statusesOf(t, translated))
+		assert.Contains(t, string(translated), `"PageNumber":9007199254740993`)
+		assert.Contains(t, string(translated), `"Unknown":{"k":[1,2.5]}`)
+		assert.Contains(t, string(translated), `"GroupIds":["g1","g2"]`)
+		assert.Contains(t, string(translated), `"Name":"n"`)
+	})
+
+	t.Run("空白裁掉，重复值逐个翻译", func(t *testing.T) {
+		body := []byte(`{"Filter":{"Statuses":[" Active ","success"]}}`)
+		assert.Equal(t, []string{"success", "success"}, statusesOf(t, translateTokenhubAssetStatuses(body)))
+	})
+
 	t.Run("已是上游枚举时不改请求体", func(t *testing.T) {
 		body := []byte(`{"Filter":{"GroupIds":["g"],"Statuses":["success"]},"PageNumber":1,"PageSize":10}`)
 		assert.Equal(t, body, translateTokenhubAssetStatuses(body))
@@ -105,6 +120,12 @@ func TestTranslateTokenhubAssetStatuses(t *testing.T) {
 			[]byte(`{"Filter":{"GroupIds":["g"]},"PageNumber":1,"PageSize":10}`),
 			[]byte(`{"GroupIds":["g"]}`),
 			[]byte(`{"Filter":{"GroupIds":["g"],"Statuses":"Active"}}`),
+			[]byte(`{"Filter":{"Statuses":[]}}`),
+			[]byte(`{"Filter":{"Statuses":null}}`),
+			[]byte(`{"Filter":{"Statuses":[123]}}`),
+			[]byte(`{"Filter":null}`),
+			[]byte(`[]`),
+			[]byte(`null`),
 			[]byte(`not-json`),
 		}
 		for _, body := range bodies {
@@ -132,11 +153,16 @@ func TestTokenhubProvider_translatesListAssetsStatuses(t *testing.T) {
 	require.NoError(t, err)
 	var sent struct {
 		Filter struct {
+			GroupIds []string `json:"GroupIds"`
 			Statuses []string `json:"Statuses"`
 		} `json:"Filter"`
+		PageNumber int `json:"PageNumber"`
 	}
 	require.NoError(t, common.Unmarshal(gotBody, &sent))
 	assert.Equal(t, []string{"success"}, sent.Filter.Statuses)
+	// 翻译不能顺手丢掉其它过滤条件与分页参数
+	assert.Equal(t, []string{"g"}, sent.Filter.GroupIds)
+	assert.Equal(t, 1, sent.PageNumber)
 
 	_, err = tokenhubProvider{}.DoAction(context.Background(), "GetAsset", nil, body)
 	require.NoError(t, err)
