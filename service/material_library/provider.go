@@ -113,15 +113,16 @@ func (tokenhubProvider) newRequest(ctx context.Context, action string, query url
 // 内部值。上游文档写 Active/Processing/Failed，但 ListAssets 过滤只认小写内部
 // 枚举，必须在出站请求里兼容。上游修复后本表可整体删除——不在表内的值原样放行。
 //
-// 实测边界（图片素材、2026-10-27）：
-//   - Filter.Statuses=["success"] 命中，但命中的素材里 Active 和 Processing 都有，
-//     上游的 success 不是状态一一对应；
-//   - ["active"]、["processing"] 返回 0 条（上游 enum 大小写敏感，只认小写内部值）；
-//   - ["verifying"]、["failed"] 也返回 0 条，但当时账号内没有这两种状态的素材，
-//     属于无效探测——processing→verifying、failed→failed 两条映射未经证实，
-//     上线后需用真实素材复核；
+// 实测边界（2026-10-28，新建素材后立刻轮询 ListAssets 与 GetAsset）：
+//   - Filter.Statuses 只认小写内部枚举，大小写敏感；Active 等对客值返回 0 条；
+//   - success 返回的条目在响应里都是 Active，**没有**观察到 success 命中
+//     Processing 状态的素材。新建素材后立刻查询时，ListAssets 要么还没索引到
+//     该素材，要么已直接返回 Active（此时 GetAsset 仍报 Processing），
+//     两者对同一素材的状态口径不一致；
+//   - verifying / processing / creating / active / failed 在所有探测中均返回 0 条，
+//     processing→verifying、failed→failed 两条映射仍无正向证据，上线后需复核；
 //   - 响应里的 Result.Items[].Status 未做反向翻译，客户端按 Active 过滤成功后，
-//     读回的 Status 仍可能是上游内部值。
+//     读回的 Status 仍是上游内部值。
 var tokenhubAssetStatusAliases = map[string]string{
 	"active":     "success",
 	"processing": "verifying",
