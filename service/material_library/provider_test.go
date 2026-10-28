@@ -2,8 +2,13 @@ package material_library
 
 import (
 	"context"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -59,4 +64,107 @@ func TestMaterialGroups_providerIsolation(t *testing.T) {
 	owned, err = model.UserMaterialGroupExists(1, "volcengine", "g-volc")
 	require.NoError(t, err)
 	assert.True(t, owned)
+}
+
+// TestTranslateTokenhubAssetStatuses 验证 ListAssets 的状态过滤翻译：对客按
+// 火山文档传 Active/Processing/Failed，上游过滤只认小写内部枚举。
+func TestTranslateTokenhubAssetStatuses(t *testing.T) {
+	statusesOf := func(t *testing.T, body []byte) []string {
+		t.Helper()
+		var parsed struct {
+			Filter struct {
+				Statuses []string `json:"Statuses"`
+			} `json:"Filter"`
+		}
+		require.NoError(t, common.Unmarshal(body, &parsed))
+		return parsed.Filter.Statuses
+	}
+
+	t.Run("文档枚举翻译成上游枚举", func(t *testing.T) {
+		body := []byte(`{"Filter":{"GroupIds":["g"],"Statuses":["Active","Processing","Failed"]},"PageNumber":1,"PageSize":10}`)
+		assert.Equal(t, []string{"success", "verifying", "failed"}, statusesOf(t, translateTokenhubAssetStatuses(body)))
+	})
+
+	t.Run("大小写不敏感", func(t *testing.T) {
+		body := []byte(`{"Filter":{"GroupIds":["g"],"Statuses":["ACTIVE","processing"]},"PageNumber":1,"PageSize":10}`)
+		assert.Equal(t, []string{"success", "verifying"}, statusesOf(t, translateTokenhubAssetStatuses(body)))
+	})
+
+	t.Run("未知值原样保留", func(t *testing.T) {
+		body := []byte(`{"Filter":{"GroupIds":["g"],"Statuses":["Active","Custom"]},"PageNumber":1,"PageSize":10}`)
+		assert.Equal(t, []string{"success", "Custom"}, statusesOf(t, translateTokenhubAssetStatuses(body)))
+	})
+
+	t.Run("只改状态值，其余字段与数字精度原样保留", func(t *testing.T) {
+		body := []byte(`{"Filter":{"GroupIds":["g1","g2"],"Name":"n","Statuses":["Active"]},"PageNumber":9007199254740993,"PageSize":10,"Unknown":{"k":[1,2.5]}}`)
+		translated := translateTokenhubAssetStatuses(body)
+		assert.Equal(t, []string{"success"}, statusesOf(t, translated))
+		assert.Contains(t, string(translated), `"PageNumber":9007199254740993`)
+		assert.Contains(t, string(translated), `"Unknown":{"k":[1,2.5]}`)
+		assert.Contains(t, string(translated), `"GroupIds":["g1","g2"]`)
+		assert.Contains(t, string(translated), `"Name":"n"`)
+	})
+
+	t.Run("空白裁掉，重复值逐个翻译", func(t *testing.T) {
+		body := []byte(`{"Filter":{"Statuses":[" Active ","success"]}}`)
+		assert.Equal(t, []string{"success", "success"}, statusesOf(t, translateTokenhubAssetStatuses(body)))
+	})
+
+	t.Run("已是上游枚举时不改请求体", func(t *testing.T) {
+		body := []byte(`{"Filter":{"GroupIds":["g"],"Statuses":["success"]},"PageNumber":1,"PageSize":10}`)
+		assert.Equal(t, body, translateTokenhubAssetStatuses(body))
+	})
+
+	t.Run("没有 Statuses 或形状不符时原样返回", func(t *testing.T) {
+		bodies := [][]byte{
+			[]byte(`{"Filter":{"GroupIds":["g"]},"PageNumber":1,"PageSize":10}`),
+			[]byte(`{"GroupIds":["g"]}`),
+			[]byte(`{"Filter":{"GroupIds":["g"],"Statuses":"Active"}}`),
+			[]byte(`{"Filter":{"Statuses":[]}}`),
+			[]byte(`{"Filter":{"Statuses":null}}`),
+			[]byte(`{"Filter":{"Statuses":[123]}}`),
+			[]byte(`{"Filter":null}`),
+			[]byte(`[]`),
+			[]byte(`null`),
+			[]byte(`not-json`),
+		}
+		for _, body := range bodies {
+			assert.Equal(t, body, translateTokenhubAssetStatuses(body))
+		}
+	})
+}
+
+// TestTokenhubProvider_translatesListAssetsStatuses 验证翻译只发生在 ListAssets
+// 出站请求上，其它 Action 的请求体保持原样。
+func TestTokenhubProvider_translatesListAssetsStatuses(t *testing.T) {
+	var gotBody []byte
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotBody, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ResponseMetadata":{},"Result":{}}`))
+	}))
+	defer upstream.Close()
+
+	setConfig(t, fmt.Sprintf(`{"enabled":true,"provider":"tokenhub","ak":"pak_x","sk":"psk_y","base_url":%q}`, upstream.URL))
+	defer setConfig(t, `{"enabled":true,"provider":"tokenhub","ak":"pak_x","sk":"psk_y","base_url":""}`)
+
+	body := []byte(`{"Filter":{"GroupIds":["g"],"Statuses":["Active"]},"PageNumber":1,"PageSize":10}`)
+	_, err := tokenhubProvider{}.DoAction(context.Background(), "ListAssets", nil, body)
+	require.NoError(t, err)
+	var sent struct {
+		Filter struct {
+			GroupIds []string `json:"GroupIds"`
+			Statuses []string `json:"Statuses"`
+		} `json:"Filter"`
+		PageNumber int `json:"PageNumber"`
+	}
+	require.NoError(t, common.Unmarshal(gotBody, &sent))
+	assert.Equal(t, []string{"success"}, sent.Filter.Statuses)
+	// 翻译不能顺手丢掉其它过滤条件与分页参数
+	assert.Equal(t, []string{"g"}, sent.Filter.GroupIds)
+	assert.Equal(t, 1, sent.PageNumber)
+
+	_, err = tokenhubProvider{}.DoAction(context.Background(), "GetAsset", nil, body)
+	require.NoError(t, err)
+	assert.Equal(t, body, gotBody)
 }
