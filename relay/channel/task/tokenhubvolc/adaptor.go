@@ -5,15 +5,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
-	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/relay/channel/task/taskcommon"
 	tasktokenhub "github.com/QuantumNous/new-api/relay/channel/task/tokenhub"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
@@ -104,7 +101,7 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 	if clientModel == "" {
 		clientModel = info.OriginModelName
 	}
-	if !isSeedance25Model(clientModel, info.OriginModelName, mappedModelName(c, clientModel)) {
+	if !isSeedance25Model(clientModel, info.OriginModelName, MappedModelName(c, clientModel)) {
 		return service.TaskErrorWrapperLocal(
 			fmt.Errorf("draft mode is only supported by Seedance 2.5 models"), "invalid_draft_model", http.StatusBadRequest)
 	}
@@ -243,7 +240,7 @@ func finalizeOptionValue(c *gin.Context, native *NativeRequest, key string) any 
 func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInfo) map[string]float64 {
 	if info != nil && info.Action == constant.TaskActionFinalize {
 		ratios := taskcommon.EstimateVideoTierBillingForTier(info, Res1080p, info.OriginHasVideoInput)
-		warnMissingTier(c, info, Res1080p, info.OriginHasVideoInput, ratios)
+		taskcommon.WarnMissingTier(c, info, Res1080p, info.OriginHasVideoInput, ratios)
 		return ratios
 	}
 	req, err := relaycommon.GetTaskRequest(c)
@@ -258,44 +255,9 @@ func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInf
 	// 基准档（480p/720p 及未传分辨率）本来就是基准价，不告警。
 	resolution, _ := req.Metadata["resolution"].(string)
 	if normalized := strings.ToLower(strings.TrimSpace(resolution)); normalized == Res1080p || normalized == Res4k {
-		warnMissingTier(c, info, normalized, taskcommon.HasVideoInputInMetadata(req.Metadata), ratios)
+		taskcommon.WarnMissingTier(c, info, normalized, taskcommon.HasVideoInputInMetadata(req.Metadata), ratios)
 	}
 	return ratios
-}
-
-const tierWarnInterval = 10 * time.Minute
-
-// missingTierWarned 去重档位缺失告警：同一 model + 档位 + 输入维度在
-// tierWarnInterval 内只告警一次，避免每次请求刷屏；超过间隔重新告警，
-// 管理员修好配置后又配错时无需重启进程。
-var missingTierWarned sync.Map
-
-// warnMissingTier 在按档位收费、但该档位没有显式单价时告警，避免静默按基准价
-// 结算（PRD 5.6）。只认「漏配」：倍率为 1.0 可能是配置了与基准价相同的单价，
-// 用 VideoTierPriceConfigured 区分，不误报。
-// 样片固定 480p，与 720p 同属基准键（video_tier_pricing 的 base 覆盖
-// 480p/720p），基准价本就是它的正确价格，因此不调用本函数。
-func warnMissingTier(c *gin.Context, info *relaycommon.RelayInfo, resolution string, hasVideo bool, ratios map[string]float64) {
-	if info == nil || ratios != nil {
-		return
-	}
-	model := info.UpstreamModelName
-	if model == "" {
-		model = info.OriginModelName
-	}
-	if taskcommon.VideoTierPriceConfigured(info.UpstreamModelName, resolution, hasVideo) ||
-		taskcommon.VideoTierPriceConfigured(info.OriginModelName, resolution, hasVideo) {
-		return // 档位有显式单价，只是恰好等于基准价
-	}
-	key := fmt.Sprintf("%s|%s|%t", model, resolution, hasVideo)
-	now := time.Now()
-	if last, loaded := missingTierWarned.Load(key); loaded && now.Sub(last.(time.Time)) < tierWarnInterval {
-		return
-	}
-	missingTierWarned.Store(key, now)
-	logger.LogWarn(c.Request.Context(), "video tier pricing missing: model="+model+
-		" resolution="+resolution+" has_video="+strconv.FormatBool(hasVideo)+
-		" action="+string(info.Action)+", billing falls back to base price")
 }
 
 // DoResponse 解析华鲲的 create 响应，按入口回不同形状：原生协议只回
@@ -376,9 +338,9 @@ func isSeedance25Model(names ...string) bool {
 	return false
 }
 
-// mappedModelName 按渠道 model_mapping 解析上游模型名，支持链式重定向。
+// MappedModelName 按渠道 model_mapping 解析上游模型名，支持链式重定向。
 // 只读上下文里的配置，不改 info；解析失败时退回原名，交正式映射步骤报错。
-func mappedModelName(c *gin.Context, modelName string) string {
+func MappedModelName(c *gin.Context, modelName string) string {
 	raw := c.GetString("model_mapping")
 	if raw == "" || raw == "{}" || modelName == "" {
 		return modelName

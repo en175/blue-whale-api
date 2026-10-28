@@ -3,6 +3,7 @@ package relay
 import (
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
 
@@ -92,7 +93,7 @@ func seedOriginFixture(t *testing.T, tc finalizeFixture, suffix string) *gin.Con
 		TaskID:     finalizeTestOriginID,
 		UserId:     ownerID,
 		ChannelId:  finalizeTestChannelID,
-		Platform:   constant.TaskPlatform("66"),
+		Platform:   constant.TaskPlatform(strconv.Itoa(channelType)),
 		Action:     constant.TaskActionGenerate,
 		Status:     tc.Status,
 		SubmitTime: tc.SubmitTime,
@@ -304,8 +305,9 @@ func TestResolveOriginTaskFinalizeIgnoresClientModel(t *testing.T) {
 }
 
 // TestResolveOriginTaskFinalizeChannelRouting 验证成片停留在能承载样片的通道上：
-// 原生协议的样片不能跨到非 70 渠道（那些适配器不认 draft_task 引用）；类型 70
-// 兼容旧视频接口，所以 /v1/videos 引用的 70 渠道样片可以在原渠道成片。
+// 原生协议的样片只能落在服务 /api/v3 的渠道（70 / 71），不能跨到不认 draft_task
+// 引用的渠道；类型 70 兼容旧视频接口，所以 /v1/videos 引用的 70 渠道样片可以在原
+// 渠道成片，而只服务原生协议的 71 不行。
 func TestResolveOriginTaskFinalizeChannelRouting(t *testing.T) {
 	now := time.Now().Unix()
 	base := finalizeFixture{
@@ -337,6 +339,26 @@ func TestResolveOriginTaskFinalizeChannelRouting(t *testing.T) {
 		require.Empty(t, taskErrCode(ResolveOriginTask(c, info)))
 		assert.Equal(t, constant.TaskActionFinalize, info.Action)
 		assert.Equal(t, "cgt-origin-123", info.OriginUpstreamTaskID)
+	})
+
+	t.Run("原生请求引用 71 渠道的样片", func(t *testing.T) {
+		tc := base
+		tc.ChannelType = constant.ChannelTypeAistoreVolc
+		tc.NativeRequest = true
+		c := seedOriginFixture(t, tc, "")
+
+		info := newInfo()
+		require.Empty(t, taskErrCode(ResolveOriginTask(c, info)))
+		assert.Equal(t, constant.TaskActionFinalize, info.Action)
+		assert.Equal(t, "cgt-origin-123", info.OriginUpstreamTaskID)
+	})
+
+	// 71 只服务原生协议：旧接口的成片入口不能用它在 dofinalize 里成片。
+	t.Run("/v1/videos 引用 71 渠道的样片被拒", func(t *testing.T) {
+		tc := base
+		tc.ChannelType = constant.ChannelTypeAistoreVolc
+		c := seedOriginFixture(t, tc, "finalize")
+		assert.Equal(t, "origin_task_path_mismatch", taskErrCode(ResolveOriginTask(c, newInfo())))
 	})
 }
 

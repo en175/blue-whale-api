@@ -70,6 +70,7 @@ const (
 	ChannelTypeNovitaGemini       = 68
 	ChannelTypeNovitaOpenAI       = 69
 	ChannelTypeTokenHubVolc       = 70
+	ChannelTypeAistoreVolc        = 71
 	ChannelTypeDummy              // this one is only for count, do not add any channel after this
 
 )
@@ -146,6 +147,7 @@ var ChannelBaseURLs = []string{
 	"https://api.novita.ai/gemini",              //68
 	"https://api.novita.ai/openai",              //69
 	"https://ai-tokenhub.ai",                    //70
+	"https://aistore.gsiig.cn/v1",               //71
 }
 
 var ChannelTypeNames = map[int]string{
@@ -216,6 +218,7 @@ var ChannelTypeNames = map[int]string{
 	ChannelTypeNovitaGemini:       "NovitaGemini",
 	ChannelTypeNovitaOpenAI:       "NovitaOpenAI",
 	ChannelTypeTokenHubVolc:       "TokenHubVolc",
+	ChannelTypeAistoreVolc:        "AistoreVolc",
 }
 
 // NativeArkVideoTaskPath 是火山方舟原生视频协议的对客路径前缀。
@@ -226,12 +229,15 @@ var ChannelTypeNames = map[int]string{
 const NativeArkVideoTaskPath = "/api/v3/contents/generations/tasks"
 
 // ChannelServesRequestPath 报告某渠道类型能否服务该请求路径。
-// 只有类型 70 服务 NativeArkVideoTaskPath；它同时兼容旧视频接口，其余路径
-// 一律不路由给它。
+// 类型 70 服务 NativeArkVideoTaskPath，同时兼容旧视频接口；类型 71 只服务
+// 原生协议，不服务旧视频接口；其余路径一律不路由给这两个类型。
 func ChannelServesRequestPath(channelType int, requestPath string) bool {
 	isNativeArkTask := strings.HasPrefix(requestPath, NativeArkVideoTaskPath)
-	if channelType == ChannelTypeTokenHubVolc {
+	switch channelType {
+	case ChannelTypeTokenHubVolc:
 		return isNativeArkTask || servesLegacyVideoTaskPath(requestPath)
+	case ChannelTypeAistoreVolc:
+		return isNativeArkTask
 	}
 	return !isNativeArkTask
 }
