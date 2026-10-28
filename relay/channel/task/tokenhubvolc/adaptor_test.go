@@ -182,7 +182,7 @@ func TestConvertToNativeArkTask_statusAndPayload(t *testing.T) {
 			UpdatedAt: 200,
 		}
 		task.Properties.OriginModelName = "doubao-seedance-2-5-260628"
-		task.Data = []byte(`{"id":"01a17b4f-083d-71f4-bcab-c5128ba2f00c","upstreamTaskId":"cgt-20261027110219-vvggz","status":"succeeded","resultSummary":{"content":{"video_url":"https://cdn/v.mp4"},"resolution":"1080p","duration":"5","usage":{"completion_tokens":120,"total_tokens":150}}}`)
+		task.Data = []byte(`{"id":"01a17b4f-083d-71f4-bcab-c5128ba2f00c","upstreamTaskId":"cgt-20261027110219-vvggz","status":"succeeded","resultSummary":{"content":{"video_url":"https://cdn/v.mp4","last_frame_url":"https://cdn/f.png"},"resolution":"1080p","duration":"5","usage":{"completion_tokens":120,"total_tokens":150}}}`)
 
 		raw, err := adaptor.ConvertToNativeArkTask(task)
 		require.NoError(t, err)
@@ -194,10 +194,73 @@ func TestConvertToNativeArkTask_statusAndPayload(t *testing.T) {
 		assert.Equal(t, "doubao-seedance-2-5-260628", out["model"])
 		// 华鲲的 UUID 是轮询键，火山 cgt 号才是到火山侧排障的凭据，两者都要能让下游看到
 		assert.Equal(t, "cgt-20261027110219-vvggz", out["upstreamTaskId"])
-		assert.Equal(t, map[string]any{"video_url": "https://cdn/v.mp4"}, out["content"])
+		assert.Equal(t, map[string]any{"video_url": "https://cdn/v.mp4", "last_frame_url": "https://cdn/f.png"}, out["content"])
 		assert.Equal(t, map[string]any{"completion_tokens": float64(120), "total_tokens": float64(150)}, out["usage"])
 		assert.Equal(t, "1080p", out["resolution"])
 		assert.Equal(t, float64(5), out["duration"])
+	})
+
+	t.Run("只回尾帧时仍返回 content", func(t *testing.T) {
+		task := &model.Task{TaskID: "task_frame", Status: model.TaskStatusSuccess}
+		task.Data = []byte(`{"resultSummary":{"content":{"last_frame_url":"https://cdn/f.png"}}}`)
+
+		raw, err := adaptor.ConvertToNativeArkTask(task)
+		require.NoError(t, err)
+
+		var out map[string]any
+		require.NoError(t, common.Unmarshal(raw, &out))
+		assert.Equal(t, map[string]any{"last_frame_url": "https://cdn/f.png"}, out["content"])
+	})
+
+	t.Run("透出联网搜索用量与实际调用的工具", func(t *testing.T) {
+		task := &model.Task{TaskID: "task_tools", Status: model.TaskStatusSuccess}
+		task.Data = []byte(`{"tools":[{"type":"web_search"}],"resultSummary":{"content":{"video_url":"https://cdn/v.mp4"},"usage":{"completion_tokens":10,"total_tokens":10,"tool_usage":{"web_search":2}}}}`)
+
+		raw, err := adaptor.ConvertToNativeArkTask(task)
+		require.NoError(t, err)
+
+		var out map[string]any
+		require.NoError(t, common.Unmarshal(raw, &out))
+		assert.Equal(t, map[string]any{
+			"completion_tokens": float64(10),
+			"total_tokens":      float64(10),
+			"tool_usage":        map[string]any{"web_search": float64(2)},
+		}, out["usage"])
+		assert.Equal(t, []any{map[string]any{"type": "web_search"}}, out["tools"])
+	})
+
+	t.Run("只有 tool_usage 时仍输出 usage", func(t *testing.T) {
+		task := &model.Task{TaskID: "task_tool_only", Status: model.TaskStatusSuccess}
+		task.Data = []byte(`{"resultSummary":{"usage":{"tool_usage":{"web_search":3}}}}`)
+
+		raw, err := adaptor.ConvertToNativeArkTask(task)
+		require.NoError(t, err)
+
+		var out map[string]any
+		require.NoError(t, common.Unmarshal(raw, &out))
+		assert.Equal(t, map[string]any{
+			"completion_tokens": float64(0),
+			"total_tokens":      float64(0),
+			"tool_usage":        map[string]any{"web_search": float64(3)},
+		}, out["usage"])
+	})
+
+	t.Run("辅助字段形态漂移不影响主响应", func(t *testing.T) {
+		task := &model.Task{TaskID: "task_drift", Status: model.TaskStatusSuccess}
+		task.Data = []byte(`{"tools":{"type":"web_search"},"resultSummary":{"content":{"video_url":"https://cdn/v.mp4"},"usage":{"completion_tokens":1,"total_tokens":2,"tool_usage":{"web_search":"2"}}}}`)
+
+		raw, err := adaptor.ConvertToNativeArkTask(task)
+		require.NoError(t, err)
+
+		var out map[string]any
+		require.NoError(t, common.Unmarshal(raw, &out))
+		assert.Equal(t, "succeeded", out["status"])
+		assert.Equal(t, map[string]any{"video_url": "https://cdn/v.mp4"}, out["content"])
+		assert.NotContains(t, out, "tools")
+		assert.Equal(t, map[string]any{
+			"completion_tokens": float64(1),
+			"total_tokens":      float64(2),
+		}, out["usage"])
 	})
 
 	t.Run("运行中任务不返回产物", func(t *testing.T) {
@@ -227,6 +290,32 @@ func TestConvertToNativeArkTask_statusAndPayload(t *testing.T) {
 		assert.Equal(t, map[string]any{"code": "TaskFailed", "message": "content blocked"}, out["error"])
 		// 上游没给出 cgt 号时省略字段，不返回空串占位
 		assert.NotContains(t, out, "upstreamTaskId")
+	})
+
+	t.Run("失败任务透出上游错误码", func(t *testing.T) {
+		t.Run("优先结果信封内的 error.code", func(t *testing.T) {
+			task := &model.Task{TaskID: "task_code", Status: model.TaskStatusFailure}
+			task.Data = []byte(`{"error":{"code":"TopLevel","message":"outer"},"resultSummary":{"error":{"code":"SensitiveContent","message":"content blocked"}}}`)
+
+			raw, err := adaptor.ConvertToNativeArkTask(task)
+			require.NoError(t, err)
+
+			var out map[string]any
+			require.NoError(t, common.Unmarshal(raw, &out))
+			assert.Equal(t, map[string]any{"code": "SensitiveContent", "message": "content blocked"}, out["error"])
+		})
+
+		t.Run("顶层 error.code 支持数字形态", func(t *testing.T) {
+			task := &model.Task{TaskID: "task_code_num", Status: model.TaskStatusFailure}
+			task.Data = []byte(`{"error":{"code":500,"message":"upstream failed"}}`)
+
+			raw, err := adaptor.ConvertToNativeArkTask(task)
+			require.NoError(t, err)
+
+			var out map[string]any
+			require.NoError(t, common.Unmarshal(raw, &out))
+			assert.Equal(t, map[string]any{"code": "500", "message": "upstream failed"}, out["error"])
+		})
 	})
 }
 
