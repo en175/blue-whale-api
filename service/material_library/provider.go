@@ -3,11 +3,14 @@ package material_library
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/material_setting"
 
@@ -51,6 +54,10 @@ func providerByName(name string) Provider {
 type tokenhubProvider struct{}
 
 func (tokenhubProvider) DoAction(ctx context.Context, action string, query url.Values, body []byte) (*Response, error) {
+	// tokenhub 的 ListAssets 过滤枚举与对客契约不一致，出站前统一翻译。
+	if action == "ListAssets" {
+		body = translateTokenhubAssetStatuses(body)
+	}
 	ctx, cancel := context.WithTimeout(ctx, materialUpstreamTimeout)
 	defer cancel()
 	req, err := tokenhubProvider{}.newRequest(ctx, action, query, body)
@@ -100,6 +107,80 @@ func (tokenhubProvider) newRequest(ctx context.Context, action string, query url
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+cfg.AK+":"+cfg.SK)
 	return req, nil
+}
+
+// tokenhubAssetStatusAliases 把对客的火山素材状态枚举翻译成 tokenhub 实际匹配的
+// 内部值。上游文档写 Active/Processing/Failed，但 ListAssets 过滤只认小写内部
+// 枚举（实测 success 命中，Active/Processing 恒为空），必须在出站请求里兼容。
+// 上游修复后本表可整体删除——已是对客枚举之外的值会原样放行。
+var tokenhubAssetStatusAliases = map[string]string{
+	"active":     "success",
+	"processing": "verifying",
+	"failed":     "failed",
+}
+
+// translateTokenhubAssetStatuses 改写 ListAssets 请求体里的 Filter.Statuses。
+// 只动命中的状态值，其余字段以原始 JSON 片段保留；请求体不是预期形状时原样
+// 返回，交上游报参数错误。
+func translateTokenhubAssetStatuses(body []byte) []byte {
+	var top map[string]json.RawMessage
+	if err := common.Unmarshal(body, &top); err != nil || top == nil {
+		return body
+	}
+	filterKey, filterRaw := rawFieldFold(top, "Filter")
+	if filterRaw == nil {
+		return body
+	}
+	var filter map[string]json.RawMessage
+	if err := common.Unmarshal(filterRaw, &filter); err != nil || filter == nil {
+		return body
+	}
+	statusKey, statusRaw := rawFieldFold(filter, "Statuses")
+	if statusRaw == nil {
+		return body
+	}
+	var statuses []string
+	if err := common.Unmarshal(statusRaw, &statuses); err != nil {
+		return body
+	}
+
+	changed := false
+	for i, status := range statuses {
+		mapped, ok := tokenhubAssetStatusAliases[strings.ToLower(strings.TrimSpace(status))]
+		if ok && mapped != status {
+			statuses[i] = mapped
+			changed = true
+		}
+	}
+	if !changed {
+		return body
+	}
+
+	encoded, err := common.Marshal(statuses)
+	if err != nil {
+		return body
+	}
+	filter[statusKey] = encoded
+	encoded, err = common.Marshal(filter)
+	if err != nil {
+		return body
+	}
+	top[filterKey] = encoded
+	encoded, err = common.Marshal(top)
+	if err != nil {
+		return body
+	}
+	return encoded
+}
+
+// rawFieldFold 按大小写不敏感查找字段，返回实际键名与原始片段。
+func rawFieldFold(fields map[string]json.RawMessage, name string) (string, json.RawMessage) {
+	for key, value := range fields {
+		if strings.EqualFold(key, name) {
+			return key, value
+		}
+	}
+	return "", nil
 }
 
 // volcengineProvider 对接火山引擎官方素材库（管控面 API）：
