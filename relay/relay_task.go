@@ -117,11 +117,12 @@ func ResolveOriginTask(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskErr
 	if ch.Status != common.ChannelStatusEnabled {
 		return service.TaskErrorWrapperLocal(errors.New("the channel of the origin task is disabled"), "task_channel_disable", http.StatusBadRequest)
 	}
-	// 出成片必须留在能承载样片的同一条通道上：/api/v3 只服务类型 70，反向不成立
-	// ——类型 70 同时兼容旧视频接口，所以旧接口的样片可以在类型 70 渠道上成片。
-	// 但原生协议的样片不能跨到其它渠道：那些渠道的适配器不认 draft_task 引用。
+	// 出成片必须留在能承载原生协议的渠道上：70 与 71 都服务 /api/v3，70 反向
+	// 还兼容旧视频接口，所以旧接口的样片可以在类型 70 渠道上成片。但原生协议的
+	// 样片不能跨到其它渠道：那些渠道的适配器不认 draft_task 引用。
 	if info.Action == constant.TaskActionFinalize {
-		if _, nativeRequest := tokenhubvolc.NativeRequestFrom(c); nativeRequest && ch.Type != constant.ChannelTypeTokenHubVolc {
+		if _, nativeRequest := tokenhubvolc.NativeRequestFrom(c); nativeRequest &&
+			!constant.ChannelServesRequestPath(ch.Type, constant.NativeArkVideoTaskPath) {
 			return service.TaskErrorWrapperLocal(errors.New("the origin task was not created by a native channel"), "origin_task_not_native", http.StatusBadRequest)
 		}
 	}

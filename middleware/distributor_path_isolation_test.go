@@ -20,15 +20,17 @@ import (
 )
 
 const (
-	pathIsolationGroup     = "default"
-	pathIsolationModel     = "doubao-seedance-2-5-260628"
-	pathIsolationOpenAICh  = 6701 // 类型 66，服务 /v1/videos
-	pathIsolationNativeCh  = 6702 // 类型 70，服务 /api/v3 与旧视频任务接口
-	pathIsolationAbortCode = http.StatusTeapot
+	pathIsolationGroup        = "default"
+	pathIsolationModel        = "doubao-seedance-2-5-260628"
+	pathIsolationAistoreModel = "cdance2.5"
+	pathIsolationOpenAICh     = 6701 // 类型 66，服务 /v1/videos
+	pathIsolationNativeCh     = 6702 // 类型 70，服务 /api/v3 与旧视频任务接口
+	pathIsolationAistoreCh    = 6703 // 类型 71，只服务 /api/v3
+	pathIsolationAbortCode    = http.StatusTeapot
 )
 
-// seedPathIsolationDB 建内存库，登记同一个模型下、同分组的 66 与 70 两条渠道。
-// 两条渠道同时可用，路径隔离才有可排除的对象：只留一条时即使过滤失效也测不出来。
+// seedPathIsolationDB 建内存库，登记同分组下 66 / 70 / 71 三条渠道。渠道同时可用，
+// 路径隔离才有可排除的对象：只留一条时即使过滤失效也测不出来。
 func seedPathIsolationDB(t *testing.T) {
 	t.Helper()
 
@@ -56,24 +58,36 @@ func seedPathIsolationDB(t *testing.T) {
 	channels := []model.Channel{
 		{Id: pathIsolationOpenAICh, Type: constant.ChannelTypeVolcEngine25, Name: "openai-shape", Key: "sk-a", Status: common.ChannelStatusEnabled},
 		{Id: pathIsolationNativeCh, Type: constant.ChannelTypeTokenHubVolc, Name: "native-ark", Key: "sk-b", Status: common.ChannelStatusEnabled},
+		{Id: pathIsolationAistoreCh, Type: constant.ChannelTypeAistoreVolc, Name: "aistore-ark", Key: "sk-c", Status: common.ChannelStatusEnabled},
 	}
 	require.NoError(t, db.Create(&channels).Error)
 	for _, ch := range channels {
 		priority := int64(0)
-		require.NoError(t, db.Create(&model.Ability{
-			Group:     pathIsolationGroup,
-			Model:     pathIsolationModel,
-			ChannelId: ch.Id,
-			Enabled:   true,
-			Priority:  &priority,
-		}).Error)
+		addAbility := func(modelName string) {
+			require.NoError(t, db.Create(&model.Ability{
+				Group:     pathIsolationGroup,
+				Model:     modelName,
+				ChannelId: ch.Id,
+				Enabled:   true,
+				Priority:  &priority,
+			}).Error)
+		}
+		// 71 不挂火山模型：与 70 同模型会让「原生路径选中 70」变成 70/71 随机
+		// 二选一，测不出目标。
+		if ch.Type != constant.ChannelTypeAistoreVolc {
+			addAbility(pathIsolationModel)
+		}
+		// 66 与 71 另挂在厂商模型名下，让「类型 71 只在原生路径可选」有对照渠道。
+		if ch.Type != constant.ChannelTypeTokenHubVolc {
+			addAbility(pathIsolationAistoreModel)
+		}
 	}
 }
 
 // runDistribute 通过真实的 gin 路由跑一次 Distribute，返回状态码与最终落到
 // 上下文里的渠道 ID（未选中为 0）。handler 以 418 结束，避免触发成功路径上的
 // 渠道亲和度记录（那部分依赖 Redis，与本测试无关）。
-func runDistribute(t *testing.T, path string, pinnedChannelID int) (int, int) {
+func runDistribute(t *testing.T, path, modelName string, pinnedChannelID int) (int, int) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	selectedChannelID := 0
@@ -91,7 +105,7 @@ func runDistribute(t *testing.T, path string, pinnedChannelID int) (int, int) {
 	}, Distribute(), handler)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{"model":"`+pathIsolationModel+`"}`))
+	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{"model":"`+modelName+`"}`))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 	return w.Code, selectedChannelID
@@ -105,7 +119,7 @@ func TestDistributePathIsolation(t *testing.T) {
 
 	t.Run("native path selects type 70", func(t *testing.T) {
 		for i := 0; i < 5; i++ {
-			code, channelID := runDistribute(t, constant.NativeArkVideoTaskPath, 0)
+			code, channelID := runDistribute(t, constant.NativeArkVideoTaskPath, pathIsolationModel, 0)
 			require.Equal(t, pathIsolationAbortCode, code, "应选出渠道并进入 handler")
 			assert.Equal(t, pathIsolationNativeCh, channelID, "同一模型下类型 66 必须被路径过滤掉")
 		}
@@ -113,27 +127,49 @@ func TestDistributePathIsolation(t *testing.T) {
 
 	t.Run("openai path excludes type 70", func(t *testing.T) {
 		for i := 0; i < 5; i++ {
-			code, channelID := runDistribute(t, "/v1/videos", 0)
+			code, channelID := runDistribute(t, "/v1/videos", pathIsolationModel, 0)
 			require.Equal(t, pathIsolationAbortCode, code)
 			assert.Equal(t, pathIsolationOpenAICh, channelID)
 		}
 	})
 
 	t.Run("pinned channel cannot bypass isolation", func(t *testing.T) {
-		code, channelID := runDistribute(t, constant.NativeArkVideoTaskPath, pathIsolationOpenAICh)
+		code, channelID := runDistribute(t, constant.NativeArkVideoTaskPath, pathIsolationModel, pathIsolationOpenAICh)
 		assert.Equal(t, http.StatusBadRequest, code, "把 /api/v3 钉到类型 66 必须拒绝")
 		assert.Zero(t, channelID)
 	})
 
 	t.Run("pinned native channel on openai path rejected", func(t *testing.T) {
-		code, channelID := runDistribute(t, "/v1/videos", pathIsolationNativeCh)
+		code, channelID := runDistribute(t, "/v1/videos", pathIsolationModel, pathIsolationNativeCh)
 		assert.Equal(t, http.StatusBadRequest, code, "把 /v1/videos 钉到类型 70 必须拒绝")
 		assert.Zero(t, channelID)
 	})
 
 	t.Run("pinned channel on its own path accepted", func(t *testing.T) {
-		code, channelID := runDistribute(t, constant.NativeArkVideoTaskPath, pathIsolationNativeCh)
+		code, channelID := runDistribute(t, constant.NativeArkVideoTaskPath, pathIsolationModel, pathIsolationNativeCh)
 		require.Equal(t, pathIsolationAbortCode, code)
 		assert.Equal(t, pathIsolationNativeCh, channelID)
+	})
+
+	t.Run("native path selects type 71 for aistore model", func(t *testing.T) {
+		for i := 0; i < 5; i++ {
+			code, channelID := runDistribute(t, constant.NativeArkVideoTaskPath, pathIsolationAistoreModel, 0)
+			require.Equal(t, pathIsolationAbortCode, code, "应选出渠道并进入 handler")
+			assert.Equal(t, pathIsolationAistoreCh, channelID, "同一模型下类型 66 必须被路径过滤掉")
+		}
+	})
+
+	t.Run("openai path excludes type 71", func(t *testing.T) {
+		for i := 0; i < 5; i++ {
+			code, channelID := runDistribute(t, "/v1/videos", pathIsolationAistoreModel, 0)
+			require.Equal(t, pathIsolationAbortCode, code)
+			assert.Equal(t, pathIsolationOpenAICh, channelID)
+		}
+	})
+
+	t.Run("pinned type 71 on openai path rejected", func(t *testing.T) {
+		code, channelID := runDistribute(t, "/v1/videos", pathIsolationAistoreModel, pathIsolationAistoreCh)
+		assert.Equal(t, http.StatusBadRequest, code, "把 /v1/videos 钉到类型 71 必须拒绝")
+		assert.Zero(t, channelID)
 	})
 }
