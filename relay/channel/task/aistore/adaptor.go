@@ -2,6 +2,7 @@ package aistore
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relay/channel"
 	taskdoubao "github.com/QuantumNous/new-api/relay/channel/task/doubao"
@@ -235,8 +237,13 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 
 	var upstream map[string]any
 	if err := common.Unmarshal(responseBody, &upstream); err != nil {
-		return "", nil, service.TaskErrorWrapper(
-			fmt.Errorf("body: %s", responseBody), "unmarshal_response_body_failed", http.StatusInternalServerError)
+		// 上游原文可能含任务号等内部信息，只进后端日志，不回给下游。
+		bodyForLog := string(responseBody)
+		if len(bodyForLog) > 512 {
+			bodyForLog = bodyForLog[:512] + "..."
+		}
+		logger.LogWarn(c.Request.Context(), "aistore create response is not json: "+bodyForLog)
+		return "", nil, service.TaskErrorWrapper(errors.New("invalid upstream response"), "unmarshal_response_body_failed", http.StatusInternalServerError)
 	}
 	upstreamID, _ := upstream["id"].(string)
 	if upstreamID == "" {
@@ -334,7 +341,13 @@ func (a *TaskAdaptor) ConvertToNativeArkTask(originTask *model.Task) ([]byte, er
 			return nil, fmt.Errorf("unmarshal aistore task data failed: %w", err)
 		}
 	}
-	if upstreamID, _ := data["id"].(string); upstreamID != "" {
+	// PrivateData 是权威值：轮询每轮都会把 Data 换成上游查询响应，某轮缺 id 时
+	// 若只靠 Data 反推，upstreamTaskId 会凭空消失。
+	upstreamID := originTask.PrivateData.UpstreamTaskID
+	if upstreamID == "" {
+		upstreamID, _ = data["id"].(string)
+	}
+	if upstreamID != "" && upstreamID != originTask.TaskID {
 		data["upstreamTaskId"] = upstreamID
 	}
 	data["id"] = originTask.TaskID
@@ -372,7 +385,9 @@ func (a *TaskAdaptor) ConvertToNativeArkTask(originTask *model.Task) ([]byte, er
 // 「是否含视频输入」继承第一步的样片，普通请求按本次请求体的分辨率判定。
 func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInfo) map[string]float64 {
 	if info != nil && info.Action == constant.TaskActionFinalize {
-		return taskcommon.EstimateVideoTierBillingForTier(info, Res1080p, info.OriginHasVideoInput)
+		ratios := taskcommon.EstimateVideoTierBillingForTier(info, Res1080p, info.OriginHasVideoInput)
+		taskcommon.WarnMissingTier(c, info, Res1080p, info.OriginHasVideoInput, ratios)
+		return ratios
 	}
 	if info != nil && info.Draft {
 		// 480p 与 720p 同属基准键，基准价本就是样片的正确价格，不告警。
@@ -413,17 +428,36 @@ func inferAction(native *tasktokenhubvolc.NativeRequest) string {
 
 // isSeedance25 报告模型名是否为 Seedance 2.5 系（样片模式的唯一支持者）。
 // 运河启源的 2.5 模型叫 cdance2.5，因此按版本号而不是厂商前缀判断。
+// 版本号必须是独立片段：v12.5 这类名字不能被当成 2.5，否则样片请求会发到
+// 不支持 draft 的模型上，预扣费已经发生。
 func isSeedance25(names ...string) bool {
 	for _, name := range names {
 		lower := strings.ToLower(strings.TrimSpace(name))
 		if lower == "" {
 			continue
 		}
-		if strings.Contains(lower, "2.5") || strings.Contains(lower, "2-5") {
-			return true
+		for _, token := range []string{"2.5", "2-5"} {
+			for offset := 0; ; {
+				pos := strings.Index(lower[offset:], token)
+				if pos < 0 {
+					break
+				}
+				start := offset + pos
+				end := start + len(token)
+				standaloneBefore := start == 0 || !isASCIIDigit(lower[start-1])
+				standaloneAfter := end == len(lower) || !isASCIIDigit(lower[end])
+				if standaloneBefore && standaloneAfter {
+					return true
+				}
+				offset = start + 1
+			}
 		}
 	}
 	return false
+}
+
+func isASCIIDigit(b byte) bool {
+	return b >= '0' && b <= '9'
 }
 
 // arkTaskStatus 把网关任务状态翻译成火山原生状态词，仅在落库数据缺 status 时兜底。

@@ -91,6 +91,11 @@ func TestValidateRequestAndSetAction(t *testing.T) {
 			wantCode:   "invalid_draft_model",
 		},
 		{
+			name:       "12.5 这类版本号不被当成 2.5",
+			nativeJSON: `{"model":"cdance12.5","content":[{"type":"text","text":"a cat"}],"draft":true}`,
+			wantCode:   "invalid_draft_model",
+		},
+		{
 			name:       "样片请求 720p 被拒",
 			nativeJSON: `{"model":"cdance2.5","content":[{"type":"text","text":"a cat"}],"draft":true,"resolution":"720p"}`,
 			wantCode:   "invalid_resolution",
@@ -370,6 +375,51 @@ func TestConvertToNativeArkTask_fillsOfficialFields(t *testing.T) {
 	assert.Equal(t, "queued", payload["status"])
 	assert.Equal(t, float64(1700000000), payload["created_at"])
 	assert.Equal(t, float64(1700000001), payload["updated_at"])
+}
+
+// TestConvertToNativeArkTask_upstreamIDFromPrivateData 轮询每轮都会用上游查询响应
+// 覆盖 Data；某轮缺 id 时 upstreamTaskId 不能跟着消失，PrivateData 才是权威值。
+func TestConvertToNativeArkTask_upstreamIDFromPrivateData(t *testing.T) {
+	task := &model.Task{
+		TaskID:      "task_public",
+		Status:      model.TaskStatusInProgress,
+		CreatedAt:   1,
+		UpdatedAt:   2,
+		Data:        []byte(`{"status":"running"}`),
+		PrivateData: model.TaskPrivateData{UpstreamTaskID: "cgt-9"},
+	}
+
+	adaptor := &TaskAdaptor{}
+	out, err := adaptor.ConvertToNativeArkTask(task)
+	require.NoError(t, err)
+
+	var payload map[string]any
+	require.NoError(t, common.Unmarshal(out, &payload))
+	assert.Equal(t, "task_public", payload["id"])
+	assert.Equal(t, "cgt-9", payload["upstreamTaskId"])
+}
+
+// TestFetchTaskHitsAistorePath 轮询地址是独立于提交地址的另一段拼接，
+// 同样要钉死 {base}/contents/generations/tasks/{id} 与鉴权头。
+func TestFetchTaskHitsAistorePath(t *testing.T) {
+	var gotPath, gotAuth string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"cgt-1","status":"running"}`))
+	}))
+	defer server.Close()
+
+	service.InitHttpClient() // FetchTask 走服务级出站客户端，测试里没有启动流程
+
+	adaptor := &TaskAdaptor{}
+	resp, err := adaptor.FetchTask(server.URL+"/v1/", "sk-test", map[string]any{"task_id": "cgt-1"}, "")
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+
+	assert.Equal(t, "/v1/contents/generations/tasks/cgt-1", gotPath)
+	assert.Equal(t, "Bearer sk-test", gotAuth)
 }
 
 func TestEstimateBilling(t *testing.T) {
