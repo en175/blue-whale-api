@@ -402,10 +402,11 @@ func TestConvertToNativeArkTask_upstreamIDFromPrivateData(t *testing.T) {
 // TestFetchTaskHitsAistorePath 轮询地址是独立于提交地址的另一段拼接，
 // 同样要钉死 {base}/contents/generations/tasks/{id} 与鉴权头。
 func TestFetchTaskHitsAistorePath(t *testing.T) {
-	var gotPath, gotAuth string
+	var gotPath, gotAuth, gotUA string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
 		gotAuth = r.Header.Get("Authorization")
+		gotUA = r.Header.Get("User-Agent")
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"id":"cgt-1","status":"running"}`))
 	}))
@@ -420,6 +421,8 @@ func TestFetchTaskHitsAistorePath(t *testing.T) {
 
 	assert.Equal(t, "/v1/contents/generations/tasks/cgt-1", gotPath)
 	assert.Equal(t, "Bearer sk-test", gotAuth)
+	// 上游 WAF 拒绝 Go 默认 UA 的 GET（HTML 403），轮询必须自带 UA。
+	assert.Equal(t, UserAgent, gotUA)
 }
 
 func TestEstimateBilling(t *testing.T) {

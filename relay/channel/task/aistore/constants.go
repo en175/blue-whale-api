@@ -11,6 +11,11 @@ const (
 	Res1080p = "1080p"
 )
 
+// UserAgent 是访问运河启源的固定 UA。上游 WAF 对 GET 请求直接拒绝 Go 默认
+// 的 Go-http-client/1.1（返回 HTML 403），轮询解析会一直失败、任务永远停在
+// queued。POST 不受影响，所以只在轮询路径上表现。
+const UserAgent = "aistore-volc/1.0"
+
 // ModelList 是运河启源默认对客模型名，直接使用厂商 ID，渠道 model_mapping
 // 默认留空。2.5 是样片模式的唯一支持者。
 var ModelList = []string{
