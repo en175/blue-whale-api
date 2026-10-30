@@ -16,7 +16,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useQuery } from '@tanstack/react-query'
 import {
   AlertTriangle,
   ChevronDown,
@@ -68,7 +67,6 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
-import { getEnabledModels } from '@/features/channels/api'
 import { usePricingData } from '@/features/pricing/hooks/use-pricing-data'
 
 import { safeJsonParse } from '../utils/json-parser'
@@ -1026,12 +1024,6 @@ function GroupModelDiscountRules({
 }: GroupModelDiscountRulesProps) {
   const { t } = useTranslation()
   const { models } = usePricingData()
-  // /api/pricing 会按当前登录用户自己的可用分组裁剪模型，管理员看不到其他分组
-  // 独占的模型；下拉选项必须用管理员全量接口，否则新加分组会一个模型都选不到。
-  const enabledModelsQuery = useQuery({
-    queryKey: ['enabled-models'],
-    queryFn: getEnabledModels,
-  })
   const [groupInput, setGroupInput] = useState<string | null>(null)
   const [modelInput, setModelInput] = useState<string | null>(null)
   const [ratioInput, setRatioInput] = useState('')
@@ -1047,7 +1039,7 @@ function GroupModelDiscountRules({
     return map
   }, [registry])
 
-  // 分组 → 该分组可用的模型列表，仅用于对失配规则给出软警告
+  // 分组 → 该分组可用的模型列表，用于限定下拉选项并对失配规则给出软警告
   const modelsByGroup = useMemo(() => {
     const map = new Map<string, string[]>()
     for (const model of models) {
@@ -1066,17 +1058,7 @@ function GroupModelDiscountRules({
     return map
   }, [models])
 
-  // 定价目录为空时无法判断分组可用性，此时不给失配警告，避免误报
-  const availabilityLoaded = models.length > 0
-
-  const allModelNames = useMemo(() => {
-    const names = new Set<string>(enabledModelsQuery.data?.data ?? [])
-    for (const model of models) names.add(model.model_name)
-    return [...names].sort((a, b) => a.localeCompare(b))
-  }, [enabledModelsQuery.data, models])
-
-  const catalogLoading =
-    enabledModelsQuery.isLoading && allModelNames.length === 0
+  const catalogLoaded = models.length > 0
 
   const groupModelRatioList = useMemo(() => {
     const map = parseNestedRatioMap(groupModelRatio)
@@ -1089,13 +1071,10 @@ function GroupModelDiscountRules({
     }))
   }, [groupModelRatio])
 
-  const modelOptions = useMemo(() => {
-    if (!groupInput) return []
-    const inGroup = modelsByGroup.get(groupInput) ?? []
-    const inGroupSet = new Set(inGroup)
-    // 该分组可用模型排前面，其余已启用模型仍可选，保存时给出软警告
-    return [...inGroup, ...allModelNames.filter((name) => !inGroupSet.has(name))]
-  }, [groupInput, modelsByGroup, allModelNames])
+  const modelOptions = useMemo(
+    () => (groupInput ? (modelsByGroup.get(groupInput) ?? []) : []),
+    [groupInput, modelsByGroup]
+  )
 
   const emitMap = useCallback(
     (map: Record<string, Record<string, number>>) => {
@@ -1244,9 +1223,9 @@ function GroupModelDiscountRules({
 
           {groupInput && modelOptions.length === 0 && (
             <p className='text-muted-foreground text-xs'>
-              {catalogLoading
-                ? t('Loading the model list...')
-                : t('No model found.')}
+              {catalogLoaded
+                ? t('No model is available in this group.')
+                : t('Loading the model list...')}
             </p>
           )}
 
@@ -1292,9 +1271,8 @@ function GroupModelDiscountRules({
                           cell: (discount: GroupModelDiscount) => {
                             const available = modelsByGroup.get(groupData.group)
                             const missing =
-                              availabilityLoaded &&
-                              available !== undefined &&
-                              !available.includes(discount.modelName)
+                              catalogLoaded &&
+                              !(available ?? []).includes(discount.modelName)
                             return (
                               <span className='inline-flex items-center gap-1.5'>
                                 {discount.modelName}
