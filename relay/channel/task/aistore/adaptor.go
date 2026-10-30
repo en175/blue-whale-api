@@ -69,6 +69,9 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+key)
+	// 上游 WAF 拒绝 Go 默认 UA 的 GET 请求（HTML 403），不显式设置会让轮询
+	// 永远解析失败，任务停在 queued 直到全局超时。
+	req.Header.Set("User-Agent", UserAgent)
 
 	client, err := service.GetHttpClientWithProxy(proxy)
 	if err != nil {
