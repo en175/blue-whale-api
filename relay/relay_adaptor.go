@@ -197,6 +197,8 @@ func GetTaskAdaptor(platform constant.TaskPlatform) channel.TaskAdaptor {
 			return &tasktokenhubvolc.TaskAdaptor{}
 		case constant.ChannelTypeAistoreVolc:
 			return &taskaistore.TaskAdaptor{}
+		case constant.ChannelTypeAistoreVolcLegacy:
+			return &taskaistore.TaskAdaptor{}
 		case constant.ChannelTypeGemini:
 			return &taskGemini.TaskAdaptor{}
 		case constant.ChannelTypeMiniMax:

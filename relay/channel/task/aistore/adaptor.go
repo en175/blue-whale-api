@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -22,25 +23,31 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// TaskAdaptor 是运河启源渠道（type 71）的适配器。上游是火山方舟协议的转售封装
-// （base URL 形如 https://aistore.gsiig.cn/v1），对客只开放火山原生
-// /api/v3/contents/generations/tasks。
+// TaskAdaptor 是运河启源渠道的适配器：类型 71 对客只开放火山原生
+// /api/v3/contents/generations/tasks；类型 72 对客只开放旧视频接口
+// （/v1/video/generations 与 /v1/videos/{id}/finalize），上游完全相同
+// （base URL 形如 https://aistore.gsiig.cn/v1）。
 //
-// 请求体与响应体都按火山原文透传：请求以中间件解析出的 native.Raw 为底，只覆盖
-// model；响应保留上游全部字段，只把 id 换成网关公开 ID 并补 upstreamTaskId。
+// 请求体与响应体都按火山原文与上游交互：原生入口以中间件解析出的 native.Raw
+// 为底，只覆盖 model；旧接口入口先由 arknative.ArkRequest 还原成火山形状。
 // 与 doubao 适配器的关键差别是它不经过 requestPayload 结构体，因此
 // output_format、return_last_frame 等火山新增字段不会被静默丢弃。
 type TaskAdaptor struct {
 	taskdoubao.TaskAdaptor
-	baseURL string
+	baseURL     string
+	channelType int
 }
 
 func (a *TaskAdaptor) Init(info *relaycommon.RelayInfo) {
 	a.TaskAdaptor.Init(info)
 	a.baseURL = info.ChannelBaseUrl
+	a.channelType = info.ChannelType
 }
 
 func (a *TaskAdaptor) GetChannelName() string {
+	if a.channelType == constant.ChannelTypeAistoreVolcLegacy {
+		return LegacyChannelName
+	}
 	return ChannelName
 }
 
@@ -88,27 +95,39 @@ func (a *TaskAdaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, req
 	return channel.DoTaskApiRequest(a, c, info, requestBody)
 }
 
-// ValidateRequestAndSetAction 校验火山原生请求并写任务类型。
+// ValidateRequestAndSetAction 校验视频任务请求并写任务类型。
+//
+// 原生入口与旧接口入口共用同一套判定：先由通用校验读内部请求体，再用
+// arknative.ArkRequest 还原火山形状。旧接口入口额外拒绝 draft_task 引用——
+// 成片只能走 /v1/videos/{id}/finalize，否则会绕过归属校验与 1080p 档计费。
 //
 // duration 由适配器自己判边界：火山用 -1 表示「编辑/延长由模型决定时长」，内部
 // 任务的时长校验只接受正数，因此原生 duration 不能交给通用校验。
 func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskError {
-	native, ok := arknative.NativeRequestFrom(c)
-	if !ok {
-		return service.TaskErrorWrapperLocal(
-			fmt.Errorf("native ark request is required"), "invalid_request", http.StatusBadRequest)
-	}
-
-	// 成片第二步：引用已由 ResolveOriginTask 校验归属、状态与 7 天窗口，
-	// 请求体里也没有 prompt，走不了通用校验。
+	// 成片第二步：原生入口的引用已由 ResolveOriginTask 校验归属、状态与 7 天
+	// 窗口；旧接口没有 prompt，走不了通用校验，只解析输出规格参数。
 	if info != nil && info.Action == constant.TaskActionFinalize {
-		return nil
+		return arknative.ValidateFinalizeRequest(c, Res1080p)
 	}
 
 	// 通用校验读中间件改写后的内部请求体（prompt + metadata），提示词必填等
-	// 既有约束原样生效。
+	// 既有约束原样生效。旧接口的火山形状要在它之后才能还原。
 	if taskErr := relaycommon.ValidateBasicTaskRequest(c, info, constant.TaskActionGenerate); taskErr != nil {
 		return taskErr
+	}
+
+	native, ok := arknative.ArkRequest(c)
+	if !ok {
+		return service.TaskErrorWrapperLocal(
+			fmt.Errorf("task metadata cannot be converted to a video request"), "invalid_request", http.StatusBadRequest)
+	}
+
+	// 成片引用只能走 finalize 分支：旧提交入口把 draft_task 当普通 content 透传
+	// 会绕过成片校验与两档计费。
+	if _, isNative := arknative.NativeRequestFrom(c); !isNative && native.HasDraftTask() {
+		return service.TaskErrorWrapperLocal(
+			fmt.Errorf("draft_task references are only accepted on the finalize endpoint"),
+			"invalid_content", http.StatusBadRequest)
 	}
 
 	if native.Duration != nil {
@@ -149,14 +168,15 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 }
 
 // BuildRequestBody 构造上游请求体：普通与样片请求以 native.Raw 为底，只覆盖
-// model 与样片字段；成片请求从零构造，content 只能是 draft_task 引用。
+// model 与样片字段；成片请求从零构造，content 只能是 draft_task 引用。旧接口
+// 入口与原生入口共用这一段，区别只在 ArkRequest 的还原来源与成片参数来源。
 func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayInfo) (io.Reader, error) {
-	native, ok := arknative.NativeRequestFrom(c)
-	if !ok {
-		return nil, fmt.Errorf("native ark request is missing")
-	}
+	native, _ := arknative.ArkRequest(c)
 
-	modelName := native.Model
+	modelName := ""
+	if native != nil {
+		modelName = native.Model
+	}
 	if info != nil && info.UpstreamModelName != "" {
 		modelName = info.UpstreamModelName
 	}
@@ -176,14 +196,13 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 			// 上游成片档位只有 1080p：客户端传任何值都被覆盖，不报错。
 			"resolution": Res1080p,
 		}
-		for _, key := range finalizeOptionKeys {
-			if value, ok := native.Raw[key]; ok {
-				payload[key] = value
-			}
-		}
+		arknative.ApplyFinalizeOptions(payload, c, native)
 		info.RequestedResolution = Res1080p
 		info.UpstreamResolution = Res1080p
 	} else {
+		if native == nil {
+			return nil, fmt.Errorf("ark native request is missing")
+		}
 		// 成片引用只能走 finalize 分支：其它入口把 draft_task 当普通 content 透传
 		// 会绕过成片校验与两档计费。
 		if native.HasDraftTask() {
@@ -215,22 +234,9 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 	return bytes.NewReader(data), nil
 }
 
-// finalizeOptionKeys 是成片请求里可以重设的输出规格类参数。content / prompt /
-// duration / ratio / seed / generate_audio 刻意不在其中：成片沿用样片的内容与
-// 时长（火山要求省略这些字段）。
-var finalizeOptionKeys = []string{
-	"output_format",
-	"watermark",
-	"return_last_frame",
-	"service_tier",
-	"execution_expires_after",
-	"priority",
-	"callback_url",
-	"safety_identifier",
-}
-
-// DoResponse 把上游创建响应原样回给下游，只把 id 换成网关公开 ID。上游 cgt 号
-// 以 upstreamTaskId 带出，便于下游到运河启源侧排障。
+// DoResponse 处理上游创建响应。原生入口把上游原文回给下游，只把 id 换成网关
+// 公开 ID，cgt 号以 upstreamTaskId 带出；旧接口入口按既有视频接口返回 OpenAI
+// 视频对象（与渠道 61/66/67/70 一致）。
 func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (string, []byte, *dto.TaskError) {
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -262,13 +268,22 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 		return "", nil, service.TaskErrorWrapper(fmt.Errorf("%s", message), "upstream_error", http.StatusInternalServerError)
 	}
 
-	upstream["id"] = info.PublicTaskID
-	upstream["upstreamTaskId"] = upstreamID
-	out, err := common.Marshal(upstream)
-	if err != nil {
-		return "", nil, service.TaskErrorWrapper(err, "marshal_response_failed", http.StatusInternalServerError)
+	if c.Request != nil && strings.HasPrefix(c.Request.URL.Path, constant.NativeArkVideoTaskPath) {
+		upstream["id"] = info.PublicTaskID
+		upstream["upstreamTaskId"] = upstreamID
+		out, err := common.Marshal(upstream)
+		if err != nil {
+			return "", nil, service.TaskErrorWrapper(err, "marshal_response_failed", http.StatusInternalServerError)
+		}
+		c.Data(http.StatusOK, "application/json; charset=utf-8", out)
+	} else {
+		video := dto.NewOpenAIVideo()
+		video.ID = info.PublicTaskID
+		video.TaskID = info.PublicTaskID
+		video.CreatedAt = time.Now().Unix()
+		video.Model = info.OriginModelName
+		c.JSON(http.StatusOK, video)
 	}
-	c.Data(http.StatusOK, "application/json; charset=utf-8", out)
 	return upstreamID, responseBody, nil
 }
 

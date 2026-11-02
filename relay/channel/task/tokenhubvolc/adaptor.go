@@ -48,7 +48,7 @@ func (a *TaskAdaptor) GetModelList() []string {
 // 与原生入口走完全相同的前两条判定。
 func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskError {
 	if info != nil && info.Action == constant.TaskActionFinalize {
-		return arknative.ValidateLegacyFinalizeRequest(c, Res1080p)
+		return arknative.ValidateFinalizeRequest(c, Res1080p)
 	}
 
 	// 通用校验先把内部请求体解析并写进上下文；旧接口的火山形状要在它之后才能还原。
@@ -137,11 +137,7 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 			// 上游成片档位只有 1080p：客户端传任何值都被覆盖，不报错。
 			"resolution": Res1080p,
 		}
-		for _, key := range arknative.FinalizeOptionKeys {
-			if value := arknative.FinalizeOptionValue(c, native, key); value != nil {
-				payload[key] = value
-			}
-		}
+		arknative.ApplyFinalizeOptions(payload, c, native)
 		info.RequestedResolution = Res1080p
 		info.UpstreamResolution = Res1080p
 	} else {

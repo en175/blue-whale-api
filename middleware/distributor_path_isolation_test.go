@@ -20,17 +20,19 @@ import (
 )
 
 const (
-	pathIsolationGroup        = "default"
-	pathIsolationModel        = "doubao-seedance-2-5-260628"
-	pathIsolationAistoreModel = "cdance2.5"
-	pathIsolationOpenAICh     = 6701 // 类型 66，服务 /v1/videos
-	pathIsolationNativeCh     = 6702 // 类型 70，服务 /api/v3 与旧视频任务接口
-	pathIsolationAistoreCh    = 6703 // 类型 71，只服务 /api/v3
-	pathIsolationAbortCode    = http.StatusTeapot
+	pathIsolationGroup              = "default"
+	pathIsolationModel              = "doubao-seedance-2-5-260628"
+	pathIsolationAistoreModel       = "cdance2.5"
+	pathIsolationAistoreLegacyModel = "cdance2.0"
+	pathIsolationOpenAICh           = 6701 // 类型 66，服务 /v1/videos
+	pathIsolationNativeCh           = 6702 // 类型 70，服务 /api/v3 与旧视频任务接口
+	pathIsolationAistoreCh          = 6703 // 类型 71，只服务 /api/v3
+	pathIsolationAistoreLegacyCh    = 6704 // 类型 72，只服务旧视频任务接口
+	pathIsolationAbortCode          = http.StatusTeapot
 )
 
-// seedPathIsolationDB 建内存库，登记同分组下 66 / 70 / 71 三条渠道。渠道同时可用，
-// 路径隔离才有可排除的对象：只留一条时即使过滤失效也测不出来。
+// seedPathIsolationDB 建内存库，登记同分组下 66 / 70 / 71 / 72 四条渠道。渠道同时
+// 可用，路径隔离才有可排除的对象：只留一条时即使过滤失效也测不出来。
 func seedPathIsolationDB(t *testing.T) {
 	t.Helper()
 
@@ -59,6 +61,7 @@ func seedPathIsolationDB(t *testing.T) {
 		{Id: pathIsolationOpenAICh, Type: constant.ChannelTypeVolcEngine25, Name: "openai-shape", Key: "sk-a", Status: common.ChannelStatusEnabled},
 		{Id: pathIsolationNativeCh, Type: constant.ChannelTypeTokenHubVolc, Name: "native-ark", Key: "sk-b", Status: common.ChannelStatusEnabled},
 		{Id: pathIsolationAistoreCh, Type: constant.ChannelTypeAistoreVolc, Name: "aistore-ark", Key: "sk-c", Status: common.ChannelStatusEnabled},
+		{Id: pathIsolationAistoreLegacyCh, Type: constant.ChannelTypeAistoreVolcLegacy, Name: "aistore-legacy", Key: "sk-d", Status: common.ChannelStatusEnabled},
 	}
 	require.NoError(t, db.Create(&channels).Error)
 	for _, ch := range channels {
@@ -74,12 +77,16 @@ func seedPathIsolationDB(t *testing.T) {
 		}
 		// 71 不挂火山模型：与 70 同模型会让「原生路径选中 70」变成 70/71 随机
 		// 二选一，测不出目标。
-		if ch.Type != constant.ChannelTypeAistoreVolc {
+		if ch.Type != constant.ChannelTypeAistoreVolc && ch.Type != constant.ChannelTypeAistoreVolcLegacy {
 			addAbility(pathIsolationModel)
 		}
 		// 66 与 71 另挂在厂商模型名下，让「类型 71 只在原生路径可选」有对照渠道。
-		if ch.Type != constant.ChannelTypeTokenHubVolc {
+		if ch.Type != constant.ChannelTypeTokenHubVolc && ch.Type != constant.ChannelTypeAistoreVolcLegacy {
 			addAbility(pathIsolationAistoreModel)
+		}
+		// 72 独占一个模型名：与 66 同模型会让「旧接口选中 72」变成随机二选一。
+		if ch.Type == constant.ChannelTypeAistoreVolcLegacy {
+			addAbility(pathIsolationAistoreLegacyModel)
 		}
 	}
 }
@@ -171,5 +178,39 @@ func TestDistributePathIsolation(t *testing.T) {
 		code, channelID := runDistribute(t, "/v1/videos", pathIsolationAistoreModel, pathIsolationAistoreCh)
 		assert.Equal(t, http.StatusBadRequest, code, "把 /v1/videos 钉到类型 71 必须拒绝")
 		assert.Zero(t, channelID)
+	})
+
+	t.Run("legacy video path selects type 72", func(t *testing.T) {
+		for i := 0; i < 5; i++ {
+			code, channelID := runDistribute(t, "/v1/video/generations", pathIsolationAistoreLegacyModel, 0)
+			require.Equal(t, pathIsolationAbortCode, code, "应选出渠道并进入 handler")
+			assert.Equal(t, pathIsolationAistoreLegacyCh, channelID)
+		}
+	})
+
+	t.Run("native path excludes type 72", func(t *testing.T) {
+		for i := 0; i < 5; i++ {
+			code, channelID := runDistribute(t, constant.NativeArkVideoTaskPath, pathIsolationAistoreLegacyModel, 0)
+			assert.NotEqual(t, pathIsolationAbortCode, code, "类型 72 不服务原生路径，必须选不到渠道")
+			assert.Zero(t, channelID)
+		}
+	})
+
+	t.Run("pinned type 72 on native path rejected", func(t *testing.T) {
+		code, channelID := runDistribute(t, constant.NativeArkVideoTaskPath, pathIsolationAistoreLegacyModel, pathIsolationAistoreLegacyCh)
+		assert.Equal(t, http.StatusBadRequest, code, "把 /api/v3 钉到类型 72 必须拒绝")
+		assert.Zero(t, channelID)
+	})
+
+	t.Run("pinned type 72 on openai path rejected", func(t *testing.T) {
+		code, channelID := runDistribute(t, "/v1/videos", pathIsolationAistoreLegacyModel, pathIsolationAistoreLegacyCh)
+		assert.Equal(t, http.StatusBadRequest, code, "把 /v1/videos 钉到类型 72 必须拒绝")
+		assert.Zero(t, channelID)
+	})
+
+	t.Run("pinned type 72 on its own path accepted", func(t *testing.T) {
+		code, channelID := runDistribute(t, "/v1/video/generations", pathIsolationAistoreLegacyModel, pathIsolationAistoreLegacyCh)
+		require.Equal(t, pathIsolationAbortCode, code)
+		assert.Equal(t, pathIsolationAistoreLegacyCh, channelID)
 	})
 }

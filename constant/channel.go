@@ -71,6 +71,7 @@ const (
 	ChannelTypeNovitaOpenAI       = 69
 	ChannelTypeTokenHubVolc       = 70
 	ChannelTypeAistoreVolc        = 71
+	ChannelTypeAistoreVolcLegacy  = 72
 	ChannelTypeDummy              // this one is only for count, do not add any channel after this
 
 )
@@ -148,6 +149,7 @@ var ChannelBaseURLs = []string{
 	"https://api.novita.ai/openai",              //69
 	"https://ai-tokenhub.ai",                    //70
 	"https://aistore.gsiig.cn/v1",               //71
+	"https://aistore.gsiig.cn/v1",               //72
 }
 
 var ChannelTypeNames = map[int]string{
@@ -219,18 +221,20 @@ var ChannelTypeNames = map[int]string{
 	ChannelTypeNovitaOpenAI:       "NovitaOpenAI",
 	ChannelTypeTokenHubVolc:       "TokenHubVolc",
 	ChannelTypeAistoreVolc:        "AistoreVolc",
+	ChannelTypeAistoreVolcLegacy:  "AistoreVolcLegacy",
 }
 
 // NativeArkVideoTaskPath 是火山方舟原生视频协议的对客路径前缀。
 //
 // 该路径与 /v1/videos 承载的上游协议不同：请求体是 content[]，任务查询按
 // 火山字段返回。除它之外，类型 70 同时兼容网关旧视频接口（见
-// servesLegacyVideoTaskPath），由适配器按入口形状分流。
+// servesLegacyVideoTaskPath），由适配器按入口形状分流；类型 72 只走旧视频接口。
 const NativeArkVideoTaskPath = "/api/v3/contents/generations/tasks"
 
 // ChannelServesRequestPath 报告某渠道类型能否服务该请求路径。
 // 类型 70 服务 NativeArkVideoTaskPath，同时兼容旧视频接口；类型 71 只服务
-// 原生协议，不服务旧视频接口；其余路径一律不路由给这两个类型。
+// 原生协议；类型 72 只服务旧视频接口（与 71 共用运河启源上游）；其余路径
+// 一律不路由给这三个类型。
 func ChannelServesRequestPath(channelType int, requestPath string) bool {
 	isNativeArkTask := strings.HasPrefix(requestPath, NativeArkVideoTaskPath)
 	switch channelType {
@@ -238,13 +242,15 @@ func ChannelServesRequestPath(channelType int, requestPath string) bool {
 		return isNativeArkTask || servesLegacyVideoTaskPath(requestPath)
 	case ChannelTypeAistoreVolc:
 		return isNativeArkTask
+	case ChannelTypeAistoreVolcLegacy:
+		return servesLegacyVideoTaskPath(requestPath)
 	}
 	return !isNativeArkTask
 }
 
-// servesLegacyVideoTaskPath 报告路径是否属于类型 70 兼容的旧视频接口：
-// /v1/video/generations（提交与查询）与 /v1/videos/{id}/finalize（样片第二步，
-// 该动作只有这一条路由）。/v1/videos 的创建走 OpenAI 视频对象，不在此列。
+// servesLegacyVideoTaskPath 报告路径是否属于旧视频接口：/v1/video/generations
+// （提交与查询）与 /v1/videos/{id}/finalize（样片第二步，该动作只有这一条路由）。
+// 类型 70 与 72 都兼容这组路径；/v1/videos 的创建走 OpenAI 视频对象，不在此列。
 func servesLegacyVideoTaskPath(requestPath string) bool {
 	if requestPath == "/v1/video/generations" ||
 		strings.HasPrefix(requestPath, "/v1/video/generations/") {

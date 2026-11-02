@@ -115,6 +115,7 @@ export function getChannelTypeIcon(type: number): string {
   69: 'OpenAI', // NovitaOpenAI (gpt-image family)
   70: 'Volcengine', // TokenHubVolc (Ark native protocol + legacy video API)
   71: 'Volcengine', // AistoreVolc (Ark native protocol passthrough)
+  72: 'Volcengine', // AistoreVolcLegacy (legacy video API, same Aistore upstream)
 
     // Tools & Platforms
     37: 'Dify', // Dify

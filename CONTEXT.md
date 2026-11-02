@@ -46,6 +46,14 @@ _Avoid_: remixGenerate（那是落库的 action 值）、视频生视频、超�
 Seedance 2.5 的两步出片：先出 480p 低价预览（样片），再基于它出 1080p 成片。两步是**两条独立计费的上游任务**，不是一次请求的两种输出。样片入口是提交时带 `draft=true`；成片入口是 `POST /v1/videos/{公开任务ID}/finalize`，原生协议渠道则在同一个提交入口传 `content:[{type:"draft_task", draft_task:{id: 公开任务ID}}]`。成片源只由网关从原任务推导，客户端指定不了——原生入口的 `draft_task.id` 也只是网关公开 ID，上游任务号由网关换。不绑定具体上游：火山、华鲲与运河启源都提供这套两步流程。
 _Avoid_: 超分、低清试看、finalizeDraft（那是落库的 action 值）
 
+**原生视频协议**:
+火山方舟的视频任务对客形状：`POST /api/v3/contents/generations/tasks` 提交、同前缀 `/{公开任务ID}` 查询，请求体用 `content[]`，成片用 `content[].draft_task` 引用样片。与「旧视频接口」是同一上游的两种对客协议。
+_Avoid_: 火山接口（含糊，也可能是 OpenAI 形状的 54 渠道）
+
+**旧视频接口**:
+网关既有的视频任务对客协议：`POST /v1/video/generations` 提交、`GET /v1/video/generations/{公开任务ID}` 查询、`POST /v1/videos/{公开任务ID}/finalize` 成片。不含 `/v1/videos` 创建与 remix，那是 OpenAI 视频对象协议。
+_Avoid_: OpenAI 视频接口（`/v1/videos` 是另一套对象协议）
+
 ### 渠道与上游
 
 **渠道（channel）**:

@@ -28,12 +28,12 @@ var FinalizeOptionKeys = []string{
 	"safety_identifier",
 }
 
-// ValidateLegacyFinalizeRequest 校验旧接口成片第二步。原生入口的 draft_task 引用
-// 已在请求转换中间件里校验，这里直接放行；旧接口没有 prompt，走不了通用校验，
-// 只解析输出规格类参数，并拒绝非 1080p 的分辨率——上游成片档位只有 1080p。
+// ValidateFinalizeRequest 校验成片第二步。原生入口的 draft_task 引用已在请求
+// 转换中间件里校验，这里直接放行；旧接口没有 prompt，走不了通用校验，只解析
+// 输出规格类参数，并拒绝非 allowedResolution 的分辨率——上游成片档位只有这一档。
 //
 // 空请求体与 `{}` 都必须通过：客户端通常直接 POST 空体，由网关套用默认值。
-func ValidateLegacyFinalizeRequest(c *gin.Context, allowedResolution string) *dto.TaskError {
+func ValidateFinalizeRequest(c *gin.Context, allowedResolution string) *dto.TaskError {
 	if _, ok := NativeRequestFrom(c); ok {
 		return nil
 	}
@@ -60,13 +60,27 @@ func ValidateLegacyFinalizeRequest(c *gin.Context, allowedResolution string) *dt
 	return nil
 }
 
-// FinalizeOptionValue 按入口取成片可重设参数：原生入口读原始 JSON，旧接口读
-// 校验阶段解析出的请求体。两者都只认 FinalizeOptionKeys 白名单。
-func FinalizeOptionValue(c *gin.Context, native *NativeRequest, key string) any {
+// ApplyFinalizeOptions 把白名单里的输出规格参数写进成片请求体，未传的键跳过。
+func ApplyFinalizeOptions(payload map[string]any, c *gin.Context, native *NativeRequest) {
+	for _, key := range FinalizeOptionKeys {
+		if value := finalizeOptionValue(c, native, key); value != nil {
+			payload[key] = value
+		}
+	}
+}
+
+// finalizeOptionValue 按入口取成片可重设参数：旧接口读校验阶段解析出的请求体，
+// 原生入口读原始 JSON。两者都只认 FinalizeOptionKeys 白名单。
+//
+// 旧接口参数优先：只有旧接口校验会写 legacyFinalizeOptionsKey，若它存在就说明
+// 本次请求来自旧接口，不能被按 metadata 还原出的 native.Raw 覆盖。
+func finalizeOptionValue(c *gin.Context, native *NativeRequest, key string) any {
+	if value, ok := c.Get(legacyFinalizeOptionsKey); ok {
+		options, _ := value.(map[string]any)
+		return options[key]
+	}
 	if native != nil {
 		return native.Raw[key]
 	}
-	value, _ := c.Get(legacyFinalizeOptionsKey)
-	options, _ := value.(map[string]any)
-	return options[key]
+	return nil
 }

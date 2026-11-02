@@ -242,6 +242,19 @@ export const CHANNEL_TYPE_CONFIGS: Record<number, ChannelTypeConfig> = {
         '火山原生视频协议原样透传，只开 /api/v3/contents/generations/tasks（提交 / 查询）。请求体除 model 外原样转发，output_format / return_last_frame / priority 等不会被丢弃；duration 可传 -1（模型自选时长）。响应保留上游全部字段，任务 id 用网关公开 ID，上游 cgt 号在 upstreamTaskId。样片模式：2.5 模型传 draft=true 出 480p 样片，再用同一入口传 content[].draft_task.id（网关任务 ID）出 1080p 成片；非 2.5 模型开样片、样片非 480p 均被拒绝。价表按模型 ID 配 base / 1080p / 1080p_video。',
     },
   },
+  72: {
+    id: 72,
+    name: CHANNEL_TYPES[72],
+    icon: 'volcengine',
+    defaultBaseUrl: 'https://aistore.gsiig.cn/v1',
+    hints: {
+      baseUrl: 'Default: https://aistore.gsiig.cn/v1',
+      key: 'Upstream API Key (Bearer)',
+      models: 'cdance2.0, cdance2.0-fast, cdance2.0-mini, cdance2.5',
+      other:
+        '与渠道 71 共用运河启源上游，只开旧视频接口：POST /v1/video/generations（提交）、GET /v1/video/generations/:task_id（查询）、POST /v1/videos/:id/finalize（样片出成片）。不支持火山原生 /api/v3、/v1/videos 创建与 remix。提交请求的 prompt 转成 content 文本项，metadata.content / resolution / generate_audio 等火山参数原样转发。样片模式：2.5 模型 metadata.draft=true 出 480p 样片，再调 finalize 出 1080p 成片（finalize 只接受 output_format / watermark / return_last_frame 等输出规格参数，分辨率固定 1080p）。价表按模型 ID 配 base / 1080p / 1080p_video。',
+    },
+  },
   64: {
     id: 64,
     name: CHANNEL_TYPES[64],

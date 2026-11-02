@@ -462,6 +462,18 @@ func TestEstimateBilling(t *testing.T) {
 		require.Contains(t, ratios, "video_input")
 		assert.InDelta(t, 1.5, ratios["video_input"], 1e-9)
 	})
+
+	// 旧接口入口与原生入口必须落到同一张档位价表：分辨率只存在于
+	// metadata 里，计费不能因为入口不同而退回基准价。
+	t.Run("旧接口按 metadata 分辨率计档", func(t *testing.T) {
+		c, _, info := newLegacyContext(t, "/v1/video/generations", `{"model":"cdance2.5","prompt":"a cat","metadata":{"resolution":"1080p"}}`)
+		info.UpstreamModelName = "cdance2.5"
+		require.Nil(t, adaptor.ValidateRequestAndSetAction(c, info))
+
+		ratios := adaptor.EstimateBilling(c, info)
+		require.Contains(t, ratios, "video_input")
+		assert.InDelta(t, 1.2, ratios["video_input"], 1e-9)
+	})
 }
 
 // TestDoRequestHitsAistorePath 回归 Critical：DoRequest 不能沿用嵌入 doubao 适配器
@@ -505,4 +517,226 @@ func TestBuildRequestBody_rejectsDraftTaskOutsideFinalize(t *testing.T) {
 	_, err := adaptor.BuildRequestBody(c, info)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "only accepted on finalize")
+}
+
+// newLegacyContext 构造旧视频接口（/v1/video/generations、/v1/videos/{id}/finalize）
+// 的 gin 上下文：请求体是网关内部任务请求（prompt + seconds + metadata），同时写入
+// BodyStorage，供通用校验与成片参数解析各自读取一次。
+func newLegacyContext(t *testing.T, path, body string) (*gin.Context, *httptest.ResponseRecorder, *relaycommon.RelayInfo) {
+	t.Helper()
+
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, path, bytes.NewReader([]byte(body)))
+	c.Request.Header.Set("Content-Type", "application/json")
+	storage, err := common.CreateBodyStorage([]byte(body))
+	require.NoError(t, err)
+	c.Set(common.KeyBodyStorage, storage)
+
+	info := &relaycommon.RelayInfo{
+		TaskRelayInfo: &relaycommon.TaskRelayInfo{},
+		ChannelMeta:   &relaycommon.ChannelMeta{},
+	}
+	return c, w, info
+}
+
+// TestValidateRequestAndSetAction_legacyEntry 旧接口请求体经 prompt + metadata
+// 还原成火山形状后，必须与原生入口共用同一套样片守卫与输入判定。
+func TestValidateRequestAndSetAction_legacyEntry(t *testing.T) {
+	tests := []struct {
+		name        string
+		body        string
+		wantCode    string
+		wantDraft   bool
+		wantVideoIn bool
+		wantAction  string
+	}{
+		{
+			name:       "图片参考按图生视频",
+			body:       `{"model":"cdance2.0","prompt":"a cat","seconds":"5","metadata":{"resolution":"720p","content":[{"type":"image_url","image_url":{"url":"asset://Asset-1"},"role":"reference_image"}]}}`,
+			wantAction: constant.TaskActionGenerate,
+		},
+		{
+			name:        "参考视频被识别为视频输入",
+			body:        `{"model":"cdance2.0","prompt":"continue","metadata":{"content":[{"type":"video_url","video_url":{"url":"https://x/v.mp4"}}]}}`,
+			wantVideoIn: true,
+			wantAction:  constant.TaskActionVideoGenerate,
+		},
+		{
+			name:       "2.5 样片 480p 通过",
+			body:       `{"model":"cdance2.5","prompt":"a cat","metadata":{"draft":true,"resolution":"480p"}}`,
+			wantDraft:  true,
+			wantAction: constant.TaskActionTextGenerate,
+		},
+		{
+			name:     "2.0 开启样片被拒",
+			body:     `{"model":"cdance2.0","prompt":"a cat","metadata":{"draft":true}}`,
+			wantCode: "invalid_draft_model",
+		},
+		{
+			name:     "样片请求 720p 被拒",
+			body:     `{"model":"cdance2.5","prompt":"a cat","metadata":{"draft":true,"resolution":"720p"}}`,
+			wantCode: "invalid_resolution",
+		},
+		{
+			name:     "时长越界被拒",
+			body:     `{"model":"cdance2.0","prompt":"a cat","metadata":{"duration":999999}}`,
+			wantCode: "invalid_duration",
+		},
+		{
+			name:     "样片引用不能走提交入口",
+			body:     `{"model":"cdance2.5","prompt":"a cat","metadata":{"content":[{"type":"draft_task","draft_task":{"id":"task_1"}}]}}`,
+			wantCode: "invalid_content",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c, _, info := newLegacyContext(t, "/v1/video/generations", tt.body)
+
+			taskErr := (&TaskAdaptor{}).ValidateRequestAndSetAction(c, info)
+
+			if tt.wantCode != "" {
+				require.NotNil(t, taskErr)
+				assert.Equal(t, tt.wantCode, taskErr.Code)
+				assert.Equal(t, http.StatusBadRequest, taskErr.StatusCode)
+				return
+			}
+			require.Nil(t, taskErr)
+			assert.Equal(t, tt.wantDraft, info.Draft)
+			assert.Equal(t, tt.wantVideoIn, info.HasVideoInput)
+			assert.Equal(t, tt.wantAction, info.Action)
+		})
+	}
+}
+
+// TestBuildRequestBody_legacyEntry 旧接口出站请求体：提示词补成 content[] 的
+// 文本项、metadata.content 的媒体项原样保留、seconds 变成顶层 duration。
+func TestBuildRequestBody_legacyEntry(t *testing.T) {
+	body := `{"model":"cdance2.0","prompt":"a cat","seconds":"5","metadata":{"resolution":"720p","generate_audio":false,"group":"vip","content":[{"type":"image_url","image_url":{"url":"asset://Asset-1"},"role":"reference_image"}]}}`
+	c, _, info := newLegacyContext(t, "/v1/video/generations", body)
+	info.UpstreamModelName = "cdance2.0-fast"
+
+	adaptor := &TaskAdaptor{}
+	require.Nil(t, adaptor.ValidateRequestAndSetAction(c, info))
+	reader, err := adaptor.BuildRequestBody(c, info)
+	require.NoError(t, err)
+	payload := readPayload(t, reader)
+
+	assert.Equal(t, "cdance2.0-fast", payload["model"])
+	assert.Equal(t, "720p", payload["resolution"])
+	assert.Equal(t, float64(5), payload["duration"])
+	assert.Equal(t, false, payload["generate_audio"], "显式 false 必须原样发给上游")
+	assert.NotContains(t, payload, "group", "网关分组键不能发给上游")
+	assert.Equal(t, []any{
+		map[string]any{"type": "image_url", "image_url": map[string]any{"url": "asset://Asset-1"}, "role": "reference_image"},
+		map[string]any{"type": "text", "text": "a cat"},
+	}, payload["content"])
+}
+
+// TestBuildRequestBody_legacyDraft 旧接口的样片同样强制 draft=true + 480p。
+func TestBuildRequestBody_legacyDraft(t *testing.T) {
+	body := `{"model":"cdance2.5","prompt":"a cat","metadata":{"draft":true,"resolution":"480p"}}`
+	c, _, info := newLegacyContext(t, "/v1/video/generations", body)
+	info.UpstreamModelName = "cdance2.5"
+
+	adaptor := &TaskAdaptor{}
+	require.Nil(t, adaptor.ValidateRequestAndSetAction(c, info))
+	reader, err := adaptor.BuildRequestBody(c, info)
+	require.NoError(t, err)
+	payload := readPayload(t, reader)
+
+	assert.Equal(t, true, payload["draft"])
+	assert.Equal(t, "480p", payload["resolution"])
+	assert.Equal(t, "480p", info.UpstreamResolution)
+}
+
+// TestBuildRequestBody_legacyFinalize 旧接口成片：引用原样片的上游任务号，
+// 只接受输出规格类参数，客户端改不了内容与时长。
+func TestBuildRequestBody_legacyFinalize(t *testing.T) {
+	body := `{"resolution":"1080p","output_format":"mov","duration":5,"prompt":"ignored","watermark":false}`
+	c, _, info := newLegacyContext(t, "/v1/videos/task_public/finalize", body)
+	info.Action = constant.TaskActionFinalize
+	info.OriginUpstreamTaskID = "cgt-origin"
+	info.UpstreamModelName = "cdance2.5"
+
+	adaptor := &TaskAdaptor{}
+	require.Nil(t, adaptor.ValidateRequestAndSetAction(c, info))
+	reader, err := adaptor.BuildRequestBody(c, info)
+	require.NoError(t, err)
+	payload := readPayload(t, reader)
+
+	assert.Equal(t, "cdance2.5", payload["model"])
+	assert.Equal(t, "1080p", payload["resolution"])
+	assert.Equal(t, "mov", payload["output_format"])
+	assert.Equal(t, false, payload["watermark"])
+	assert.NotContains(t, payload, "duration")
+	assert.NotContains(t, payload, "prompt")
+	assert.Equal(t, []any{
+		map[string]any{"type": "draft_task", "draft_task": map[string]any{"id": "cgt-origin"}},
+	}, payload["content"])
+	assert.Equal(t, "1080p", info.RequestedResolution)
+}
+
+// TestValidateRequestAndSetAction_legacyFinalizeRejectsResolution 上游成片只有
+// 1080p 一档，客户端传别的档位必须显式拒绝而不是悄悄改价。
+func TestValidateRequestAndSetAction_legacyFinalizeRejectsResolution(t *testing.T) {
+	c, _, info := newLegacyContext(t, "/v1/videos/task_public/finalize", `{"resolution":"720p"}`)
+	info.Action = constant.TaskActionFinalize
+
+	taskErr := (&TaskAdaptor{}).ValidateRequestAndSetAction(c, info)
+	require.NotNil(t, taskErr)
+	assert.Equal(t, "invalid_resolution", taskErr.Code)
+	assert.Equal(t, http.StatusBadRequest, taskErr.StatusCode)
+}
+
+// TestBuildRequestBody_legacyFinalizeOptionsWin 旧接口成片参数优先于按内部请求体
+// 还原出的 native：只要校验阶段存了旧接口参数，就不能被 metadata 里的同名字段覆盖。
+func TestBuildRequestBody_legacyFinalizeOptionsWin(t *testing.T) {
+	body := `{"output_format":"mov","watermark":false}`
+	c, _, info := newLegacyContext(t, "/v1/videos/task_public/finalize", body)
+	info.Action = constant.TaskActionFinalize
+	info.OriginUpstreamTaskID = "cgt-origin"
+	info.UpstreamModelName = "cdance2.5"
+
+	adaptor := &TaskAdaptor{}
+	require.Nil(t, adaptor.ValidateRequestAndSetAction(c, info))
+
+	// 模拟内部任务请求已写进上下文：ArkRequest 会据此还原出冲突的 native 值。
+	c.Set("task_request", relaycommon.TaskSubmitReq{
+		Model:    "cdance2.5",
+		Metadata: map[string]any{"output_format": "mp4", "watermark": true},
+	})
+
+	reader, err := adaptor.BuildRequestBody(c, info)
+	require.NoError(t, err)
+	payload := readPayload(t, reader)
+
+	assert.Equal(t, "mov", payload["output_format"])
+	assert.Equal(t, false, payload["watermark"])
+}
+
+// TestDoResponse_legacyEntry 旧接口按既有视频接口返回 OpenAI 视频对象，
+// 上游 cgt 号只作为任务号回传给调用方落库。
+func TestDoResponse_legacyEntry(t *testing.T) {
+	c, w, info := newLegacyContext(t, "/v1/video/generations", `{"model":"cdance2.5","prompt":"a cat"}`)
+	info.PublicTaskID = "task_public"
+	info.OriginModelName = "cdance2.5"
+
+	adaptor := &TaskAdaptor{}
+	resp := &http.Response{Body: io.NopCloser(bytes.NewReader([]byte(`{"id":"cgt-123"}`)))}
+	taskID, taskData, taskErr := adaptor.DoResponse(c, resp, info)
+	require.Nil(t, taskErr)
+	assert.Equal(t, "cgt-123", taskID)
+	assert.JSONEq(t, `{"id":"cgt-123"}`, string(taskData))
+
+	var out map[string]any
+	require.NoError(t, common.Unmarshal(w.Body.Bytes(), &out))
+	assert.Equal(t, "task_public", out["id"])
+	assert.Equal(t, "task_public", out["task_id"])
+	assert.Equal(t, "video", out["object"])
+	assert.Equal(t, "queued", out["status"])
+	assert.Equal(t, "cdance2.5", out["model"])
+	assert.NotZero(t, out["created_at"])
 }

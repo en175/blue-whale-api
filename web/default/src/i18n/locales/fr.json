@@ -5234,6 +5234,7 @@
     "TokenHub25": "TokenHub 2.5 (brouillon)",
     "TokenHubVolc": "TokenHub Volc natif (2.0/2.5)",
     "AistoreVolc": "Aistore Volc natif (2.0/2.5)",
+    "AistoreVolcLegacy": "Aistore Volc API vidéo héritée (2.0/2.5)",
     "NovitaGemini": "Novita Gemini (image)",
     "NovitaOpenAI": "Novita OpenAI (image)",
     "vs. previous": "vs. précédent",

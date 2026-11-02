@@ -4,6 +4,9 @@ package aistore
 // "AistoreVolc" 对应。
 const ChannelName = "aistore-volc"
 
+// LegacyChannelName 是渠道 72 的展示名：同一运河启源上游，对客走旧视频接口。
+const LegacyChannelName = "aistore-volc-legacy"
+
 // 输出分辨率档。样片（draft）只允许 480p，成片（finalize）固定 1080p——
 // 这两个值同时也是档位价表的键。
 const (
