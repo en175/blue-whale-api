@@ -11,6 +11,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/relay/channel/task/arknative"
 	"github.com/QuantumNous/new-api/relay/channel/task/taskcommon"
 	tasktokenhub "github.com/QuantumNous/new-api/relay/channel/task/tokenhub"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
@@ -47,7 +48,7 @@ func (a *TaskAdaptor) GetModelList() []string {
 // 与原生入口走完全相同的前两条判定。
 func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskError {
 	if info != nil && info.Action == constant.TaskActionFinalize {
-		return validateFinalizeRequest(c)
+		return arknative.ValidateLegacyFinalizeRequest(c, Res1080p)
 	}
 
 	// 通用校验先把内部请求体解析并写进上下文；旧接口的火山形状要在它之后才能还原。
@@ -55,7 +56,7 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 		return taskErr
 	}
 
-	native, ok := arkRequest(c)
+	native, ok := arknative.ArkRequest(c)
 	if !ok {
 		return service.TaskErrorWrapperLocal(fmt.Errorf("task metadata cannot be converted to a video request"), "invalid_request", http.StatusBadRequest)
 	}
@@ -63,7 +64,7 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 	// 成片只能走 /v1/videos/{id}/finalize：那条路径经 ResolveOriginTask 校验归属、
 	// 样片状态与 7 天窗口，并按成片档位计费。旧提交入口收到 draft_task 引用必须
 	// 拒绝，否则它会被当作普通 content 透传给上游，绕过全部成片校验与计费。
-	if _, isNative := NativeRequestFrom(c); !isNative && native.HasDraftTask() {
+	if _, isNative := arknative.NativeRequestFrom(c); !isNative && native.HasDraftTask() {
 		return service.TaskErrorWrapperLocal(
 			fmt.Errorf("draft_task references are only accepted on the finalize endpoint"),
 			"invalid_content", http.StatusBadRequest)
@@ -76,7 +77,7 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 	info.HasVideoInput = native.HasVideoInput()
 	// 通用校验把 action 固定成 generate，任务日志会把纯文本和参考视频都显示成
 	// 「图生视频」。这里按 content[] 的实际输入形态改写，与 doubao 适配器同口径。
-	info.Action = inferNativeAction(native)
+	info.Action = arknative.InferAction(native)
 
 	// duration 是计费乘数之一。火山用 -1 表示「编辑/延长」由模型决定时长，
 	// 其余必须是正整数且不超过通用上限——原生协议的 duration 不在
@@ -101,7 +102,7 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 	if clientModel == "" {
 		clientModel = info.OriginModelName
 	}
-	if !isSeedance25Model(clientModel, info.OriginModelName, MappedModelName(c, clientModel)) {
+	if !isSeedance25Model(clientModel, info.OriginModelName, taskcommon.MappedModelName(c, clientModel)) {
 		return service.TaskErrorWrapperLocal(
 			fmt.Errorf("draft mode is only supported by Seedance 2.5 models"), "invalid_draft_model", http.StatusBadRequest)
 	}
@@ -113,38 +114,6 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 	return nil
 }
 
-// validateFinalizeRequest 校验成片第二步。原生入口的 draft_task 引用已在请求
-// 转换中间件里校验，这里直接放行；旧接口没有 prompt，走不了通用校验，只解析
-// 输出规格类参数，并拒绝非 1080p 的分辨率——上游成片档位只有 1080p。
-//
-// 空请求体与 `{}` 都必须通过：客户端通常直接 POST 空体，由网关套用默认值。
-func validateFinalizeRequest(c *gin.Context) *dto.TaskError {
-	if _, ok := NativeRequestFrom(c); ok {
-		return nil
-	}
-
-	options := map[string]any{}
-	storage, err := common.GetBodyStorage(c)
-	if err != nil {
-		return service.TaskErrorWrapper(err, "get_request_body_failed", http.StatusBadRequest)
-	}
-	if storage.Size() > 0 {
-		if err := common.UnmarshalBodyReusable(c, &options); err != nil {
-			return service.TaskErrorWrapper(err, "invalid_json", http.StatusBadRequest)
-		}
-	}
-
-	if resolution, ok := options["resolution"].(string); ok {
-		if normalized := strings.ToLower(strings.TrimSpace(resolution)); normalized != "" && normalized != Res1080p {
-			return service.TaskErrorWrapperLocal(
-				fmt.Errorf("finalize only supports resolution %s", Res1080p), "invalid_resolution", http.StatusBadRequest)
-		}
-	}
-
-	c.Set(legacyFinalizeOptionsKey, options)
-	return nil
-}
-
 // BuildRequestBody 构造发给华鲲的请求体。
 //
 // 普通与样片请求从下游原始 JSON 出发，只覆盖 model 与样片相关字段——火山新增
@@ -152,7 +121,7 @@ func validateFinalizeRequest(c *gin.Context) *dto.TaskError {
 // 由 arkRequest 从 prompt + metadata 合成，其后完全同路。成片请求则从零构造：
 // 它的 content 只能是 draft_task 引用，可重设的只有输出规格类参数。
 func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayInfo) (io.Reader, error) {
-	native, _ := arkRequest(c)
+	native, _ := arknative.ArkRequest(c)
 
 	var payload map[string]any
 	if info != nil && info.Action == constant.TaskActionFinalize {
@@ -168,8 +137,8 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 			// 上游成片档位只有 1080p：客户端传任何值都被覆盖，不报错。
 			"resolution": Res1080p,
 		}
-		for _, key := range finalizeOptionKeys {
-			if value := finalizeOptionValue(c, native, key); value != nil {
+		for _, key := range arknative.FinalizeOptionKeys {
+			if value := arknative.FinalizeOptionValue(c, native, key); value != nil {
 				payload[key] = value
 			}
 		}
@@ -208,31 +177,6 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 		return nil, err
 	}
 	return bytes.NewReader(data), nil
-}
-
-// finalizeOptionKeys 是成片请求里可以重设的输出规格类参数。content / prompt /
-// duration / ratio / seed / generate_audio 刻意不在其中：成片沿用样片的内容与
-// 时长，客户端传什么都影响不了成片本身。
-var finalizeOptionKeys = []string{
-	"output_format",
-	"watermark",
-	"return_last_frame",
-	"service_tier",
-	"execution_expires_after",
-	"priority",
-	"callback_url",
-	"safety_identifier",
-}
-
-// finalizeOptionValue 按入口取成片可重设参数：原生入口读原始 JSON，旧接口读
-// 校验阶段解析出的请求体。两者都只认 finalizeOptionKeys 白名单。
-func finalizeOptionValue(c *gin.Context, native *NativeRequest, key string) any {
-	if native != nil {
-		return native.Raw[key]
-	}
-	value, _ := c.Get(legacyFinalizeOptionsKey)
-	options, _ := value.(map[string]any)
-	return options[key]
 }
 
 // EstimateBilling 返回档位价倍率（video_input）。
@@ -304,25 +248,6 @@ type createResponse struct {
 	Message string `json:"message"`
 }
 
-// inferNativeAction 按 content[] 的实际输入形态写入任务类型。任务日志与筛选
-// 依赖 action 区分「文生 / 图生 / 视频生」，与 doubao 适配器保持一致：视频优先，
-// 其次图片，纯文本兜底。音频与 draft_task 不单独构成一种类型。
-func inferNativeAction(native *NativeRequest) string {
-	hasImage := false
-	for _, item := range native.Content {
-		if item.Type == "video_url" || item.VideoURL != nil {
-			return constant.TaskActionVideoGenerate
-		}
-		if item.Type == "image_url" || item.ImageURL != nil {
-			hasImage = true
-		}
-	}
-	if hasImage {
-		return constant.TaskActionGenerate
-	}
-	return constant.TaskActionTextGenerate
-}
-
 // isSeedance25Model 报告模型名是否为 Seedance 2.5 系（样片模式的唯一支持者）。
 // 对客名与映射后的上游名都可能是 2.5，调用方两者都传进来。
 func isSeedance25Model(names ...string) bool {
@@ -336,27 +261,4 @@ func isSeedance25Model(names ...string) bool {
 		}
 	}
 	return false
-}
-
-// MappedModelName 按渠道 model_mapping 解析上游模型名，支持链式重定向。
-// 只读上下文里的配置，不改 info；解析失败时退回原名，交正式映射步骤报错。
-func MappedModelName(c *gin.Context, modelName string) string {
-	raw := c.GetString("model_mapping")
-	if raw == "" || raw == "{}" || modelName == "" {
-		return modelName
-	}
-	var mapping map[string]string
-	if err := common.UnmarshalJsonStr(raw, &mapping); err != nil {
-		return modelName
-	}
-	visited := map[string]bool{modelName: true}
-	current := modelName
-	for {
-		next, exists := mapping[current]
-		if !exists || next == "" || visited[next] {
-			return current
-		}
-		visited[next] = true
-		current = next
-	}
 }

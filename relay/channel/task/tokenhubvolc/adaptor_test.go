@@ -10,6 +10,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/relay/channel/task/arknative"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 
 	"github.com/gin-gonic/gin"
@@ -19,10 +20,10 @@ import (
 
 // newTaskContext 复现请求转换中间件的产物：解析原生请求、写入上下文，并把
 // 内部请求体（model + prompt + metadata）放回请求，供通用校验读取。
-func newTaskContext(t *testing.T, nativeJSON string) (*gin.Context, *relaycommon.RelayInfo, *NativeRequest) {
+func newTaskContext(t *testing.T, nativeJSON string) (*gin.Context, *relaycommon.RelayInfo, *arknative.NativeRequest) {
 	t.Helper()
 
-	native, err := ParseNativeRequest([]byte(nativeJSON))
+	native, err := arknative.ParseNativeRequest([]byte(nativeJSON))
 	require.NoError(t, err)
 
 	internal := map[string]any{"model": native.Model, "metadata": native.Raw}
@@ -37,7 +38,7 @@ func newTaskContext(t *testing.T, nativeJSON string) (*gin.Context, *relaycommon
 	c, _ := gin.CreateTestContext(w)
 	c.Request = httptest.NewRequest(http.MethodPost, constant.NativeArkVideoTaskPath, bytes.NewReader(body))
 	c.Request.Header.Set("Content-Type", "application/json")
-	StoreNativeRequest(c, native)
+	arknative.StoreNativeRequest(c, native)
 
 	info := &relaycommon.RelayInfo{
 		TaskRelayInfo: &relaycommon.TaskRelayInfo{},

@@ -14,9 +14,9 @@ import (
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relay/channel"
+	"github.com/QuantumNous/new-api/relay/channel/task/arknative"
 	taskdoubao "github.com/QuantumNous/new-api/relay/channel/task/doubao"
 	"github.com/QuantumNous/new-api/relay/channel/task/taskcommon"
-	tasktokenhubvolc "github.com/QuantumNous/new-api/relay/channel/task/tokenhubvolc"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
@@ -93,7 +93,7 @@ func (a *TaskAdaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, req
 // duration 由适配器自己判边界：火山用 -1 表示「编辑/延长由模型决定时长」，内部
 // 任务的时长校验只接受正数，因此原生 duration 不能交给通用校验。
 func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskError {
-	native, ok := tasktokenhubvolc.NativeRequestFrom(c)
+	native, ok := arknative.NativeRequestFrom(c)
 	if !ok {
 		return service.TaskErrorWrapperLocal(
 			fmt.Errorf("native ark request is required"), "invalid_request", http.StatusBadRequest)
@@ -121,7 +121,7 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 
 	if info != nil {
 		info.HasVideoInput = native.HasVideoInput()
-		info.Action = inferAction(native)
+		info.Action = arknative.InferAction(native)
 	}
 
 	if !native.IsDraft() {
@@ -134,7 +134,7 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 	if info != nil && info.OriginModelName != "" {
 		clientModel = info.OriginModelName
 	}
-	if !isSeedance25(clientModel, tasktokenhubvolc.MappedModelName(c, clientModel)) {
+	if !isSeedance25(clientModel, taskcommon.MappedModelName(c, clientModel)) {
 		return service.TaskErrorWrapperLocal(
 			fmt.Errorf("draft mode is only supported by Seedance 2.5 models"), "invalid_draft_model", http.StatusBadRequest)
 	}
@@ -151,7 +151,7 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 // BuildRequestBody 构造上游请求体：普通与样片请求以 native.Raw 为底，只覆盖
 // model 与样片字段；成片请求从零构造，content 只能是 draft_task 引用。
 func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayInfo) (io.Reader, error) {
-	native, ok := tasktokenhubvolc.NativeRequestFrom(c)
+	native, ok := arknative.NativeRequestFrom(c)
 	if !ok {
 		return nil, fmt.Errorf("native ark request is missing")
 	}
@@ -409,24 +409,6 @@ func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInf
 		}
 	}
 	return ratios
-}
-
-// inferAction 按 content[] 的实际输入形态写任务类型：视频优先，其次图片，
-// 纯文本兜底。任务日志与筛选依赖它区分「文生 / 图生 / 视频生」。
-func inferAction(native *tasktokenhubvolc.NativeRequest) string {
-	hasImage := false
-	for _, item := range native.Content {
-		if item.Type == "video_url" || item.VideoURL != nil {
-			return constant.TaskActionVideoGenerate
-		}
-		if item.Type == "image_url" || item.ImageURL != nil {
-			hasImage = true
-		}
-	}
-	if hasImage {
-		return constant.TaskActionGenerate
-	}
-	return constant.TaskActionTextGenerate
 }
 
 // isSeedance25 报告模型名是否为 Seedance 2.5 系（样片模式的唯一支持者）。

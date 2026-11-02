@@ -10,7 +10,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/logger"
-	"github.com/QuantumNous/new-api/relay/channel/task/tokenhubvolc"
+	"github.com/QuantumNous/new-api/relay/channel/task/arknative"
 
 	"github.com/gin-gonic/gin"
 )
@@ -41,9 +41,9 @@ func ArkNativeRequestConvert() gin.HandlerFunc {
 			return
 		}
 
-		native, err := tokenhubvolc.ParseNativeRequest(raw)
+		native, err := arknative.ParseNativeRequest(raw)
 		if err != nil {
-			if errors.Is(err, tokenhubvolc.ErrNativeBodyNotObject) {
+			if errors.Is(err, arknative.ErrNativeBodyNotObject) {
 				WriteArkError(c, http.StatusBadRequest, "InvalidParameter", err.Error())
 				return
 			}
@@ -58,7 +58,7 @@ func ArkNativeRequestConvert() gin.HandlerFunc {
 			return
 		}
 		// 网关侧不按 token 归属改写请求，只登记解析结果供适配器与 relay 层读取。
-		tokenhubvolc.StoreNativeRequest(c, native)
+		arknative.StoreNativeRequest(c, native)
 
 		// draft_task 项存在但 id 为空时，第二步没有可引用的样片，必须在这里拒绝，
 		// 否则会退化成一次普通的空 content 提交。

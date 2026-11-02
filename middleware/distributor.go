@@ -16,7 +16,7 @@ import (
 	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relay/channel/mediakit"
-	"github.com/QuantumNous/new-api/relay/channel/task/tokenhubvolc"
+	"github.com/QuantumNous/new-api/relay/channel/task/arknative"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
@@ -402,7 +402,7 @@ func getModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
 			c.Set("relay_mode", relayconstant.RelayModeVideoSubmit)
 			// 第二步成片锁定原任务的渠道（ResolveOriginTask 负责切换），与
 			// /v1/videos/:id/finalize 的处理一致，这里不重新选渠道。
-			if native, ok := tokenhubvolc.NativeRequestFrom(c); ok && native.DraftTaskID() != "" {
+			if native, ok := arknative.NativeRequestFrom(c); ok && native.DraftTaskID() != "" {
 				shouldSelectChannel = false
 			}
 		} else {

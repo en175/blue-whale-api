@@ -10,7 +10,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
-	tasktokenhubvolc "github.com/QuantumNous/new-api/relay/channel/task/tokenhubvolc"
+	"github.com/QuantumNous/new-api/relay/channel/task/arknative"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/config"
@@ -25,7 +25,7 @@ import (
 func newNativeContext(t *testing.T, nativeJSON string) (*gin.Context, *httptest.ResponseRecorder, *relaycommon.RelayInfo) {
 	t.Helper()
 
-	native, err := tasktokenhubvolc.ParseNativeRequest([]byte(nativeJSON))
+	native, err := arknative.ParseNativeRequest([]byte(nativeJSON))
 	require.NoError(t, err)
 
 	internal := map[string]any{"model": native.Model, "metadata": native.Raw}
@@ -40,7 +40,7 @@ func newNativeContext(t *testing.T, nativeJSON string) (*gin.Context, *httptest.
 	c, _ := gin.CreateTestContext(w)
 	c.Request = httptest.NewRequest(http.MethodPost, constant.NativeArkVideoTaskPath, bytes.NewReader(body))
 	c.Request.Header.Set("Content-Type", "application/json")
-	tasktokenhubvolc.StoreNativeRequest(c, native)
+	arknative.StoreNativeRequest(c, native)
 
 	info := &relaycommon.RelayInfo{
 		TaskRelayInfo: &relaycommon.TaskRelayInfo{},

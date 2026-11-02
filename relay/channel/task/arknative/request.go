@@ -1,4 +1,4 @@
-package tokenhubvolc
+package arknative
 
 import (
 	"errors"
@@ -14,9 +14,6 @@ import (
 // NativeRequestContextKey 是请求转换中间件写入解析结果的上下文键。
 // relay 层据此判定成片请求，适配器据此重建上游请求体。
 const NativeRequestContextKey = "ark_native_request"
-
-// legacyFinalizeOptionsKey 保存旧接口成片请求体解析出的输出规格参数。
-const legacyFinalizeOptionsKey = "ark_legacy_finalize_options"
 
 // NativeRequest 是下游按火山方舟文档发来的视频任务请求。
 //
@@ -133,6 +130,11 @@ func NativeRequestFrom(c *gin.Context) (*NativeRequest, bool) {
 	return req, ok
 }
 
+// StoreNativeRequest 供请求转换中间件写入解析结果。
+func StoreNativeRequest(c *gin.Context, req *NativeRequest) {
+	c.Set(NativeRequestContextKey, req)
+}
+
 // nativeRequestFromLegacy 把网关旧视频接口（/v1/video/generations）注册在上下文
 // 里的内部请求体还原成火山形状：顶层 prompt 补成 content[] 的第一条 text，
 // metadata 里的火山顶层参数（content / resolution / ratio / duration / watermark
@@ -217,16 +219,11 @@ func nativeRequestFromLegacy(c *gin.Context) (*NativeRequest, bool) {
 	return native, true
 }
 
-// arkRequest 返回本次请求的火山形状：原生入口由请求转换中间件写入，旧接口按
+// ArkRequest 返回本次请求的火山形状：原生入口由请求转换中间件写入，旧接口按
 // 内部请求体还原。两条入口由此共用同一套校验、上游构造与计费。
-func arkRequest(c *gin.Context) (*NativeRequest, bool) {
+func ArkRequest(c *gin.Context) (*NativeRequest, bool) {
 	if native, ok := NativeRequestFrom(c); ok {
 		return native, true
 	}
 	return nativeRequestFromLegacy(c)
-}
-
-// StoreNativeRequest 供请求转换中间件写入解析结果。
-func StoreNativeRequest(c *gin.Context, req *NativeRequest) {
-	c.Set(NativeRequestContextKey, req)
 }

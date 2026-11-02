@@ -8,7 +8,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
-	"github.com/QuantumNous/new-api/relay/channel/task/tokenhubvolc"
+	"github.com/QuantumNous/new-api/relay/channel/task/arknative"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -16,16 +16,16 @@ import (
 )
 
 // runArkConvert 走一遍请求转换中间件，返回响应与下游处理函数实际读到的内容。
-func runArkConvert(t *testing.T, body string) (*httptest.ResponseRecorder, *tokenhubvolc.NativeRequest, map[string]any) {
+func runArkConvert(t *testing.T, body string) (*httptest.ResponseRecorder, *arknative.NativeRequest, map[string]any) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
-	var captured *tokenhubvolc.NativeRequest
+	var captured *arknative.NativeRequest
 	var internal map[string]any
 
 	router := gin.New()
 	router.POST(constant.NativeArkVideoTaskPath, ArkNativeRequestConvert(), func(c *gin.Context) {
-		captured, _ = tokenhubvolc.NativeRequestFrom(c)
+		captured, _ = arknative.NativeRequestFrom(c)
 		// 用与业务代码相同的读取方式，验证改写后的 body 真的替换了缓存
 		require.NoError(t, common.UnmarshalBodyReusable(c, &internal))
 		c.Status(http.StatusOK)

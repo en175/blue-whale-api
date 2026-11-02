@@ -46,6 +46,29 @@ func DefaultInt(val, fallback int) int {
 	return val
 }
 
+// MappedModelName 按渠道 model_mapping 解析上游模型名，支持链式重定向。
+// 只读上下文里的配置，不改 info；解析失败时退回原名，交正式映射步骤报错。
+func MappedModelName(c *gin.Context, modelName string) string {
+	raw := c.GetString("model_mapping")
+	if raw == "" || raw == "{}" || modelName == "" {
+		return modelName
+	}
+	var mapping map[string]string
+	if err := common.UnmarshalJsonStr(raw, &mapping); err != nil {
+		return modelName
+	}
+	visited := map[string]bool{modelName: true}
+	current := modelName
+	for {
+		next, exists := mapping[current]
+		if !exists || next == "" || visited[next] {
+			return current
+		}
+		visited[next] = true
+		current = next
+	}
+}
+
 // EncodeLocalTaskID encodes an upstream operation name to a URL-safe base64 string.
 // Used by Gemini/Vertex to store upstream names as task IDs.
 func EncodeLocalTaskID(name string) string {

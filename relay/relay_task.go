@@ -16,8 +16,8 @@ import (
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relay/channel"
+	"github.com/QuantumNous/new-api/relay/channel/task/arknative"
 	"github.com/QuantumNous/new-api/relay/channel/task/taskcommon"
-	tokenhubvolc "github.com/QuantumNous/new-api/relay/channel/task/tokenhubvolc"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relay/helper"
@@ -42,7 +42,7 @@ func ResolveOriginTask(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskErr
 	// 火山原生协议的 action 不在路径里：第二步成片由 content[] 的 draft_task
 	// 引用表达，来源任务 ID 也就来自请求体。取出来后与 /v1/videos 的 finalize
 	// 共用下面同一套校验（归属、状态、7 天窗口、上游 ID）。
-	if native, ok := tokenhubvolc.NativeRequestFrom(c); ok {
+	if native, ok := arknative.NativeRequestFrom(c); ok {
 		if draftTaskID := native.DraftTaskID(); draftTaskID != "" {
 			info.Action = constant.TaskActionFinalize
 			info.OriginTaskID = draftTaskID
@@ -121,7 +121,7 @@ func ResolveOriginTask(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskErr
 	// 还兼容旧视频接口，所以旧接口的样片可以在类型 70 渠道上成片。但原生协议的
 	// 样片不能跨到其它渠道：那些渠道的适配器不认 draft_task 引用。
 	if info.Action == constant.TaskActionFinalize {
-		if _, nativeRequest := tokenhubvolc.NativeRequestFrom(c); nativeRequest &&
+		if _, nativeRequest := arknative.NativeRequestFrom(c); nativeRequest &&
 			!constant.ChannelServesRequestPath(ch.Type, constant.NativeArkVideoTaskPath) {
 			return service.TaskErrorWrapperLocal(errors.New("the origin task was not created by a native channel"), "origin_task_not_native", http.StatusBadRequest)
 		}
@@ -236,7 +236,7 @@ func ResolveOriginTask(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskErr
 // IsNativeArkFinalizeRequest 报告当前请求是否是火山原生协议的第二步成片。
 // 成片的上游 create 不是幂等的，调用方据此禁止重试。
 func IsNativeArkFinalizeRequest(c *gin.Context) bool {
-	native, ok := tokenhubvolc.NativeRequestFrom(c)
+	native, ok := arknative.NativeRequestFrom(c)
 	return ok && native.DraftTaskID() != ""
 }
 

@@ -11,7 +11,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
-	tokenhubvolc "github.com/QuantumNous/new-api/relay/channel/task/tokenhubvolc"
+	"github.com/QuantumNous/new-api/relay/channel/task/arknative"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/gin-gonic/gin"
@@ -116,9 +116,9 @@ func seedOriginFixture(t *testing.T, tc finalizeFixture, suffix string) *gin.Con
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	if tc.NativeRequest {
 		c.Request = httptest.NewRequest(http.MethodPost, "/api/v3/contents/generations/tasks", nil)
-		tokenhubvolc.StoreNativeRequest(c, &tokenhubvolc.NativeRequest{
+		arknative.StoreNativeRequest(c, &arknative.NativeRequest{
 			Model:   finalizeTestModel,
-			Content: []tokenhubvolc.NativeContentItem{{Type: "draft_task", DraftTask: &tokenhubvolc.DraftTaskRef{ID: originID}}},
+			Content: []arknative.NativeContentItem{{Type: "draft_task", DraftTask: &arknative.DraftTaskRef{ID: originID}}},
 		})
 	} else {
 		c.Request = httptest.NewRequest(http.MethodPost, "/v1/videos/"+originID+"/"+suffix, nil)
