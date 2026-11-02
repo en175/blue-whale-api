@@ -3,9 +3,9 @@
 | 项目 | 内容 |
 |---|---|
 | 文档类型 | 标准 PRD（涉及计费、资金、前后端、数据库迁移） |
-| 状态 | 待评审 |
-| 版本 | v0.2 |
-| 日期 | 2026-10-22 |
+| 状态 | 待评审（口径已对齐，待正式评审） |
+| 版本 | v0.3 |
+| 日期 | 2026-11-02 |
 | 产品负责人 | 待指定 |
 | 研发负责人 | 待指定 |
 | 测试负责人 | 待指定 |
@@ -14,7 +14,7 @@
 | 关联开发子任务 | IKPZBS（后端）、IKPZBV（前端）；测试任务由测试按 SOP 创建 |
 | 影响范围 | `blue-whale-api` 后端、`web/default` 前端、`quota_adjustments` 新表、`top_ups` 加列 |
 
-> 评审前置：本文档需产品确认目标版本后，才可进入业务代码修改。PRD 未确认前只做只读调研。
+> 评审前置：本文档口径已与产品对齐，但正式评审和目标版本仍未完成；完成评审并明确目标版本前，只做只读调研，不进入业务代码修改。
 
 ---
 
@@ -51,12 +51,14 @@
 
 ---
 
-## 2. 已确认的产品决策
+## 2. 已对齐的产品决策
+
+> 以下为开发前已对齐的产品口径，不等同于 PRD 正式评审通过；目标版本未定前不进入业务开发。
 
 | # | 决策 | 结论 |
 |---|---|---|
 | D1 | 入口 | 独立「财务报表」页，面向财务集中核对；不绑定用户列表行操作 |
-| D2 | “管理员充值”口径 | 仅管理员手动**增加 / 减少 / 覆盖**用户额度；不包含管理员补单 |
+| D2 | “管理员调账”口径 | 仅管理员手动**增加 / 减少 / 覆盖**用户额度；不包含管理员补单 |
 | D3 | 管理员调账事件模型 | 独立 `quota_adjustments` 表；不写入 `logs.type=1`，不破坏“方向由 type 表达” |
 | D4 | 导出结构 | Excel 多 Sheet：说明、用量汇总、资金汇总、消耗、退款、充值、管理员调整 |
 | D5 | 报表边界 | 只做四类流水，不做余额对账；其他入账（赠送/签到/兑换码/订阅）不包含 |
@@ -83,6 +85,9 @@
 | P4 | 历史数据采用“双合计”口径 | 已确认 | — | 产品 / 财务 |
 | P5 | 财务人员使用哪个账号 | 待确认 | 当前用管理员账号；如需独立财务角色另开需求 | 产品 / 运维 |
 | P6 | 日志保留策略 | 待确认 | 日志被清理的历史区间无法核对，导出说明需提示 | 运维 / 产品 |
+| P7 | 确认 `LogConsumeEnabled` 生产状态 | 待确认 | 关闭时消耗/退款日志不落库，报表为 0；页面和导出说明必须标注 | 运维 / 产品 |
+| P8 | 网关/nginx `proxy_read_timeout` 与 `send_timeout` >= 360s，服务端 `WriteTimeout` >= 360s | 待确认 | 5 分钟流式导出会被 60s 默认超时截断；无法调整时改用异步导出 | 运维 / 研发 |
+| P9 | 同步数据库字典 | 待开发 | 新增 `docs/db-schema/docs/quota_adjustments.md`，更新 `top_ups.md` | 后端 |
 
 ---
 
@@ -170,6 +175,8 @@
 - 导出超限：toast 提示缩小时间范围或增加用户/模型条件。
 - 历史数据提示：在「充值明细」「管理员调整」「资金汇总」顶部显示黄色提示条：
   “含 N 条历史记录金额无法精确重建，已标记「估算/不可解析」，不计入精确合计。”
+- 日志开关：若 `LogConsumeEnabled=false`，页面顶部显示红色提示“消耗/退款日志未开启，报表数据不完整”；导出说明同步标注，不把 0 当作真实零消耗。
+- 导出超时/断流：提示“导出超时，请缩小时间范围或稍后重试”；不生成部分文件。
 
 ---
 
@@ -181,7 +188,7 @@
 |---|---|---|---|
 | 消耗 | `logs` | `type=2` | 精确 |
 | 退款 | `logs` | `type=6` | 精确 |
-| 支付充值 | `top_ups` | `status=success`，按 `complete_time` | 实付金额精确；到账额度新数据精确、历史估算 |
+| 支付充值 | `top_ups` | `status=success`，按 `complete_time` | 实付金额精确；到账额度新数据精确、历史估算；Epay 未加账单独标注 |
 | 管理员调账 | `quota_adjustments` + 历史 `logs.type=3` | 按目标用户和时间 | 新数据精确；历史估算/不可解析 |
 
 **不包含**：新用户赠送、邀请赠送、签到、兑换码、订阅、活动、余额转移等其他入账。因此本报表**不是余额对账表**。
@@ -194,7 +201,10 @@
 | 退款 | `logs.created_at` | 同上 | `时间(UTC+8)` |
 | 支付充值 | `top_ups.complete_time`；为 0 时回退 `create_time` | 仅 `status=success` | `完成时间(UTC+8)` |
 | 管理员调账（新） | `quota_adjustments.created_at` | 同上 | `时间(UTC+8)` |
-| 管理员调账（历史） | `logs.created_at`（`type=3`） | 仅解析新表起始时间之前 | `时间(UTC+8)` |
+| 管理员调账（历史） | `logs.created_at`（`type=3`） | 仅解析不带 `quota_adjustment_id` 标记的记录 | `时间(UTC+8)` |
+
+- 新代码写入的 `type=3` 审计日志带 `other.op.params.quota_adjustment_id`，报表跳过；无标记的历史记录才解析。滚动发布时旧 pod 仍写无标记日志，按标记去重可避免丢账/双计。
+- `LogConsumeEnabled=false` 时 `type=2/6` 不落库，报表只反映已存在的日志；导出说明必须输出开关状态。
 
 - 数据库存储 Unix 秒；页面和导出统一按 `Asia/Shanghai (UTC+8)` 展示。
 - 充值订单创建但未完成的，不计入充值明细和汇总。
@@ -222,8 +232,8 @@
 | 输入 tokens | `SUM(prompt_tokens) WHERE type=2` | — |
 | 输出 tokens | `SUM(completion_tokens) WHERE type=2` | — |
 | 消耗金额 / 退款金额 | 额度按导出时展示设置换算 | 仅参考，原始 quota 为准 |
-| 支付充值到账额度 | 新订单 `top_ups.quota_credited`；历史按规则估算 | 分精确/估算两列 |
-| 实付金额 | `SUM(top_ups.money)` | 法币实付，精确 |
+| 支付充值到账额度 | 新订单 `top_ups.quota_credited`；历史按规则估算 | 分精确/估算两列；Epay 未加账记 0 并标注 |
+| 实付金额 | `top_ups.money` 按 `decimal` 聚合 | 法币实付，精确；禁止用 float64 直接累加 |
 | 管理员调账净额 | `quota_adjustments.quota_delta` 合计；历史解析 | 加为正、减为负、覆盖为 after-before；分精确/估算两列 |
 | 当前余额 | `users.quota` | 当前值，**不是**截止筛选结束时间的余额 |
 
@@ -266,7 +276,7 @@
 | 支付充值到账额度-精确 | number | `quota_credited` 精确合计 |
 | 支付充值到账额度-估算 | number | 历史订单按规则估算 |
 | 支付充值估算条数 | number | — |
-| 支付实付金额 | number | `SUM(money)`，精确 |
+| 支付实付金额 | number | `decimal` 聚合，精确 |
 | 支付订单数 | number | 仅 success |
 | 管理员调账净额-精确 | number | 新表精确合计 |
 | 管理员调账净额-估算 | number | 历史日志解析 |
@@ -327,8 +337,9 @@
 | 支付网关 | text | `payment_provider` |
 | 实付金额 | number | `money`，精确 |
 | 订单额度(原始) | number | `amount`，按订单流含义保留原值 |
-| 到账额度 | number | `quota_credited`；历史按规则估算 |
-| 到账来源 | text | `精确` / `估算` / `不可用` |
+| 到账额度 | number | `quota_credited`；历史按规则估算；Epay 记 0 |
+| 到账来源 | text | `精确` / `精确（补单）` / `估算` / `未加账` / `不可用` |
+| 数据提示 | text | 如“RCH 补单可能放大 QuotaPerUnit 倍”“Epay 订单未加账”“完成时间缺失” |
 | 状态 | text | 仅导出 `success` |
 
 ### 7.6 管理员调整明细
@@ -381,6 +392,9 @@ Sheet 顺序：
 | 消耗/退款口径 | `logs.type=2/6` |
 | 充值口径 | `top_ups.status=success`，按 `complete_time` |
 | 管理员调账口径 | 仅手动加/减/覆盖；不含补单；新表精确、历史解析 |
+| 日志开关 | `LogConsumeEnabled` 当前值；false 时提示报表不完整 |
+| 补单说明 | RCH 档位补单可能按 Amount×QuotaPerUnit 放大，已标注 |
+| Epay 说明 | Epay 订单当前未加账，`quota_credited=0` |
 | 报表边界 | 不是余额对账表，不含赠送/签到/兑换码/订阅等其他入账 |
 | 历史数据说明 | 估算/不可解析条数与原因 |
 | 行数统计 | 各 Sheet 行数 |
@@ -412,8 +426,8 @@ Sheet 顺序：
 | 最大时间跨度 | 366 天 | 超过返回 400 |
 | 单明细 Sheet 最大行数 | 100,000 | 超过返回 400，提示缩小范围 |
 | 单次导出总行数 | 300,000 | 超过返回 400 |
-| 单次导出超时 | 5 分钟 | 超时返回 500，不生成部分文件 |
-| 并发导出 | 同一管理员 1 个 | 重复请求返回 429 |
+| 单次导出超时 | 5 分钟 | 超时返回 504/断流；不生成部分文件；网关/服务端超时需 >= 360s |
+| 并发导出 | 同一管理员 1 个 | Redis 锁；重复请求返回 429；锁不可用返回 503 |
 
 ---
 
@@ -468,9 +482,25 @@ GET /api/billing-report/adjustment
 
 ### 9.3 导出
 
-`GET /api/billing-report/export`
+`POST /api/billing-report/export`
 
-| 参数 | 类型 | 必填 | 说明 |
+采用同步流式响应（`excelize` / CSV 边生成边写），前端用 `fetch` 读取 blob，不走浏览器 GET 下载，避免长查询被代理 60 秒默认超时截断。
+
+请求体：
+
+```json
+{
+  "format": "xlsx",
+  "sheet": "consume",
+  "user_id": 1,
+  "username": "",
+  "start_timestamp": 1730000000,
+  "end_timestamp": 1732592000,
+  "model_name": "m1"
+}
+```
+
+| 字段 | 类型 | 必填 | 说明 |
 |---|---|---|---|
 | `format` | `xlsx` / `csv` | 是 | — |
 | `sheet` | string | CSV 必填 | `consume` / `refund` / `topup` / `adjustment` |
@@ -481,15 +511,19 @@ GET /api/billing-report/adjustment
 - `xlsx`：`Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`
 - `csv`：`Content-Type: text/csv; charset=utf-8`
 - `Content-Disposition: attachment; filename*=UTF-8''...`
+- `Cache-Control: no-store`；反向代理需关闭缓冲（`X-Accel-Buffering: no`）。
+- 前置依赖：网关 `proxy_read_timeout` / `send_timeout` 和服务端 `WriteTimeout` >= 360 秒；无法满足时改为异步任务导出（PRD 不默认实现）。
 
 ### 9.4 错误码
 
 | HTTP | 场景 |
 |---|---|
-| 400 | 时间缺失、开始 > 结束、跨度超限、参数非法、行数超限 |
+| 400 | 时间缺失、开始 > 结束、跨度超限、参数非法、行数超限、管理员调账额度越界 |
 | 403 | 非管理员 |
 | 429 | 同一管理员已有导出任务 |
-| 500 | 数据库/文件生成失败、导出超时 |
+| 503 | Redis 不可用或导出锁获取失败 |
+| 504 | 网关/服务端导出超时 |
+| 500 | 数据库/文件生成失败 |
 
 错误返回沿用 `common.ApiErrorMsg` / i18n，中文、英文都要有。
 
@@ -501,7 +535,7 @@ GET /api/billing-report/adjustment
 
 | 列 | 类型 | 说明 |
 |---|---|---|
-| `id` | bigint PK | 自增 |
+| `id` | bigint PK | GORM 自增主键（不手写 `AUTO_INCREMENT` / `SERIAL`） |
 | `user_id` | bigint | 目标用户，索引 |
 | `operator_id` | bigint | 操作人，索引 |
 | `action` | varchar(20) | `add` / `subtract` / `override` |
@@ -519,8 +553,9 @@ GET /api/billing-report/adjustment
 写入规则：
 
 - 在 `ManageUser` 的 `add_quota` 分支内，与用户余额更新放在**同一事务**。
-- 事务内对用户行加 `lockForUpdate`，读取 `quota_before`，执行加/减/覆盖，写入 `quota_after` 和 `quota_delta`，插入调账行，提交。
-- 事务提交后再写 `type=3` 操作审计日志；日志库可能独立，无法与主库同事务，失败只记录系统错误，不回滚调账。
+- 事务内对用户行加 `lockForUpdate`，**加锁后重新读取** `quota_before`，不能使用 handler 开头读到的 `user.Quota`；执行加/减/覆盖，写入 `quota_after` 和 `quota_delta`，插入调账行，提交。
+- `req.Value` 和计算后的 `quota_after` 必须落在 32 位 quota 安全范围；超出返回 400，禁止截断或溢出。`quota_delta` 用 int64 存储，但写入前仍做上限校验。
+- 事务提交后再写 `type=3` 操作审计日志，并在 `other.op.params.quota_adjustment_id` 写入新表主键；日志库可能独立，无法与主库同事务，失败只记录系统错误，不回滚调账。
 - 调账行是财务账本，优先于审计日志。
 
 ### 10.2 `top_ups` 增加 `quota_credited`
@@ -529,25 +564,31 @@ GET /api/billing-report/adjustment
 |---|---|---|---|
 | `quota_credited` | bigint | 0 | 订单完成时实际加到用户账上的 quota |
 
-- 所有完成路径写入：Stripe、Creem、Waffo、Waffo Pancake、BlueWhalePay 钱包流、BlueWhalePay 档位流、Epay、管理员补单。
+- 所有实际加账路径写入：Stripe、Creem、Waffo、Waffo Pancake、BlueWhalePay 钱包流、BlueWhalePay 档位流、管理员补单。Epay 回调当前只把订单置 `success`、不加 quota（代码中加账逻辑被注释），不写入非零 `quota_credited`，按“未加账”处理。
+- 管理员补单：`ManualCompleteTopUp` 对非 Stripe 一律 `Amount × QuotaPerUnit`；RCH 档位订单的 `Amount` 是 raw tokens，补单会放大 QuotaPerUnit 倍。这是既有缺陷，另开缺陷跟踪；本报表按实际加账写 `quota_credited`，到账来源标 `精确（补单）` 并提示放大风险，不修正计费。
+- Epay：订单成功但未加账，`quota_credited=0`；明细来源 `未加账`，不按 Amount×QuotaPerUnit 估算。
 - 迁移需同时支持 SQLite / MySQL / PostgreSQL；GORM AutoMigrate 自动 `ADD COLUMN`。
 - 建议同时增加索引 `idx_topups_status_complete_time (status, complete_time)`，服务报表按完成时间查询；若生产评估 `top_ups` 很小可省略。
-- 新记录 `quota_credited > 0` 视为精确。
+- 新记录 `quota_credited > 0` 视为精确；Epay 的 0 是业务结果，不是历史缺失，按 `payment_provider=epay` 识别，不按 0 判断。
 - 历史记录 `quota_credited = 0`，按以下规则估算并标记：
 
 | 历史订单特征 | 到账额度估算 | 来源标记 |
 |---|---|---|
-| `trade_no` 以 `RCH` 开头（档位流，raw tokens） | `amount` | 精确（不依赖 QuotaPerUnit） |
+| `trade_no` 以 `RCH` 开头（档位流，raw tokens） | `amount` | 精确（不依赖 QuotaPerUnit）；若为管理员补单，见补单说明 |
 | `payment_provider=creem` | `amount` | 精确 |
 | `payment_provider=stripe` | `money * 当前 QuotaPerUnit` | 估算 |
-| 其他（waffo / pancake / epay / bluewhalepay 钱包流） | `amount * 当前 QuotaPerUnit` | 估算 |
+| `payment_provider=epay` | `0` | 未加账 |
+| 其他（waffo / pancake / bluewhalepay 钱包流） | `amount * 当前 QuotaPerUnit` | 估算 |
 
 ### 10.3 历史管理员调账解析
 
 - 新表上线后，调账记录只从 `quota_adjustments` 读取。
-- 历史记录从 `logs.type=3` 解析，且仅解析 `created_at < 新表首行 created_at` 的记录，避免与新表重复计数。
-  - 若新表为空，则解析全部历史 `type=3`。
-  - 新代码同时写新表和 `type=3` 审计日志；以首行时间作为分界，不会双计。
+- 历史记录从 `logs.type=3` 解析，**按标记去重**，不使用“新表首行时间”分界：
+  - 新代码写 `type=3` 审计日志时，在 `other.op.params` 写入 `quota_adjustment_id`（新表主键）。
+  - 报表解析 `type=3` 时，带 `quota_adjustment_id` 的记录跳过（已在新表），无标记的记录才解析。
+  - 滚动发布期间旧 pod 仍写无标记日志、新 pod 写带标记日志；按标记去重不会丢账，也不会双计。
+  - 若新表插入失败，事务回滚，不产生调账；若审计日志写入失败，无 `type=3` 行，新表行仍只计一次。
+  - 不使用首行时间：旧 pod 在首行之后仍可能写无标记日志，按时间分界会漏账。
 - 解析字段：
   - `other.op.action`：`user.quota_add` / `user.quota_subtract` / `user.quota_override`。
   - 目标用户：`other.op.params.target_user_id`；缺省时取日志 `user_id`（管理员改自己）。
@@ -573,6 +614,8 @@ GET /api/billing-report/adjustment
 - 回滚：`restart.sh` 备份 `new-api.prev`；回滚二进制即可。新增表和列保留，旧代码忽略，不破坏数据。
 - 新列对历史行默认 0；AutoMigrate 不做数据回填。
 - 大表风险：本次只改 `top_ups`（表小）和新建空表，不改 `logs`；风险可控。
+- 数据库字典同步（交付项）：新增 `docs/db-schema/docs/quota_adjustments.md`；更新 `docs/db-schema/docs/top_ups.md`（`quota_credited`、索引、`amount`/`money` 语义）。
+- 滚动发布：旧 pod 继续写无标记 `type=3`，新 pod 写带 `quota_adjustment_id` 的日志；报表按标记去重，不依赖首行时间。
 
 ---
 
@@ -594,6 +637,13 @@ GET /api/billing-report/adjustment
 | `QuotaPerUnit <= 0` | 金额列留空，精确性不受影响；页面和导出说明标注“金额换算不可用” |
 | 调账事务失败 | 余额和调账行一起回滚，不产生半条记录 |
 | 调账成功但审计日志写入失败 | 调账保留；记录系统错误；财务账本以新表为准 |
+| 管理员调账输入超出 int32 安全范围 | 400，不写表、不改余额 |
+| RCH 档位订单被管理员补单 | 到账额度按实际加账展示，来源=`精确（补单）`，提示“补单可能放大 QuotaPerUnit 倍”；另开缺陷 |
+| Epay 订单成功 | 订单进入充值明细，`quota_credited=0`，来源=`未加账`；不按 Amount×QuotaPerUnit 估算 |
+| 滚动发布期间旧 pod 写 `type=3` | 无标记，解析一次；新 pod 带 `quota_adjustment_id`，跳过；不丢账不双计 |
+| Redis 锁不可用 | 503，禁止重复导出 |
+| 导出超过网关超时 | 504/断流；提示缩小范围；不生成部分文件 |
+| `LogConsumeEnabled=false` | 消耗/退款明细为空、汇总为 0；页面和导出说明标注；不报错 |
 | 导出时数据库断开 | 500，不生成部分文件，不写成功审计 |
 | 客户端断开导出连接 | 服务端停止查询和写文件，清理临时文件 |
 | ClickHouse 日志库 | 查询、分页、聚合均可用 |
@@ -608,8 +658,9 @@ GET /api/billing-report/adjustment
 - 30 天、10 万条消耗日志的目标：汇总查询 < 3 秒，Excel 导出 < 30 秒（生产硬件，具体以压测为准）。
 - Excel 使用流式写入（`excelize.StreamWriter`），避免一次性加载全部行。
 - 明细查询使用游标/分批读取，避免 `OFFSET` 深分页；导出内部按 `(created_at, id)` 递增扫描。
-- 汇总 SQL 只取必要列，避免 `SELECT *`。
+- 汇总 SQL 只取必要列，避免 `SELECT *`；金额合计用 `decimal`，不用 `float64` 累加。
 - 导出前先做行数预估；超过上限直接拒绝，不创建临时文件。
+- 导出使用同步流式响应；Redis 实现“同一管理员同时 1 个导出”的锁，锁 TTL 略大于 5 分钟，正常结束主动释放。
 
 ### 12.2 安全
 
@@ -649,6 +700,15 @@ GET /api/billing-report/adjustment
 | A21 | 日志保留 | 日志被清理后，报表只统计仍存在的日志，不报错 |
 | A22 | 调账事务 | 模拟调账中途失败，余额和调账行都不变；不出现半条记录 |
 | A23 | 上线下线 | 发版后 AutoMigrate 自动建表/加列；回滚二进制后旧版本正常启动，新增数据不被破坏 |
+| A24 | 日志开关 | `LogConsumeEnabled=false` 时页面顶部有红色提示，导出说明标注，数据为 0 但不报错 |
+| A25 | 滚动发布去重 | 新 pod 的 `type=3` 带 `quota_adjustment_id` 被跳过；旧 pod 无标记记录被解析一次；不丢账不双计 |
+| A26 | RCH 补单 | 管理员补单后 `quota_credited` 等于实际加账；明细来源=`精确（补单）`，提示放大风险 |
+| A27 | Epay 未加账 | Epay 成功订单在充值明细中 `quota_credited=0`、来源=`未加账`，不进入估算合计 |
+| A28 | 覆盖并发 | 两个管理员同时改同一用户余额，`quota_before` 均为加锁后最新值，调账行和余额一致 |
+| A29 | 金额精度 | 多笔小数金额合计与 `decimal` 结果一致，不出现 float 尾差 |
+| A30 | 调账越界 | 输入导致额度超出 32 位安全范围时返回 400，余额和调账行均不变 |
+| A31 | 多副本导出锁 | 两个实例同时收到同一管理员的导出请求，只有一个执行，另一个返回 429/503 |
+| A32 | 字典同步 | 新增/更新 db-schema 文档，字段、索引、业务规则与实现一致 |
 
 ---
 
@@ -659,7 +719,11 @@ GET /api/billing-report/adjustment
   - 管理员调账历史字符串解析（USD/CNY/TOKENS/CUSTOM/非法格式/覆盖差额）。
   - 新表调账事务与行锁：加/减/覆盖的前后额度、delta 符号。
   - 汇总公式（消耗 - 退款 = 净消耗；精确/估算分列；负净消耗）。
-  - 日志解析分界：新表首行之前的 `type=3` 才解析，之后不双计。
+  - 历史调账标记去重：带 `quota_adjustment_id` 跳过、无标记解析；模拟滚动发布旧 pod。
+  - 管理员调账输入越界（int32 安全范围）返回 400。
+  - 金额 `decimal` 聚合精度。
+  - `LogConsumeEnabled=false` 时汇总为 0 且警告存在。
+  - 导出锁：多副本/重复请求只执行一次。
   - 时间范围与行数上限校验。
   - CSV BOM、表头、公式注入转义。
   - 权限：非管理员 403。
@@ -669,7 +733,7 @@ GET /api/billing-report/adjustment
   - 6 个页签切换和空态。
   - 导出按钮 loading/错误提示。
   - 权限隐藏。
-- 手工验收：覆盖 A1–A23，至少准备 1 个历史订单、1 个历史管理员调账、1 个新管理员调账、1 个退款任务。
+- 手工验收：覆盖 A1–A32，至少准备 1 个历史订单、1 个历史管理员调账、1 个新管理员调账、1 个退款任务、1 个 RCH 补单、1 个 Epay 订单。
 
 ---
 
@@ -695,6 +759,9 @@ GET /api/billing-report/adjustment
 | 4 | 是否给 `top_ups` 增加 `(status, complete_time)` 索引 | 生产表大则加；表小可省 | 研发 / DBA |
 | 5 | 是否需要“期初/期末余额对账” | 本次不做；如需要另开需求加每日余额快照 | 产品 / 财务 |
 | 6 | 是否需要包含订阅、兑换码、签到等其他入账 | 本次不做；如需要另开需求 | 产品 |
+| 7 | RCH 档位订单被补单放大 QuotaPerUnit 倍的既有缺陷 | 另开缺陷修复计费；本报表只标注实际加账，不修正 | 研发 / 产品 |
+| 8 | Epay 订单成功但不加账是否符合预期 | 先按“未加账”展示；如应加账，另开缺陷修复回调 | 产品 / 研发 |
+| 9 | 网关超时无法调到 360 秒时是否改异步导出 | 默认同步流式；无法调超时时改异步任务 + 下载链接 | 运维 / 研发 |
 
 ---
 
@@ -704,3 +771,4 @@ GET /api/billing-report/adjustment
 |---|---|---|---|
 | v0.1 | 2026-10-22 | 初稿：确认独立入口、管理员充值口径、多 Sheet 导出、PRD 先行 | Agent |
 | v0.2 | 2026-10-22 | 按评审结论修订：管理员调账改为独立 `quota_adjustments` 表；确认四类流水不做余额对账；双合计；权限、时区、充值归期、CSV、上限、金额口径、数据库迁移方案 | Agent |
+| v0.3 | 2026-11-02 | 处理 PR !131 评审：状态改为“口径已对齐待正式评审”；补 db-schema 交付项；`LogConsumeEnabled` 提示；历史调账改为 `quota_adjustment_id` 标记去重；补 RCH 补单放大与 Epay 未加账说明；导出改 POST 流式 + 超时/Redis 锁；覆盖前额度改加锁后重读；金额 decimal 聚合与调账越界校验；新增 A24–A32、测试和开放问题 | Agent |
