@@ -13,6 +13,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	tokenhubvolc "github.com/QuantumNous/new-api/relay/channel/task/tokenhubvolc"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
@@ -49,6 +50,8 @@ type finalizeFixture struct {
 	ChannelType int
 	// NativeRequest 表示请求来自 /api/v3 并已写入解析后的原生请求体。
 	NativeRequest bool
+	// ModelMapping 是渠道配置的模型映射；成片锁定渠道后必须能继续按它翻译模型名。
+	ModelMapping string
 }
 
 // seedOriginFixture 建内存库、一条启用渠道与一条原任务，并返回一个指向该原任务的
@@ -78,6 +81,10 @@ func seedOriginFixture(t *testing.T, tc finalizeFixture, suffix string) *gin.Con
 		Name:   "volcengine-25-test",
 		Status: common.ChannelStatusEnabled,
 		Key:    "sk-test",
+	}
+	if tc.ModelMapping != "" {
+		mapping := tc.ModelMapping
+		channel.ModelMapping = &mapping
 	}
 	require.NoError(t, db.Create(channel).Error)
 
@@ -302,6 +309,34 @@ func TestResolveOriginTaskFinalizeIgnoresClientModel(t *testing.T) {
 
 	require.Empty(t, taskErrCode(ResolveOriginTask(c, info)))
 	assert.Equal(t, finalizeTestModel, info.OriginModelName, "计费模型必须取原任务记录的模型")
+}
+
+// TestResolveOriginTaskFinalizeLoadsChannelModelMapping 回归：原生协议的成片
+// 请求在 distributor 里跳过渠道选择，渠道的 model_mapping 不会进上下文。
+// ResolveOriginTask 锁定原渠道时必须自己补上，否则 ModelMappedHelper 会把
+// 对客模型名（doubao-...）原样发给上游，上游报「无效的模型」。
+func TestResolveOriginTaskFinalizeLoadsChannelModelMapping(t *testing.T) {
+	const mapping = `{"doubao-seedance-2-5-260628":"cdance2.5"}`
+	now := time.Now().Unix()
+	c := seedOriginFixture(t, finalizeFixture{
+		Draft: true, Status: model.TaskStatusSuccess, SubmitTime: now, FinishTime: now,
+		UpstreamTaskID: "cgt-origin-123",
+		ChannelType:    constant.ChannelTypeAistoreVolc,
+		NativeRequest:  true,
+		ModelMapping:   mapping,
+	}, "")
+	info := &relaycommon.RelayInfo{
+		UserId:          finalizeTestUserID,
+		TaskRelayInfo:   &relaycommon.TaskRelayInfo{},
+		OriginModelName: finalizeTestModel,
+	}
+
+	require.Empty(t, taskErrCode(ResolveOriginTask(c, info)))
+	assert.Equal(t, mapping, common.GetContextKeyString(c, constant.ContextKeyChannelModelMapping))
+
+	require.NoError(t, helper.ModelMappedHelper(c, info, nil))
+	assert.Equal(t, "cdance2.5", info.UpstreamModelName, "成片必须按原渠道的映射翻译上游模型名")
+	assert.Equal(t, finalizeTestModel, info.OriginModelName)
 }
 
 // TestResolveOriginTaskFinalizeChannelRouting 验证成片停留在能承载样片的通道上：

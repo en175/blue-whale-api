@@ -133,6 +133,11 @@ func ResolveOriginTask(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskErr
 		return service.TaskErrorWrapperLocal(errors.New("the channel of the origin task does not support this path"), "origin_task_path_mismatch", http.StatusBadRequest)
 	}
 	info.LockedChannel = ch
+	// 成片 / remix 锁定原渠道时可能绕过 SetupContextForSelectedChannel（原生
+	// 协议的成片请求在 distributor 里就不选渠道），渠道的 model_mapping 不会进
+	// 上下文。不在这里补，ModelMappedHelper 读到空映射，会把对客模型名原样发给
+	// 上游——上游只认映射后的模型名，直接 400「无效的模型」。
+	common.SetContextKey(c, constant.ContextKeyChannelModelMapping, ch.GetModelMapping())
 
 	if originTask.ChannelId != info.ChannelId {
 		key, _, newAPIError := ch.GetNextEnabledKey()
