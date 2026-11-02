@@ -4,7 +4,7 @@
 |---|---|
 | 文档类型 | 标准 PRD（涉及计费、资金、前后端、数据库迁移） |
 | 状态 | 待评审（口径已对齐，待正式评审） |
-| 版本 | v0.3 |
+| 版本 | v0.4 |
 | 日期 | 2026-11-02 |
 | 产品负责人 | 待指定 |
 | 研发负责人 | 待指定 |
@@ -188,7 +188,7 @@
 |---|---|---|---|
 | 消耗 | `logs` | `type=2` | 精确 |
 | 退款 | `logs` | `type=6` | 精确 |
-| 支付充值 | `top_ups` | `status=success`，按 `complete_time` | 实付金额精确；到账额度新数据精确、历史估算；Epay 未加账单独标注 |
+| 支付充值 | `top_ups` | `status=success`，按 `complete_time` | 实付金额精确；到账额度新数据精确、历史估算 |
 | 管理员调账 | `quota_adjustments` + 历史 `logs.type=3` | 按目标用户和时间 | 新数据精确；历史估算/不可解析 |
 
 **不包含**：新用户赠送、邀请赠送、签到、兑换码、订阅、活动、余额转移等其他入账。因此本报表**不是余额对账表**。
@@ -232,7 +232,7 @@
 | 输入 tokens | `SUM(prompt_tokens) WHERE type=2` | — |
 | 输出 tokens | `SUM(completion_tokens) WHERE type=2` | — |
 | 消耗金额 / 退款金额 | 额度按导出时展示设置换算 | 仅参考，原始 quota 为准 |
-| 支付充值到账额度 | 新订单 `top_ups.quota_credited`；历史按规则估算 | 分精确/估算两列；Epay 未加账记 0 并标注 |
+| 支付充值到账额度 | 新订单 `top_ups.quota_credited`；历史按规则估算 | 分精确/估算两列 |
 | 实付金额 | `top_ups.money` 按 `decimal` 聚合 | 法币实付，精确；禁止用 float64 直接累加 |
 | 管理员调账净额 | `quota_adjustments.quota_delta` 合计；历史解析 | 加为正、减为负、覆盖为 after-before；分精确/估算两列 |
 | 当前余额 | `users.quota` | 当前值，**不是**截止筛选结束时间的余额 |
@@ -337,9 +337,9 @@
 | 支付网关 | text | `payment_provider` |
 | 实付金额 | number | `money`，精确 |
 | 订单额度(原始) | number | `amount`，按订单流含义保留原值 |
-| 到账额度 | number | `quota_credited`；历史按规则估算；Epay 记 0 |
-| 到账来源 | text | `精确` / `精确（补单）` / `估算` / `未加账` / `不可用` |
-| 数据提示 | text | 如“RCH 补单可能放大 QuotaPerUnit 倍”“Epay 订单未加账”“完成时间缺失” |
+| 到账额度 | number | `quota_credited`；历史按规则估算 |
+| 到账来源 | text | `精确` / `精确（补单）` / `估算` / `不可用` |
+| 数据提示 | text | 如“RCH 补单可能放大 QuotaPerUnit 倍”“完成时间缺失” |
 | 状态 | text | 仅导出 `success` |
 
 ### 7.6 管理员调整明细
@@ -394,7 +394,6 @@ Sheet 顺序：
 | 管理员调账口径 | 仅手动加/减/覆盖；不含补单；新表精确、历史解析 |
 | 日志开关 | `LogConsumeEnabled` 当前值；false 时提示报表不完整 |
 | 补单说明 | RCH 档位补单可能按 Amount×QuotaPerUnit 放大，已标注 |
-| Epay 说明 | Epay 订单当前未加账，`quota_credited=0` |
 | 报表边界 | 不是余额对账表，不含赠送/签到/兑换码/订阅等其他入账 |
 | 历史数据说明 | 估算/不可解析条数与原因 |
 | 行数统计 | 各 Sheet 行数 |
@@ -564,12 +563,11 @@ GET /api/billing-report/adjustment
 |---|---|---|---|
 | `quota_credited` | bigint | 0 | 订单完成时实际加到用户账上的 quota |
 
-- 所有实际加账路径写入：Stripe、Creem、Waffo、Waffo Pancake、BlueWhalePay 钱包流、BlueWhalePay 档位流、管理员补单。Epay 回调当前只把订单置 `success`、不加 quota（代码中加账逻辑被注释），不写入非零 `quota_credited`，按“未加账”处理。
+- 所有实际加账路径写入：Stripe、Creem、Waffo、Waffo Pancake、BlueWhalePay 钱包流、BlueWhalePay 档位流、Epay、管理员补单。Epay 回调在订单置 `success` 后调用 `IncreaseUserQuota` 加账（`controller/topup.go:388-401`），属于正常加账路径。
 - 管理员补单：`ManualCompleteTopUp` 对非 Stripe 一律 `Amount × QuotaPerUnit`；RCH 档位订单的 `Amount` 是 raw tokens，补单会放大 QuotaPerUnit 倍。这是既有缺陷，另开缺陷跟踪；本报表按实际加账写 `quota_credited`，到账来源标 `精确（补单）` 并提示放大风险，不修正计费。
-- Epay：订单成功但未加账，`quota_credited=0`；明细来源 `未加账`，不按 Amount×QuotaPerUnit 估算。
 - 迁移需同时支持 SQLite / MySQL / PostgreSQL；GORM AutoMigrate 自动 `ADD COLUMN`。
 - 建议同时增加索引 `idx_topups_status_complete_time (status, complete_time)`，服务报表按完成时间查询；若生产评估 `top_ups` 很小可省略。
-- 新记录 `quota_credited > 0` 视为精确；Epay 的 0 是业务结果，不是历史缺失，按 `payment_provider=epay` 识别，不按 0 判断。
+- 新记录 `quota_credited > 0` 视为精确。
 - 历史记录 `quota_credited = 0`，按以下规则估算并标记：
 
 | 历史订单特征 | 到账额度估算 | 来源标记 |
@@ -577,8 +575,7 @@ GET /api/billing-report/adjustment
 | `trade_no` 以 `RCH` 开头（档位流，raw tokens） | `amount` | 精确（不依赖 QuotaPerUnit）；若为管理员补单，见补单说明 |
 | `payment_provider=creem` | `amount` | 精确 |
 | `payment_provider=stripe` | `money * 当前 QuotaPerUnit` | 估算 |
-| `payment_provider=epay` | `0` | 未加账 |
-| 其他（waffo / pancake / bluewhalepay 钱包流） | `amount * 当前 QuotaPerUnit` | 估算 |
+| 其他（waffo / pancake / epay / bluewhalepay 钱包流） | `amount * 当前 QuotaPerUnit` | 估算 |
 
 ### 10.3 历史管理员调账解析
 
@@ -639,7 +636,6 @@ GET /api/billing-report/adjustment
 | 调账成功但审计日志写入失败 | 调账保留；记录系统错误；财务账本以新表为准 |
 | 管理员调账输入超出 int32 安全范围 | 400，不写表、不改余额 |
 | RCH 档位订单被管理员补单 | 到账额度按实际加账展示，来源=`精确（补单）`，提示“补单可能放大 QuotaPerUnit 倍”；另开缺陷 |
-| Epay 订单成功 | 订单进入充值明细，`quota_credited=0`，来源=`未加账`；不按 Amount×QuotaPerUnit 估算 |
 | 滚动发布期间旧 pod 写 `type=3` | 无标记，解析一次；新 pod 带 `quota_adjustment_id`，跳过；不丢账不双计 |
 | Redis 锁不可用 | 503，禁止重复导出 |
 | 导出超过网关超时 | 504/断流；提示缩小范围；不生成部分文件 |
@@ -703,7 +699,7 @@ GET /api/billing-report/adjustment
 | A24 | 日志开关 | `LogConsumeEnabled=false` 时页面顶部有红色提示，导出说明标注，数据为 0 但不报错 |
 | A25 | 滚动发布去重 | 新 pod 的 `type=3` 带 `quota_adjustment_id` 被跳过；旧 pod 无标记记录被解析一次；不丢账不双计 |
 | A26 | RCH 补单 | 管理员补单后 `quota_credited` 等于实际加账；明细来源=`精确（补单）`，提示放大风险 |
-| A27 | Epay 未加账 | Epay 成功订单在充值明细中 `quota_credited=0`、来源=`未加账`，不进入估算合计 |
+| A27 | Epay 加账 | Epay 成功订单实际增加 quota，`quota_credited` 等于加账额度，来源=`精确` |
 | A28 | 覆盖并发 | 两个管理员同时改同一用户余额，`quota_before` 均为加锁后最新值，调账行和余额一致 |
 | A29 | 金额精度 | 多笔小数金额合计与 `decimal` 结果一致，不出现 float 尾差 |
 | A30 | 调账越界 | 输入导致额度超出 32 位安全范围时返回 400，余额和调账行均不变 |
@@ -760,8 +756,7 @@ GET /api/billing-report/adjustment
 | 5 | 是否需要“期初/期末余额对账” | 本次不做；如需要另开需求加每日余额快照 | 产品 / 财务 |
 | 6 | 是否需要包含订阅、兑换码、签到等其他入账 | 本次不做；如需要另开需求 | 产品 |
 | 7 | RCH 档位订单被补单放大 QuotaPerUnit 倍的既有缺陷 | 另开缺陷修复计费；本报表只标注实际加账，不修正 | 研发 / 产品 |
-| 8 | Epay 订单成功但不加账是否符合预期 | 先按“未加账”展示；如应加账，另开缺陷修复回调 | 产品 / 研发 |
-| 9 | 网关超时无法调到 360 秒时是否改异步导出 | 默认同步流式；无法调超时时改异步任务 + 下载链接 | 运维 / 研发 |
+| 8 | 网关超时无法调到 360 秒时是否改异步导出 | 默认同步流式；无法调超时时改异步任务 + 下载链接 | 运维 / 研发 |
 
 ---
 
@@ -772,3 +767,4 @@ GET /api/billing-report/adjustment
 | v0.1 | 2026-10-22 | 初稿：确认独立入口、管理员充值口径、多 Sheet 导出、PRD 先行 | Agent |
 | v0.2 | 2026-10-22 | 按评审结论修订：管理员调账改为独立 `quota_adjustments` 表；确认四类流水不做余额对账；双合计；权限、时区、充值归期、CSV、上限、金额口径、数据库迁移方案 | Agent |
 | v0.3 | 2026-11-02 | 处理 PR !131 评审：状态改为“口径已对齐待正式评审”；补 db-schema 交付项；`LogConsumeEnabled` 提示；历史调账改为 `quota_adjustment_id` 标记去重；补 RCH 补单放大与 Epay 未加账说明；导出改 POST 流式 + 超时/Redis 锁；覆盖前额度改加锁后重读；金额 decimal 聚合与调账越界校验；新增 A24–A32、测试和开放问题 | Agent |
+| v0.4 | 2026-11-02 | 复查 Epay 回调：`EpayNotify` 在订单置成功后调用 `IncreaseUserQuota` 实际加账（`controller/topup.go:388-401`），撤回 v0.3 的“Epay 未加账”结论；Epay 恢复为正常加账路径，历史估算回到 `amount × QuotaPerUnit`，A27 改为正向验收 | Agent |
