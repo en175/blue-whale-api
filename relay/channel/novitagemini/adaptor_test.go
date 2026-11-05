@@ -30,6 +30,7 @@ func TestGetRequestURL(t *testing.T) {
 		name        string
 		baseURL     string
 		modelName   string
+		isStream    bool
 		expectedURL string
 		expectError bool
 	}{
@@ -46,6 +47,19 @@ func TestGetRequestURL(t *testing.T) {
 			expectedURL: "https://api.novita.ai/gemini/v1/models/gemini-nano-banana-2.1:generateContent",
 		},
 		{
+			name:        "streaming uses streamGenerateContent with alt=sse",
+			baseURL:     "https://api.novita.ai/gemini",
+			modelName:   "gemini-nano-banana-2.1",
+			isStream:    true,
+			expectedURL: "https://api.novita.ai/gemini/v1/models/gemini-nano-banana-2.1:streamGenerateContent?alt=sse",
+		},
+		{
+			name:        "model name is path escaped",
+			baseURL:     "https://api.novita.ai/gemini",
+			modelName:   "a/b c",
+			expectedURL: "https://api.novita.ai/gemini/v1/models/a%2Fb%20c:generateContent",
+		},
+		{
 			name:        "empty model name is rejected",
 			baseURL:     "https://api.novita.ai/gemini",
 			modelName:   "",
@@ -56,6 +70,7 @@ func TestGetRequestURL(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			info := &relaycommon.RelayInfo{
+				IsStream: tc.isStream,
 				ChannelMeta: &relaycommon.ChannelMeta{
 					ChannelBaseUrl:    tc.baseURL,
 					UpstreamModelName: tc.modelName,
@@ -70,6 +85,31 @@ func TestGetRequestURL(t *testing.T) {
 			assert.Equal(t, tc.expectedURL, url)
 		})
 	}
+}
+
+func TestGetRequestURLDisablesPingForStreaming(t *testing.T) {
+	adaptor := &Adaptor{}
+
+	streamInfo := &relaycommon.RelayInfo{
+		IsStream: true,
+		ChannelMeta: &relaycommon.ChannelMeta{
+			ChannelBaseUrl:    "https://api.novita.ai/gemini",
+			UpstreamModelName: "gemini-nano-banana-2.1",
+		},
+	}
+	_, err := adaptor.GetRequestURL(streamInfo)
+	require.NoError(t, err)
+	assert.True(t, streamInfo.DisablePing)
+
+	nonStreamInfo := &relaycommon.RelayInfo{
+		ChannelMeta: &relaycommon.ChannelMeta{
+			ChannelBaseUrl:    "https://api.novita.ai/gemini",
+			UpstreamModelName: "gemini-nano-banana-2.1",
+		},
+	}
+	_, err = adaptor.GetRequestURL(nonStreamInfo)
+	require.NoError(t, err)
+	assert.False(t, nonStreamInfo.DisablePing)
 }
 
 func TestConvertImageRequestGenerations(t *testing.T) {

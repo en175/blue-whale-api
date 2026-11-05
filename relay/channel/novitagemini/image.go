@@ -272,7 +272,7 @@ func buildImageUsage(response *dto.GeminiChatResponse, imageCount int) *dto.Usag
 		if imageCount > maxResponseImages {
 			imageCount = maxResponseImages
 		}
-		usage.CompletionTokens = imageCount * 1400
+		usage.CompletionTokens = imageCount * estimatedTokensPerImage
 		patched = true
 	}
 	if usage.TotalTokens < usage.PromptTokens+usage.CompletionTokens {
