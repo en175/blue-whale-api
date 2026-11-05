@@ -14,10 +14,10 @@ import (
 // legacyFinalizeOptionsKey 保存旧接口成片请求体解析出的输出规格参数。
 const legacyFinalizeOptionsKey = "ark_legacy_finalize_options"
 
-// FinalizeOptionKeys 是成片请求里可以重设的输出规格类参数。content / prompt /
+// finalizeOptionKeys 是成片请求里可以重设的输出规格类参数。content / prompt /
 // duration / ratio / seed / generate_audio 刻意不在其中：成片沿用样片的内容与
 // 时长，客户端传什么都影响不了成片本身。
-var FinalizeOptionKeys = []string{
+var finalizeOptionKeys = []string{
 	"output_format",
 	"watermark",
 	"return_last_frame",
@@ -62,7 +62,7 @@ func ValidateFinalizeRequest(c *gin.Context, allowedResolution string) *dto.Task
 
 // ApplyFinalizeOptions 把白名单里的输出规格参数写进成片请求体，未传的键跳过。
 func ApplyFinalizeOptions(payload map[string]any, c *gin.Context, native *NativeRequest) {
-	for _, key := range FinalizeOptionKeys {
+	for _, key := range finalizeOptionKeys {
 		if value := finalizeOptionValue(c, native, key); value != nil {
 			payload[key] = value
 		}
@@ -70,7 +70,7 @@ func ApplyFinalizeOptions(payload map[string]any, c *gin.Context, native *Native
 }
 
 // finalizeOptionValue 按入口取成片可重设参数：旧接口读校验阶段解析出的请求体，
-// 原生入口读原始 JSON。两者都只认 FinalizeOptionKeys 白名单。
+// 原生入口读原始 JSON。两者都只认 finalizeOptionKeys 白名单。
 //
 // 旧接口参数优先：只有旧接口校验会写 legacyFinalizeOptionsKey，若它存在就说明
 // 本次请求来自旧接口，不能被按 metadata 还原出的 native.Raw 覆盖。

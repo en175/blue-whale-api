@@ -44,7 +44,7 @@ func (a *TaskAdaptor) GetModelList() []string {
 //	普通提交        ：完全沿用 /v1/videos 的通用校验
 //
 // 通用校验读的是中间件改写后的内部请求体（prompt + metadata），因此提示词必填、
-// 时长上限等既有约束原样生效。旧接口的请求体由 arkRequest 还原成火山形状后，
+// 时长上限等既有约束原样生效。旧接口的请求体由 arknative.ArkRequest 还原成火山形状后，
 // 与原生入口走完全相同的前两条判定。
 func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskError {
 	if info != nil && info.Action == constant.TaskActionFinalize {
@@ -118,7 +118,7 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 //
 // 普通与样片请求从下游原始 JSON 出发，只覆盖 model 与样片相关字段——火山新增
 // 的顶层参数（tools、priority 等）无需在本包建模也能透传。旧接口的原始 JSON
-// 由 arkRequest 从 prompt + metadata 合成，其后完全同路。成片请求则从零构造：
+// 由 arknative.ArkRequest 从 prompt + metadata 合成，其后完全同路。成片请求则从零构造：
 // 它的 content 只能是 draft_task 引用，可重设的只有输出规格类参数。
 func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayInfo) (io.Reader, error) {
 	native, _ := arknative.ArkRequest(c)

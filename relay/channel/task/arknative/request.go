@@ -205,8 +205,13 @@ func nativeRequestFromLegacy(c *gin.Context) (*NativeRequest, bool) {
 			}
 		}
 	}
+	// metadata.draft 可能以字符串形式传入（兼容旧调用方）；这里统一归一化成
+	// bool，否则 ParseNativeRequest 解 *bool 会失败，整个请求被误判为不可转换。
+	// 不是可识别的 true 时删键，按普通任务处理。
 	if taskcommon.IsDraftRequest(&req) {
 		raw["draft"] = true
+	} else {
+		delete(raw, "draft")
 	}
 	data, err := common.Marshal(raw)
 	if err != nil {

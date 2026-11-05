@@ -708,6 +708,10 @@ func TestBuildRequestBody_legacyFinalizeOptionsWin(t *testing.T) {
 		Model:    "cdance2.5",
 		Metadata: map[string]any{"output_format": "mp4", "watermark": true},
 	})
+	native, ok := arknative.ArkRequest(c)
+	require.True(t, ok, "回归前提：必须能重建出 native，否则本测试会空转")
+	require.Equal(t, "mp4", native.Raw["output_format"])
+	require.Equal(t, true, native.Raw["watermark"])
 
 	reader, err := adaptor.BuildRequestBody(c, info)
 	require.NoError(t, err)
@@ -715,6 +719,46 @@ func TestBuildRequestBody_legacyFinalizeOptionsWin(t *testing.T) {
 
 	assert.Equal(t, "mov", payload["output_format"])
 	assert.Equal(t, false, payload["watermark"])
+}
+
+// TestBuildRequestBody_legacyDraftString 旧接口兼容字符串形式的 metadata.draft：
+// "true" 走样片，"false" 按普通任务处理；两者都不能因为 *bool 解析失败被误拒。
+func TestBuildRequestBody_legacyDraftString(t *testing.T) {
+	tests := []struct {
+		name      string
+		body      string
+		wantDraft bool
+	}{
+		{
+			name:      "字符串 true 走样片",
+			body:      `{"model":"cdance2.5","prompt":"a cat","metadata":{"draft":"true"}}`,
+			wantDraft: true,
+		},
+		{
+			name: "字符串 false 按普通任务",
+			body: `{"model":"cdance2.5","prompt":"a cat","metadata":{"draft":"false"}}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c, _, info := newLegacyContext(t, "/v1/video/generations", tt.body)
+			info.UpstreamModelName = "cdance2.5"
+
+			adaptor := &TaskAdaptor{}
+			require.Nil(t, adaptor.ValidateRequestAndSetAction(c, info))
+			reader, err := adaptor.BuildRequestBody(c, info)
+			require.NoError(t, err)
+			payload := readPayload(t, reader)
+
+			if tt.wantDraft {
+				assert.Equal(t, true, payload["draft"])
+				assert.Equal(t, "480p", payload["resolution"])
+				return
+			}
+			assert.NotContains(t, payload, "draft")
+		})
+	}
 }
 
 // TestDoResponse_legacyEntry 旧接口按既有视频接口返回 OpenAI 视频对象，
