@@ -186,6 +186,11 @@ func TryUserAuth() func(c *gin.Context) {
 		id := session.Get("id")
 		if id != nil {
 			c.Set("id", id)
+			// 可选登录的路由也要能区分管理员；缺了 role，c.GetInt("role") 恒为 0，
+			// 管理员会被当成游客处理（如 /api/pricing 按用户分组裁剪模型）。
+			if role := session.Get("role"); role != nil {
+				c.Set("role", role)
+			}
 		}
 		c.Next()
 	}

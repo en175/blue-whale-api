@@ -56,7 +56,11 @@ func GetPricing(c *gin.Context) {
 	}
 
 	usableGroup = service.GetUserUsableGroups(group)
-	pricing = filterPricingByUsableGroups(pricing, usableGroup)
+	// 普通用户只看到自己可用分组里的模型；管理员要配置所有分组的模型折扣等，
+	// 必须看到全部分组的模型，否则新加分组（仅该组有渠道）的模型会被裁掉。
+	if c.GetInt("role") < common.RoleAdminUser {
+		pricing = filterPricingByUsableGroups(pricing, usableGroup)
+	}
 	// check groupRatio contains usableGroup
 	for group := range ratio_setting.GetGroupRatioCopy() {
 		if _, ok := usableGroup[group]; !ok {
